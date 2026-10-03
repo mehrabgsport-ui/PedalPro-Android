@@ -3,7 +3,10 @@ package ir.pedalpro.app;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -66,8 +69,19 @@ public class MainActivity extends Activity {
         registerTrackingReceiver();
         requestLocationIfNeeded();
         requestNotificationIfNeeded();
-        if (savedInstanceState == null) webView.loadUrl(HOME);
+        scheduleNotificationJob();
+        String initial = resolveInitialUrl(getIntent());
+        if (savedInstanceState == null) webView.loadUrl(initial);
         else webView.restoreState(savedInstanceState);
+    }
+
+    private String resolveInitialUrl(Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data != null) {
+            String host = data.getHost() == null ? "" : data.getHost().toLowerCase(Locale.ROOT);
+            if ("pedalpro.ir".equals(host) || "www.pedalpro.ir".equals(host)) return data.toString();
+        }
+        return HOME;
     }
 
     private void registerTrackingReceiver() {
@@ -76,6 +90,20 @@ public class MainActivity extends Activity {
         filter.addAction(TrackingService.ACTION_STATUS);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(trackingReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(trackingReceiver, filter);
+    }
+
+    private void scheduleNotificationJob() {
+        try {
+            JobScheduler js = (JobScheduler) getSystemService(JOB_SCHEDULER_SERVICE);
+            JobInfo info = new JobInfo.Builder(NotificationJobService.JOB_ID,
+                    new ComponentName(this, NotificationJobService.class))
+                    .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                    .setPeriodic(15 * 60 * 1000L)
+                    .setPersisted(true)
+                    .build();
+            js.schedule(info);
+            NotificationJobService.fetchNow(getApplicationContext());
+        } catch (Exception ignored) { }
     }
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
@@ -89,7 +117,7 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.1");
+        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.2");
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -98,41 +126,32 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(new NativeBridge(), "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleUri(request.getUrl());
             }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            @Override public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return handleUri(Uri.parse(url));
             }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
+            @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                NotificationJobService.fetchNow(getApplicationContext());
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+            @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 if (hasLocation()) callback.invoke(origin, true, false);
                 else {
-                    geoOrigin = origin;
-                    geoCallback = callback;
+                    geoOrigin = origin; geoCallback = callback;
                     requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
                 }
             }
 
-            @Override
-            public void onPermissionRequest(PermissionRequest request) {
+            @Override public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> {
                     boolean needsCamera = false;
-                    for (String r : request.getResources()) {
-                        if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) needsCamera = true;
-                    }
+                    for (String r : request.getResources()) if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) needsCamera = true;
                     if (needsCamera && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                         pendingWebPermission = request;
                         requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
@@ -142,8 +161,7 @@ public class MainActivity extends Activity {
                 });
             }
 
-            @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+            @Override public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = filePathCallback;
                 try {
@@ -166,8 +184,7 @@ public class MainActivity extends Activity {
     }
 
     public class NativeBridge {
-        @JavascriptInterface
-        public void startTracking(String json) {
+        @JavascriptInterface public void startTracking(String json) {
             runOnUiThread(() -> {
                 if (!hasLocation()) {
                     pendingTrackingJson = json;
@@ -177,23 +194,21 @@ public class MainActivity extends Activity {
                 startNativeTracking(json);
             });
         }
-
-        @JavascriptInterface
-        public void stopTracking() {
+        @JavascriptInterface public void stopTracking() {
             runOnUiThread(() -> {
                 Intent i = new Intent(MainActivity.this, TrackingService.class);
                 i.setAction(TrackingService.ACTION_STOP);
                 startService(i);
             });
         }
-
-        @JavascriptInterface
-        public boolean isTracking() {
+        @JavascriptInterface public boolean isTracking() {
             return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("active", false);
         }
-
-        @JavascriptInterface
-        public String appVersion() { return "1.1.0"; }
+        @JavascriptInterface public String appVersion() { return BuildConfig.VERSION_NAME; }
+        @JavascriptInterface public int appVersionCode() { return BuildConfig.VERSION_CODE; }
+        @JavascriptInterface public void checkForUpdate() {
+            runOnUiThread(() -> AppUpdateManager.check(MainActivity.this, true));
+        }
     }
 
     private void startNativeTracking(String json) {
@@ -205,8 +220,7 @@ public class MainActivity extends Activity {
             i.putExtra("csrf", o.optString("csrf", ""));
             i.putExtra("max_accuracy", o.optDouble("max_accuracy", 25));
             i.putExtra("interval_ms", o.optLong("interval_ms", 2500));
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
-            else startService(i);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i); else startService(i);
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
         }
@@ -224,8 +238,7 @@ public class MainActivity extends Activity {
             return true;
         }
         if ("intent".equals(scheme)) {
-            try { startActivity(Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)); }
-            catch (Exception ignored) { }
+            try { startActivity(Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)); } catch (Exception ignored) { }
             return true;
         }
         return false;
@@ -237,31 +250,39 @@ public class MainActivity extends Activity {
     }
 
     private void requestLocationIfNeeded() {
-        if (!hasLocation()) requestPermissions(
-                new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+        if (!hasLocation()) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
     }
 
     private void requestNotificationIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
-        }
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    @Override protected void onResume() {
+        super.onResume();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && getPackageManager().canRequestPackageInstalls())
+            AppUpdateManager.resumePendingInstall(this);
+        AppUpdateManager.check(this, false);
+        NotificationJobService.fetchNow(getApplicationContext());
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String url = resolveInitialUrl(intent);
+        if (webView != null && !HOME.equals(url)) webView.loadUrl(url);
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_LOCATION) {
             boolean ok = hasLocation();
             if (geoCallback != null) {
                 geoCallback.invoke(geoOrigin, ok, false);
-                geoCallback = null;
-                geoOrigin = null;
+                geoCallback = null; geoOrigin = null;
             }
             if (ok && pendingTrackingJson != null) {
-                String json = pendingTrackingJson;
-                pendingTrackingJson = null;
-                startNativeTracking(json);
+                String json = pendingTrackingJson; pendingTrackingJson = null; startNativeTracking(json);
             }
         } else if (requestCode == REQ_CAMERA && pendingWebPermission != null) {
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -271,36 +292,26 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_FILE && fileCallback != null) {
             Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-            fileCallback.onReceiveValue(result);
-            fileCallback = null;
+            fileCallback.onReceiveValue(result); fileCallback = null;
         }
     }
 
-    @Override
-    public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+    @Override public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) webView.goBack(); else super.onBackPressed();
     }
 
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        webView.saveState(outState);
-        super.onSaveInstanceState(outState);
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        webView.saveState(outState); super.onSaveInstanceState(outState);
     }
 
-    @Override
-    protected void onDestroy() {
+    @Override protected void onDestroy() {
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
-            webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
-            webView.destroy();
+            webView.stopLoading(); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy();
         }
         super.onDestroy();
     }
