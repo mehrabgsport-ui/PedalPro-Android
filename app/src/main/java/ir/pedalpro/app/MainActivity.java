@@ -3,13 +3,17 @@ package ir.pedalpro.app;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -20,6 +24,8 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -27,12 +33,25 @@ public class MainActivity extends Activity {
     private static final int REQ_LOCATION = 1101;
     private static final int REQ_CAMERA = 1102;
     private static final int REQ_FILE = 1103;
+    private static final int REQ_NOTIFICATIONS = 1104;
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private GeolocationPermissions.Callback geoCallback;
     private String geoOrigin;
     private PermissionRequest pendingWebPermission;
+    private String pendingTrackingJson;
+
+    private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            String payload = intent.getStringExtra(TrackingService.EXTRA_PAYLOAD);
+            if (payload == null || webView == null) return;
+            String fn = TrackingService.ACTION_UPDATE.equals(intent.getAction())
+                    ? "PedalProNativeLocation" : "PedalProNativeStatus";
+            String script = "window." + fn + " && window." + fn + "(" + JSONObject.quote(payload) + ");";
+            webView.post(() -> webView.evaluateJavascript(script, null));
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,12 +63,22 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         setupWebView();
+        registerTrackingReceiver();
         requestLocationIfNeeded();
+        requestNotificationIfNeeded();
         if (savedInstanceState == null) webView.loadUrl(HOME);
         else webView.restoreState(savedInstanceState);
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private void registerTrackingReceiver() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(TrackingService.ACTION_UPDATE);
+        filter.addAction(TrackingService.ACTION_STATUS);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(trackingReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(trackingReceiver, filter);
+    }
+
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     private void setupWebView() {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
@@ -60,11 +89,13 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.0");
+        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.1");
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(webView, true);
+
+        webView.addJavascriptInterface(new NativeBridge(), "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -75,6 +106,12 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return handleUri(Uri.parse(url));
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                CookieManager.getInstance().flush();
+                view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
             }
         });
 
@@ -114,7 +151,7 @@ public class MainActivity extends Activity {
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     startActivityForResult(intent, REQ_FILE);
                     return true;
-                } catch (ActivityNotFoundException e) {
+                } catch (Exception e) {
                     fileCallback = null;
                     Toast.makeText(MainActivity.this, "انتخاب فایل در دسترس نیست", Toast.LENGTH_SHORT).show();
                     return false;
@@ -123,33 +160,72 @@ public class MainActivity extends Activity {
         });
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-            } catch (Exception e) {
-                Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show();
-            }
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+            catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
+    }
+
+    public class NativeBridge {
+        @JavascriptInterface
+        public void startTracking(String json) {
+            runOnUiThread(() -> {
+                if (!hasLocation()) {
+                    pendingTrackingJson = json;
+                    requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+                    return;
+                }
+                startNativeTracking(json);
+            });
+        }
+
+        @JavascriptInterface
+        public void stopTracking() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, TrackingService.class);
+                i.setAction(TrackingService.ACTION_STOP);
+                startService(i);
+            });
+        }
+
+        @JavascriptInterface
+        public boolean isTracking() {
+            return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("active", false);
+        }
+
+        @JavascriptInterface
+        public String appVersion() { return "1.1.0"; }
+    }
+
+    private void startNativeTracking(String json) {
+        try {
+            JSONObject o = new JSONObject(json);
+            Intent i = new Intent(this, TrackingService.class);
+            i.setAction(TrackingService.ACTION_START);
+            i.putExtra("ride_id", o.optInt("ride_id", 0));
+            i.putExtra("csrf", o.optString("csrf", ""));
+            i.putExtra("max_accuracy", o.optDouble("max_accuracy", 25));
+            i.putExtra("interval_ms", o.optLong("interval_ms", 2500));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
+            else startService(i);
+        } catch (Exception e) {
+            Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private boolean handleUri(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-        if (("https".equals(scheme) || "http".equals(scheme)) && ("pedalpro.ir".equals(host) || "www.pedalpro.ir".equals(host))) {
-            return false;
-        }
-        if ("http".equals(scheme) || "https".equals(scheme) || "geo".equals(scheme) || "market".equals(scheme) || "tel".equals(scheme) || "mailto".equals(scheme)) {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, uri));
-            } catch (Exception e) {
-                Toast.makeText(this, "برنامه مناسب برای باز کردن این لینک پیدا نشد", Toast.LENGTH_SHORT).show();
-            }
+        if (("https".equals(scheme) || "http".equals(scheme)) &&
+                ("pedalpro.ir".equals(host) || "www.pedalpro.ir".equals(host))) return false;
+        if ("http".equals(scheme) || "https".equals(scheme) || "geo".equals(scheme) ||
+                "market".equals(scheme) || "tel".equals(scheme) || "mailto".equals(scheme)) {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
+            catch (Exception e) { Toast.makeText(this, "برنامه مناسب برای باز کردن این لینک پیدا نشد", Toast.LENGTH_SHORT).show(); }
             return true;
         }
         if ("intent".equals(scheme)) {
-            try {
-                Intent intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME);
-                startActivity(intent);
-            } catch (Exception ignored) { }
+            try { startActivity(Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)); }
+            catch (Exception ignored) { }
             return true;
         }
         return false;
@@ -161,17 +237,32 @@ public class MainActivity extends Activity {
     }
 
     private void requestLocationIfNeeded() {
-        if (!hasLocation()) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+        if (!hasLocation()) requestPermissions(
+                new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+    }
+
+    private void requestNotificationIfNeeded() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+        }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_LOCATION && geoCallback != null) {
+        if (requestCode == REQ_LOCATION) {
             boolean ok = hasLocation();
-            geoCallback.invoke(geoOrigin, ok, false);
-            geoCallback = null;
-            geoOrigin = null;
+            if (geoCallback != null) {
+                geoCallback.invoke(geoOrigin, ok, false);
+                geoCallback = null;
+                geoOrigin = null;
+            }
+            if (ok && pendingTrackingJson != null) {
+                String json = pendingTrackingJson;
+                pendingTrackingJson = null;
+                startNativeTracking(json);
+            }
         } else if (requestCode == REQ_CAMERA && pendingWebPermission != null) {
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
                 pendingWebPermission.grant(pendingWebPermission.getResources());
@@ -204,8 +295,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
-            webView.loadUrl("about:blank");
             webView.stopLoading();
             webView.setWebChromeClient(null);
             webView.setWebViewClient(null);
