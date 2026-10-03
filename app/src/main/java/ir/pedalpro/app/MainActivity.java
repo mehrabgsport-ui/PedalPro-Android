@@ -70,6 +70,7 @@ public class MainActivity extends Activity {
         requestLocationIfNeeded();
         requestNotificationIfNeeded();
         scheduleNotificationJob();
+        FirebaseConfigManager.sync(getApplicationContext());
         String initial = resolveInitialUrl(getIntent());
         if (savedInstanceState == null) webView.loadUrl(initial);
         else webView.restoreState(savedInstanceState);
@@ -117,7 +118,7 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.2");
+        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.3");
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -136,6 +137,7 @@ public class MainActivity extends Activity {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
                 NotificationJobService.fetchNow(getApplicationContext());
+                FirebaseConfigManager.sync(getApplicationContext());
             }
         });
 
@@ -264,6 +266,7 @@ public class MainActivity extends Activity {
             AppUpdateManager.resumePendingInstall(this);
         AppUpdateManager.check(this, false);
         NotificationJobService.fetchNow(getApplicationContext());
+        FirebaseConfigManager.sync(getApplicationContext());
     }
 
     @Override protected void onNewIntent(Intent intent) {
