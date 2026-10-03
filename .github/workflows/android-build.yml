@@ -19,10 +19,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Install Android SDK 36
+      - name: Locate and install Android SDK 36
         shell: bash
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/16.0/bin/sdkmanager"
+          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found under $ANDROID_HOME"
+            find "$ANDROID_HOME" -maxdepth 4 -type f | sort | head -200
+            exit 1
+          fi
+          echo "Using $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - name: Set up Gradle
