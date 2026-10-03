@@ -5,6 +5,7 @@ plugins {
 android {
     namespace 'ir.pedalpro.app'
     compileSdk 36
+    buildFeatures { buildConfig true }
 
     defaultConfig {
         applicationId 'ir.pedalpro.app'
