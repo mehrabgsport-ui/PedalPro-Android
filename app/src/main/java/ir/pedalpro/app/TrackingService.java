@@ -184,7 +184,7 @@ public class TrackingService extends Service implements LocationListener {
             double meters = lastAcceptedLocation.distanceTo(filtered);
             float prevAcc = lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 12f;
             float curAcc = filtered.hasAccuracy() ? filtered.getAccuracy() : 12f;
-            double noiseRadius = Math.max(1.8, Math.min(6.0, Math.sqrt(Math.max(1.0, prevAcc * curAcc)) * 0.24));
+            double noiseRadius = Math.max(3.0, Math.min(9.0, Math.sqrt(Math.max(1.0, prevAcc * curAcc)) * 0.55));
             if (meters < noiseRadius && now - lastAcceptedAt < 15000L) {
                 broadcastStatus("GPS پایدار — حرکت کاذب حذف شد", false);
                 return;
@@ -201,8 +201,17 @@ public class TrackingService extends Service implements LocationListener {
                         alpha * (filtered.getLatitude() - lastAcceptedLocation.getLatitude()));
                 smooth.setLongitude(lastAcceptedLocation.getLongitude() +
                         alpha * (filtered.getLongitude() - lastAcceptedLocation.getLongitude()));
+                double smoothMeters = lastAcceptedLocation.distanceTo(smooth);
+                double speedMps = smoothMeters / (dtMs / 1000.0);
+                // Never trust Android's instantaneous speed while stationary. Derive speed from the filtered route.
+                if (smoothMeters < 2.0 || speedMps < 0.70) smooth.setSpeed(0f);
+                else smooth.setSpeed((float)Math.min(speedMps, prefs.getFloat("max_speed_kmh", 100f) / 3.6));
                 filtered = smooth;
+            } else {
+                filtered.setSpeed(0f);
             }
+        } else {
+            filtered.setSpeed(0f);
         }
 
         lastAcceptedAt = now;
