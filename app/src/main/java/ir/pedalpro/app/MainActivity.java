@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -58,7 +59,7 @@ public class MainActivity extends Activity {
     window.__PP_WALKIE_PROBE_INSTALLED__ = true;
 
     const MAX_BODY = 1200;
-    const probeVersion = "1.4.11-e2e";
+    const probeVersion = "1.4.12-audio-source-fix";
 
     function errInfo(e) {
       if (!e) return null;
@@ -138,9 +139,22 @@ public class MainActivity extends Activity {
         const originalGum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getUserMedia = function(constraints) {
           emit("GUM_REQUEST", {constraints: constraints});
+          try {
+            if (window.AndroidBridge && typeof window.AndroidBridge.prepareWalkieAudio === "function") {
+              window.AndroidBridge.prepareWalkieAudio();
+              emit("ANDROID_AUDIO_PREPARE_CALL", {});
+            }
+          } catch (e) {
+            emit("ANDROID_AUDIO_PREPARE_FAIL", errInfo(e));
+          }
           let p;
           try { p = originalGum(constraints); }
           catch (e) {
+            try {
+              if (window.AndroidBridge && typeof window.AndroidBridge.releaseWalkieAudio === "function") {
+                window.AndroidBridge.releaseWalkieAudio();
+              }
+            } catch (_) {}
             emit("GUM_THROW", errInfo(e));
             throw e;
           }
@@ -156,6 +170,11 @@ public class MainActivity extends Activity {
             emit("GUM_OK", {active:stream.active, tracks:tracks});
             return stream;
           }, function(e){
+            try {
+              if (window.AndroidBridge && typeof window.AndroidBridge.releaseWalkieAudio === "function") {
+                window.AndroidBridge.releaseWalkieAudio();
+              }
+            } catch (_) {}
             emit("GUM_FAIL", errInfo(e));
             throw e;
           });
@@ -172,8 +191,17 @@ public class MainActivity extends Activity {
         function hookRecorder(rec) {
           if (hooked.has(rec)) return;
           hooked.add(rec);
-          ["start","stop","pause","resume"].forEach(function(name){
+          ["start","pause","resume"].forEach(function(name){
             rec.addEventListener(name, function(){ emit("REC_EVENT_" + name.toUpperCase(), {state:rec.state, mimeType:rec.mimeType}); });
+          });
+          rec.addEventListener("stop", function(){
+            emit("REC_EVENT_STOP", {state:rec.state, mimeType:rec.mimeType});
+            try {
+              if (window.AndroidBridge && typeof window.AndroidBridge.releaseWalkieAudio === "function") {
+                window.AndroidBridge.releaseWalkieAudio();
+                emit("ANDROID_AUDIO_RELEASE_CALL", {reason:"recorder-stop"});
+              }
+            } catch (_) {}
           });
           rec.addEventListener("dataavailable", function(e){
             emit("REC_DATA", {state:rec.state, size:e.data ? e.data.size : 0, type:e.data ? e.data.type : ""});
@@ -412,6 +440,11 @@ public class MainActivity extends Activity {
     private android.app.AlertDialog walkieDebugDialog;
     private final ArrayDeque<String> walkieRecentLogs = new ArrayDeque<>();
     private long lastWalkieDebugDialogMs = 0L;
+    private AudioManager walkieAudioManager;
+    private boolean walkieAudioModeOwned = false;
+    private int walkieAudioPreviousMode = AudioManager.MODE_NORMAL;
+    private final android.os.Handler walkieAudioHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable walkieAudioReleaseRunnable = () -> releaseWalkieAudioMode("timeout");
     private boolean backDispatching = false;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
@@ -581,6 +614,9 @@ public class MainActivity extends Activity {
                             if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) needsCamera = true;
                             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) needsAudio = true;
                         }
+                        if (needsAudio) {
+                            prepareWalkieAudioMode("web-permission");
+                        }
                         if (needsAudio && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                             walkieLog("AUDIO_ANDROID_PERMISSION_PROMPT", origin);
                             pendingWebPermission = request;
@@ -686,6 +722,12 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public void prepareWalkieAudio() {
+            prepareWalkieAudioMode("js-getUserMedia");
+        }
+        @JavascriptInterface public void releaseWalkieAudio() {
+            releaseWalkieAudioMode("js-release");
+        }
         @JavascriptInterface public void walkieDebug(String json) {
             String raw = json == null ? "null" : json;
             String stage = "JS_EVENT";
@@ -803,6 +845,54 @@ public class MainActivity extends Activity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i); else startService(i);
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void prepareWalkieAudioMode(String reason) {
+        try {
+            if (walkieAudioManager == null) {
+                walkieAudioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+            }
+            if (walkieAudioManager == null) {
+                walkieLog("AUDIO_MODE_PREPARE_FAIL", "reason=" + reason + " audioManager=null");
+                return;
+            }
+            walkieAudioHandler.removeCallbacks(walkieAudioReleaseRunnable);
+            if (!walkieAudioModeOwned) {
+                walkieAudioPreviousMode = walkieAudioManager.getMode();
+            }
+            int before = walkieAudioManager.getMode();
+            walkieAudioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            int after = walkieAudioManager.getMode();
+            walkieAudioModeOwned = true;
+            walkieAudioHandler.postDelayed(walkieAudioReleaseRunnable, 8000L);
+            walkieLog("AUDIO_MODE_PREPARED", "reason=" + reason + " before=" + before +
+                    " after=" + after + " previous=" + walkieAudioPreviousMode);
+        } catch (Throwable e) {
+            walkieLog("AUDIO_MODE_PREPARE_FAIL", "reason=" + reason + " " +
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private void releaseWalkieAudioMode(String reason) {
+        try {
+            walkieAudioHandler.removeCallbacks(walkieAudioReleaseRunnable);
+            if (walkieAudioManager == null || !walkieAudioModeOwned) return;
+            int before = walkieAudioManager.getMode();
+            if (before == AudioManager.MODE_IN_COMMUNICATION) {
+                int restore = walkieAudioPreviousMode;
+                if (restore == AudioManager.MODE_INVALID || restore == AudioManager.MODE_CURRENT) {
+                    restore = AudioManager.MODE_NORMAL;
+                }
+                walkieAudioManager.setMode(restore);
+            }
+            int after = walkieAudioManager.getMode();
+            walkieAudioModeOwned = false;
+            walkieLog("AUDIO_MODE_RELEASED", "reason=" + reason + " before=" + before + " after=" + after);
+        } catch (Throwable e) {
+            walkieAudioModeOwned = false;
+            walkieLog("AUDIO_MODE_RELEASE_FAIL", "reason=" + reason + " " +
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
@@ -1034,6 +1124,7 @@ public class MainActivity extends Activity {
             try { walkieDebugDialog.dismiss(); } catch (Throwable ignored) { }
             walkieDebugDialog = null;
         }
+        releaseWalkieAudioMode("activity-destroy");
         if (webView != null) {
             webView.stopLoading(); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy();
         }
