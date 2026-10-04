@@ -188,7 +188,7 @@ public class MainActivity extends Activity {
     public class NativeBridge {
         @JavascriptInterface public void startTracking(String json) {
             runOnUiThread(() -> {
-                if (!hasLocation()) {
+                if (!hasFineLocation()) {
                     pendingTrackingJson = json;
                     requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
                     return;
@@ -225,6 +225,7 @@ public class MainActivity extends Activity {
             i.putExtra("ride_id", o.optInt("ride_id", 0));
             i.putExtra("csrf", o.optString("csrf", ""));
             i.putExtra("max_accuracy", o.optDouble("max_accuracy", 25));
+            i.putExtra("max_speed_kmh", o.optDouble("max_speed_kmh", 100));
             i.putExtra("interval_ms", o.optLong("interval_ms", 2500));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i); else startService(i);
         } catch (Exception e) {
@@ -264,6 +265,25 @@ public class MainActivity extends Activity {
                 checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean hasFineLocation() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void showLocationSettingsHelp() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("دقت GPS PedalPro")
+                .setMessage("برای ثبت دقیق مسیر، دسترسی Location را روی «Precise / دقیق» و «Allow while using the app» بگذارید و GPS گوشی را روشن کنید.")
+                .setPositiveButton("تنظیمات برنامه", (d, w) -> {
+                    try {
+                        Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(i);
+                    } catch (Exception ignored) { }
+                })
+                .setNegativeButton("بعداً", null)
+                .show();
+    }
+
     private void requestNotificationIfNeeded() {
         if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
         android.content.SharedPreferences prefs = getSharedPreferences("pedalpro_permissions", MODE_PRIVATE);
@@ -299,12 +319,17 @@ public class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQ_LOCATION) {
             boolean ok = hasLocation();
+            boolean fine = hasFineLocation();
             if (geoCallback != null) {
                 geoCallback.invoke(geoOrigin, ok, false);
                 geoCallback = null; geoOrigin = null;
             }
-            if (ok && pendingTrackingJson != null) {
+            if (fine && pendingTrackingJson != null) {
                 String json = pendingTrackingJson; pendingTrackingJson = null; startNativeTracking(json);
+            } else if (pendingTrackingJson != null) {
+                pendingTrackingJson = null;
+                showLocationSettingsHelp();
+                Toast.makeText(this, "برای ثبت مسیر دقیق، Location را روی Precise قرار دهید.", Toast.LENGTH_LONG).show();
             }
         } else if (requestCode == REQ_CAMERA && pendingWebPermission != null) {
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
