@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
     private volatile boolean updateCheckRunning = false;
     private long lastUpdateCheckMs = 0L;
     private android.app.AlertDialog forcedUpdateDialog;
+    private boolean backDispatching = false;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -462,7 +463,27 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack(); else super.onBackPressed();
+        if (webView == null) {
+            super.onBackPressed();
+            return;
+        }
+        if (backDispatching) return;
+        backDispatching = true;
+        String js = "(function(){try{" +
+                "if(window.PedalProHandleAndroidBack){return !!window.PedalProHandleAndroidBack();}" +
+                "return false;}catch(e){return false;}})();";
+        webView.evaluateJavascript(js, value -> {
+            backDispatching = false;
+            boolean handled = "true".equalsIgnoreCase(value) ||
+                    "\"true\"".equalsIgnoreCase(value) ||
+                    "1".equals(value) || "\"1\"".equals(value);
+            if (!handled) fallbackNativeBack();
+        });
+    }
+
+    private void fallbackNativeBack() {
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
