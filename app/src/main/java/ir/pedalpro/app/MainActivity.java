@@ -30,6 +30,11 @@ import android.view.WindowManager;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -45,6 +50,9 @@ public class MainActivity extends Activity {
     private String geoOrigin;
     private PermissionRequest pendingWebPermission;
     private String pendingTrackingJson;
+    private volatile boolean updateCheckRunning = false;
+    private long lastUpdateCheckMs = 0L;
+    private android.app.AlertDialog forcedUpdateDialog;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -74,6 +82,7 @@ public class MainActivity extends Activity {
         String initial = resolveInitialUrl(getIntent());
         if (savedInstanceState == null) webView.loadUrl(initial);
         else webView.restoreState(savedInstanceState);
+        webView.postDelayed(() -> checkReleasePolicy(false), 1400L);
     }
 
     private String resolveInitialUrl(Intent intent) {
@@ -168,8 +177,25 @@ public class MainActivity extends Activity {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = filePathCallback;
                 try {
-                    Intent intent = fileChooserParams.createIntent();
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    boolean ppup = false;
+                    String[] accepts = fileChooserParams.getAcceptTypes();
+                    if (accepts != null) {
+                        for (String a : accepts) {
+                            if (a != null && a.toLowerCase(Locale.ROOT).contains("ppup")) { ppup = true; break; }
+                        }
+                    }
+                    Intent intent;
+                    if (ppup) {
+                        // .ppup is a ZIP container with a custom extension. Android file pickers
+                        // often hide it when MIME filtering is enabled, so show all openable files
+                        // and let PedalPro validate the package on the server.
+                        intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("*/*");
+                    } else {
+                        intent = fileChooserParams.createIntent();
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    }
                     startActivityForResult(intent, REQ_FILE);
                     return true;
                 } catch (Exception e) {
@@ -220,12 +246,79 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String appVersion() { return BuildConfig.VERSION_NAME; }
         @JavascriptInterface public int appVersionCode() { return BuildConfig.VERSION_CODE; }
         @JavascriptInterface public void checkForUpdate() {
-            runOnUiThread(() -> StoreUpdateManager.openUpdate(MainActivity.this));
+            runOnUiThread(() -> checkReleasePolicy(true));
         }
         @JavascriptInterface public void requestNotifications() {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+    }
+
+    private void checkReleasePolicy(boolean manual) {
+        long now = System.currentTimeMillis();
+        if (updateCheckRunning) return;
+        if (!manual && now - lastUpdateCheckMs < 25000L) return;
+        updateCheckRunning = true;
+        lastUpdateCheckMs = now;
+        new Thread(() -> {
+            HttpURLConnection c = null;
+            try {
+                URL u = new URL("https://pedalpro.ir/api.php?action=app_latest_release");
+                c = (HttpURLConnection) u.openConnection();
+                c.setConnectTimeout(10000);
+                c.setReadTimeout(12000);
+                c.setRequestProperty("Accept", "application/json");
+                int code = c.getResponseCode();
+                if (code < 200 || code >= 300) throw new Exception("HTTP " + code);
+                StringBuilder sb = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line; while ((line = br.readLine()) != null) sb.append(line);
+                }
+                JSONObject root = new JSONObject(sb.toString());
+                JSONObject rel = root.optJSONObject("release");
+                if (rel == null) throw new Exception("release missing");
+                int latest = rel.optInt("version_code", 0);
+                String version = rel.optString("version_name", String.valueOf(latest));
+                String notes = rel.optString("release_notes", "");
+                String apkUrl = rel.optString("apk_url", "");
+                boolean mandatory = rel.optBoolean("is_mandatory", false);
+                runOnUiThread(() -> {
+                    if (latest > BuildConfig.VERSION_CODE) showReleaseDialog(version, notes, apkUrl, mandatory);
+                    else {
+                        if (forcedUpdateDialog != null && forcedUpdateDialog.isShowing()) forcedUpdateDialog.dismiss();
+                        if (webView != null) webView.setEnabled(true);
+                        if (manual) Toast.makeText(MainActivity.this, "PedalPro به‌روز است.", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } catch (Exception e) {
+                if (manual) runOnUiThread(() -> Toast.makeText(MainActivity.this, "بررسی نسخه انجام نشد؛ اتصال اینترنت را بررسی کنید.", Toast.LENGTH_LONG).show());
+            } finally {
+                if (c != null) c.disconnect();
+                updateCheckRunning = false;
+            }
+        }, "PedalProUpdateCheck").start();
+    }
+
+    private void showReleaseDialog(String version, String notes, String apkUrl, boolean mandatory) {
+        if (isFinishing() || isDestroyed()) return;
+        if (forcedUpdateDialog != null && forcedUpdateDialog.isShowing()) forcedUpdateDialog.dismiss();
+        String msg = "نسخه " + version + " آماده است." + (notes == null || notes.trim().isEmpty() ? "" : "\n\n" + notes.trim());
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(this)
+                .setTitle(mandatory ? "بروزرسانی اجباری PedalPro" : "نسخه جدید PedalPro")
+                .setMessage(msg)
+                .setPositiveButton(mandatory ? "بروزرسانی الزامی" : "بروزرسانی", (d, w) ->
+                        StoreUpdateManager.openUpdate(MainActivity.this, apkUrl));
+        if (!mandatory) b.setNegativeButton("بعداً", null);
+        forcedUpdateDialog = b.create();
+        forcedUpdateDialog.setCancelable(!mandatory);
+        forcedUpdateDialog.setCanceledOnTouchOutside(!mandatory);
+        forcedUpdateDialog.setOnShowListener(x -> {
+            if (mandatory && webView != null) webView.setEnabled(false);
+        });
+        forcedUpdateDialog.setOnDismissListener(x -> {
+            if (!mandatory && webView != null) webView.setEnabled(true);
+        });
+        forcedUpdateDialog.show();
     }
 
     private void setRideScreenAwake(boolean keepAwake) {
@@ -326,6 +419,7 @@ public class MainActivity extends Activity {
         setRideScreenAwake(tracking);
         NotificationJobService.fetchNow(getApplicationContext());
         FirebaseConfigManager.sync(getApplicationContext());
+        webView.postDelayed(() -> checkReleasePolicy(false), 650L);
     }
 
     @Override protected void onNewIntent(Intent intent) {
