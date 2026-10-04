@@ -42,6 +42,7 @@ public class TrackingService extends Service implements LocationListener {
     public static final String PREFS = "pedalpro_native_tracking";
     public static final String ACTION_START = "ir.pedalpro.app.START_TRACKING";
     public static final String ACTION_STOP = "ir.pedalpro.app.STOP_TRACKING";
+    public static final String ACTION_DISCARD = "ir.pedalpro.app.DISCARD_TRACKING";
     public static final String ACTION_UPDATE = "ir.pedalpro.app.TRACK_UPDATE";
     public static final String ACTION_STATUS = "ir.pedalpro.app.TRACK_STATUS";
     public static final String EXTRA_PAYLOAD = "payload";
@@ -70,6 +71,11 @@ public class TrackingService extends Service implements LocationListener {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
             stopTracking();
+            return START_NOT_STICKY;
+        }
+
+        if (intent != null && ACTION_DISCARD.equals(intent.getAction())) {
+            discardTracking();
             return START_NOT_STICKY;
         }
 
@@ -440,6 +446,25 @@ public class TrackingService extends Service implements LocationListener {
 
     private void stopTracking() {
         prefs.edit().putBoolean("active", false).apply();
+        if (locationManager != null) {
+            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
+        }
+        releaseWakeLock();
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        stopSelf();
+    }
+
+    private void discardTracking() {
+        prefs.edit()
+                .putBoolean("active", false)
+                .remove("pending")
+                .remove("ride_id")
+                .remove("csrf")
+                .apply();
+        rawWindow.clear();
+        acceptedWindow.clear();
+        lastAcceptedLocation = null;
+        lastAcceptedAt = 0L;
         if (locationManager != null) {
             try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
         }

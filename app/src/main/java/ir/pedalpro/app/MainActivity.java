@@ -203,6 +203,13 @@ public class MainActivity extends Activity {
                 startService(i);
             });
         }
+        @JavascriptInterface public void discardTracking() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, TrackingService.class);
+                i.setAction(TrackingService.ACTION_DISCARD);
+                startService(i);
+            });
+        }
         @JavascriptInterface public boolean isTracking() {
             return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("active", false);
         }
