@@ -38,6 +38,6 @@ jobs:
       - name: Upload Cafe Bazaar APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.9-bazaar-APK-unsigned
+          name: PedalPro-1.4.10-bazaar-APK-unsigned
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
