@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private static final int REQ_CAMERA = 1102;
     private static final int REQ_FILE = 1103;
     private static final int REQ_NOTIFICATIONS = 1104;
+    private static final int REQ_AUDIO = 1105;
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
@@ -163,14 +164,31 @@ public class MainActivity extends Activity {
 
             @Override public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> {
-                    boolean needsCamera = false;
-                    for (String r : request.getResources()) if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) needsCamera = true;
-                    if (needsCamera && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                        pendingWebPermission = request;
-                        requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
-                        return;
+                    try {
+                        if (request.getOrigin() == null || !isPedalProOrigin(request.getOrigin().toString())) {
+                            request.deny();
+                            return;
+                        }
+                        boolean needsCamera = false;
+                        boolean needsAudio = false;
+                        for (String r : request.getResources()) {
+                            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(r)) needsCamera = true;
+                            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) needsAudio = true;
+                        }
+                        if (needsAudio && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            pendingWebPermission = request;
+                            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
+                            return;
+                        }
+                        if (needsCamera && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                            pendingWebPermission = request;
+                            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+                            return;
+                        }
+                        request.grant(request.getResources());
+                    } catch (Throwable e) {
+                        request.deny();
                     }
-                    request.grant(request.getResources());
                 });
             }
 
@@ -448,6 +466,11 @@ public class MainActivity extends Activity {
             }
         } else if (requestCode == REQ_CAMERA && pendingWebPermission != null) {
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                pendingWebPermission.grant(pendingWebPermission.getResources());
+            else pendingWebPermission.deny();
+            pendingWebPermission = null;
+        } else if (requestCode == REQ_AUDIO && pendingWebPermission != null) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                 pendingWebPermission.grant(pendingWebPermission.getResources());
             else pendingWebPermission.deny();
             pendingWebPermission = null;
