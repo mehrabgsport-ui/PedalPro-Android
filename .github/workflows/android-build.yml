@@ -1,4 +1,4 @@
-name: Android Store Release Build
+name: Android Bazaar Release Build
 
 on:
   workflow_dispatch:
@@ -34,22 +34,10 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Build store release artifacts
-        run: gradle :app:assembleGooglePlayRelease :app:bundleGooglePlayRelease :app:assembleBazaarRelease --stacktrace
-      - name: Upload Google Play AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: PedalPro-1.4.7-googlePlay-AAB-unsigned
-          path: app/build/outputs/bundle/googlePlayRelease/*.aab
-          if-no-files-found: error
-      - name: Upload Google Play APK smoke build
-        uses: actions/upload-artifact@v4
-        with:
-          name: PedalPro-1.4.7-googlePlay-APK-unsigned
-          path: app/build/outputs/apk/googlePlay/release/*.apk
-          if-no-files-found: error
+        run: gradle :app:assembleBazaarRelease --stacktrace
       - name: Upload Cafe Bazaar APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.7-bazaar-APK-unsigned
+          name: PedalPro-1.4.8-bazaar-APK-unsigned
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
