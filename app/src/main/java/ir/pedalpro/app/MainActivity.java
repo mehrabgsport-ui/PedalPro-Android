@@ -67,7 +67,6 @@ public class MainActivity extends Activity {
         setContentView(root);
         setupWebView();
         registerTrackingReceiver();
-        requestLocationIfNeeded();
         requestNotificationIfNeeded();
         scheduleNotificationJob();
         FirebaseConfigManager.sync(getApplicationContext());
@@ -114,11 +113,11 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setGeolocationEnabled(true);
-        s.setAllowFileAccess(true);
+        s.setAllowFileAccess(false);
         s.setAllowContentAccess(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.3");
+        s.setUserAgentString(s.getUserAgentString() + " PedalProAndroid/1.4");
 
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
@@ -143,6 +142,7 @@ public class MainActivity extends Activity {
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                if (!isPedalProOrigin(origin)) { callback.invoke(origin, false, false); return; }
                 if (hasLocation()) callback.invoke(origin, true, false);
                 else {
                     geoOrigin = origin; geoCallback = callback;
@@ -209,8 +209,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String appVersion() { return BuildConfig.VERSION_NAME; }
         @JavascriptInterface public int appVersionCode() { return BuildConfig.VERSION_CODE; }
         @JavascriptInterface public void checkForUpdate() {
-            runOnUiThread(() -> AppUpdateManager.check(MainActivity.this, true));
+            runOnUiThread(() -> StoreUpdateManager.openUpdate(MainActivity.this));
         }
+        @JavascriptInterface public void requestNotifications() {
+            runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
+        }
+        @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
     }
 
     private void startNativeTracking(String json) {
@@ -226,6 +230,15 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private boolean isPedalProOrigin(String origin) {
+        try {
+            Uri u = Uri.parse(origin);
+            String h = u.getHost();
+            return "https".equalsIgnoreCase(u.getScheme()) && h != null &&
+                    (h.equalsIgnoreCase("pedalpro.ir") || h.equalsIgnoreCase("www.pedalpro.ir"));
+        } catch (Throwable e) { return false; }
     }
 
     private boolean handleUri(Uri uri) {
@@ -251,20 +264,26 @@ public class MainActivity extends Activity {
                 checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void requestLocationIfNeeded() {
-        if (!hasLocation()) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+    private void requestNotificationIfNeeded() {
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("pedalpro_permissions", MODE_PRIVATE);
+        if (prefs.getBoolean("notification_prompt_shown", false)) return;
+        prefs.edit().putBoolean("notification_prompt_shown", true).apply();
+        showNotificationPermissionDialog();
     }
 
-    private void requestNotificationIfNeeded() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS);
+    private void showNotificationPermissionDialog() {
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("اعلان‌های PedalPro")
+                .setMessage("برای دریافت پیام‌های چت، چالش‌های زنده و هشدارهای PedalPro اجازه اعلان را فعال کنید.")
+                .setPositiveButton("فعال کردن", (d, w) -> requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFICATIONS))
+                .setNegativeButton("بعداً", null)
+                .show();
     }
 
     @Override protected void onResume() {
         super.onResume();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && getPackageManager().canRequestPackageInstalls())
-            AppUpdateManager.resumePendingInstall(this);
-        AppUpdateManager.check(this, false);
         NotificationJobService.fetchNow(getApplicationContext());
         FirebaseConfigManager.sync(getApplicationContext());
     }
