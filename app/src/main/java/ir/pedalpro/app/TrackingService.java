@@ -79,6 +79,7 @@ public class TrackingService extends Service implements LocationListener {
     private long trackingStartedAt = 0L;
     private Location lastAcceptedLocation;
     private int stationaryFixes = 0;
+    private int movementConfirmFixes = 0;
     private int rejectedFixes = 0;
     private long lastFilterStatusAt = 0L;
     private final ArrayDeque<Location> rawWindow = new ArrayDeque<>();
@@ -109,13 +110,18 @@ public class TrackingService extends Service implements LocationListener {
                 stopSelf();
                 return START_NOT_STICKY;
             }
+            // GPS Engine V2 owns the safe operating envelope. Legacy server/admin
+            // values that are too strict (e.g. 10m / 2000ms / 50kmh) must not
+            // degrade tracking quality or delete legitimate downhill fixes.
+            float requestedAccuracy = (float) intent.getDoubleExtra("max_accuracy", 25);
+            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 80);
             prefs.edit()
                     .putBoolean("active", true)
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
-                    .putFloat("max_accuracy", (float) intent.getDoubleExtra("max_accuracy", 25))
-                    .putFloat("max_speed_kmh", (float) intent.getDoubleExtra("max_speed_kmh", 100))
-                    .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 1000L)))
+                    .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
+                    .putFloat("max_speed_kmh", Math.max(80f, requestedMaxSpeed))
+                    .putLong("interval_ms", 1000L)
                     .apply();
             if (previousRideId != rideId) resetRawLog(rideId);
         }
@@ -133,6 +139,7 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
         stationaryFixes = 0;
+        movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
         beginLocationUpdates();
@@ -305,13 +312,31 @@ public class TrackingService extends Service implements LocationListener {
 
         // MTB/gravel slow movement: Doppler speed can prove motion before coordinate
         // displacement grows beyond the full accuracy radius.
-        boolean dopplerMovement = osMps >= 0.35 &&
-                meters >= Math.max(1.2, noiseRadius * 0.35);
-        boolean geometricMovement = meters >= noiseRadius &&
-                derivedMps >= 0.35;
-        boolean accumulatedSlowMovement = meters >= Math.max(3.0, noiseRadius * 1.15) &&
-                dtMs >= 2500L;
+        boolean dopplerMovement = osMps >= 0.55 &&
+                meters >= Math.max(1.8, noiseRadius * 0.55);
+        boolean geometricMovement = meters >= Math.max(2.5, noiseRadius) &&
+                derivedMps >= 0.45;
+        boolean accumulatedSlowMovement = meters >= Math.max(4.0, noiseRadius * 1.20) &&
+                dtMs >= 3000L;
         boolean moving = dopplerMovement || geometricMovement || accumulatedSlowMovement;
+
+        // Once we have been stationary for a few fixes, leaving the lock requires
+        // more than one plausible sample. This suppresses the classic 1-3m drift
+        // that Fused/GNSS can report while the phone is physically still.
+        if (moving && stationaryFixes >= 2) {
+            double unlockDistance = Math.max(3.5, noiseRadius * 1.10);
+            boolean strongEvidence =
+                    meters >= Math.max(5.0, noiseRadius * 1.45) ||
+                    (osMps >= 0.85 && meters >= unlockDistance) ||
+                    (derivedMps >= 0.95 && meters >= unlockDistance);
+
+            if (strongEvidence) movementConfirmFixes++;
+            else movementConfirmFixes = 0;
+
+            if (movementConfirmFixes < 2) moving = false;
+        } else if (!moving) {
+            movementConfirmFixes = 0;
+        }
 
         if (!moving) {
             stationaryFixes++;
@@ -330,6 +355,7 @@ public class TrackingService extends Service implements LocationListener {
         }
 
         stationaryFixes = 0;
+        movementConfirmFixes = 0;
         double maxMps = prefs.getFloat("max_speed_kmh", 100f) / 3.6;
         double chosenMps = derivedMps;
         if (osMps > 0.0 && Math.abs(osMps - derivedMps) <= Math.max(2.0, derivedMps * 0.65)) {
@@ -380,7 +406,7 @@ public class TrackingService extends Service implements LocationListener {
 
     private double stationaryNoiseRadius(float prevAcc, float curAcc) {
         double a = Math.max(1.0, Math.max(prevAcc, curAcc));
-        return Math.max(2.0, Math.min(6.0, a * 0.32));
+        return Math.max(3.0, Math.min(8.0, a * 0.45));
     }
 
     private boolean isIsolatedSpike(ArrayDeque<Location> source, Location newest) {
@@ -737,6 +763,7 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
         stationaryFixes = 0;
+        movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
         stopAllLocationUpdates();
