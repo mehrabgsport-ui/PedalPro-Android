@@ -178,11 +178,6 @@ public class TrackingService extends Service implements LocationListener {
         }
 
         long interval = Math.min(1800L, prefs.getLong("interval_ms", 2500L));
-        if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) {
-            broadcastPoint(locationJson(candidate), null);
-            return;
-        }
-
         double meters = lastAcceptedLocation == null ? 0.0 : lastAcceptedLocation.distanceTo(candidate);
         long dtMs = lastAcceptedLocation == null ? 0L : candidate.getTime() - lastAcceptedLocation.getTime();
         float prevAcc = lastAcceptedLocation != null && lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 10f;
@@ -207,6 +202,12 @@ public class TrackingService extends Service implements LocationListener {
                     prefs.getFloat("max_speed_kmh", 100f) / 3.6));
         } else {
             candidate.setSpeed(0f);
+        }
+
+        // UI gets every valid fix (~1 Hz); server persistence stays throttled.
+        if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) {
+            try { broadcastPoint(locationJson(candidate), null); } catch (Exception ignored) { }
+            return;
         }
 
         lastAcceptedAt = now;
