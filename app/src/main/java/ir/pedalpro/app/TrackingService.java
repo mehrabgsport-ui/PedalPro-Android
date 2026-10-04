@@ -20,10 +20,23 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.webkit.CookieManager;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -52,6 +65,12 @@ public class TrackingService extends Service implements LocationListener {
     private static final int NOTIFICATION_ID = 4107;
 
     private LocationManager locationManager;
+    private FusedLocationProviderClient fusedClient;
+    private LocationCallback fusedCallback;
+    private boolean usingFused = false;
+    private boolean legacyFallbackStarted = false;
+    private BufferedWriter rawWriter;
+    private int rawWriterRideId = 0;
     private SharedPreferences prefs;
     private final ExecutorService network = Executors.newSingleThreadExecutor();
     private final AtomicBoolean flushing = new AtomicBoolean(false);
@@ -92,8 +111,9 @@ public class TrackingService extends Service implements LocationListener {
                     .putString("csrf", intent.getStringExtra("csrf"))
                     .putFloat("max_accuracy", (float) intent.getDoubleExtra("max_accuracy", 25))
                     .putFloat("max_speed_kmh", (float) intent.getDoubleExtra("max_speed_kmh", 100))
-                    .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 2500L)))
+                    .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 1000L)))
                     .apply();
+            resetRawLog(rideId);
         }
 
         if (!prefs.getBoolean("active", false)) {
@@ -121,10 +141,73 @@ public class TrackingService extends Service implements LocationListener {
             stopTracking();
             return;
         }
-        if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-        long interval = prefs.getLong("interval_ms", 2500L);
 
-        // Warm start: a fresh last-known fix prevents waiting minutes for the first map position.
+        legacyFallbackStarted = false;
+        usingFused = false;
+        ensureRawWriter();
+
+        if (!startFusedLocationUpdates()) {
+            startLegacyLocationFallback();
+        }
+    }
+
+    private boolean startFusedLocationUpdates() {
+        try {
+            int availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this);
+            if (availability != ConnectionResult.SUCCESS) {
+                broadcastStatus("Fused GPS در این گوشی در دسترس نیست؛ استفاده از GPS مستقیم اندروید", false);
+                return false;
+            }
+
+            fusedClient = LocationServices.getFusedLocationProviderClient(this);
+            LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+                    .setMinUpdateIntervalMillis(750L)
+                    .setMaxUpdateDelayMillis(1500L)
+                    .setWaitForAccurateLocation(false)
+                    .build();
+
+            fusedCallback = new LocationCallback() {
+                @Override public void onLocationResult(LocationResult result) {
+                    if (result == null) return;
+                    for (Location loc : result.getLocations()) {
+                        if (loc != null) handleLocation(loc, "fused");
+                    }
+                }
+            };
+
+            try {
+                fusedClient.getLastLocation().addOnSuccessListener(last -> {
+                    if (last == null || !prefs.getBoolean("active", false)) return;
+                    long age = Math.abs(System.currentTimeMillis() - last.getTime());
+                    if (age <= 30000L && (!last.hasAccuracy() || last.getAccuracy() <= 70f)) {
+                        handleLocation(last, "fused_last");
+                    }
+                });
+            } catch (Throwable ignored) { }
+
+            fusedClient.requestLocationUpdates(request, fusedCallback, Looper.getMainLooper())
+                    .addOnSuccessListener(v -> {
+                        usingFused = true;
+                        broadcastStatus("Fused GPS با دقت بالا فعال — نمونه‌گیری حدود ۱ ثانیه", false);
+                    })
+                    .addOnFailureListener(e -> {
+                        usingFused = false;
+                        broadcastStatus("Fused GPS فعال نشد؛ انتقال به GPS مستقیم اندروید", false);
+                        startLegacyLocationFallback();
+                    });
+            return true;
+        } catch (Throwable e) {
+            usingFused = false;
+            return false;
+        }
+    }
+
+    private synchronized void startLegacyLocationFallback() {
+        if (legacyFallbackStarted || !prefs.getBoolean("active", false)) return;
+        legacyFallbackStarted = true;
+        if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        long interval = Math.max(1000L, prefs.getLong("interval_ms", 1000L));
+
         try {
             Location best = null;
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
@@ -135,21 +218,31 @@ public class TrackingService extends Service implements LocationListener {
                 if (best == null || (!x.hasAccuracy() || !best.hasAccuracy()) ||
                         (x.hasAccuracy() && best.hasAccuracy() && x.getAccuracy() < best.getAccuracy())) best = x;
             }
-            if (best != null && (!best.hasAccuracy() || best.getAccuracy() <= 70f)) onLocationChanged(best);
+            if (best != null && (!best.hasAccuracy() || best.getAccuracy() <= 70f)) {
+                handleLocation(best, "legacy_last");
+            }
         } catch (Exception ignored) { }
 
         try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
+            }
         } catch (Exception ignored) { }
         try {
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, Math.max(2000L, interval), 0f, this, Looper.getMainLooper());
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                        LocationManager.NETWORK_PROVIDER, Math.max(2000L, interval), 0f, this, Looper.getMainLooper());
+            }
         } catch (Exception ignored) { }
-        broadcastStatus("در حال دریافت چند نمونه GPS برای قفل دقیق موقعیت…", false);
+        broadcastStatus("GPS مستقیم اندروید فعال — حالت سازگار", false);
     }
 
     @Override public void onLocationChanged(Location loc) {
+        handleLocation(loc, "legacy:" + (loc == null ? "unknown" : String.valueOf(loc.getProvider())));
+    }
+
+    private void handleLocation(Location loc, String source) {{
         if (!prefs.getBoolean("active", false) || loc == null) return;
 
         long now = System.currentTimeMillis();
@@ -177,7 +270,7 @@ public class TrackingService extends Service implements LocationListener {
             return;
         }
 
-        long interval = Math.min(1800L, prefs.getLong("interval_ms", 2500L));
+        long interval = Math.min(1800L, Math.max(1000L, prefs.getLong("interval_ms", 1000L)));
         double meters = lastAcceptedLocation == null ? 0.0 : lastAcceptedLocation.distanceTo(candidate);
         long dtMs = lastAcceptedLocation == null ? 0L : candidate.getTime() - lastAcceptedLocation.getTime();
         float prevAcc = lastAcceptedLocation != null && lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 10f;
@@ -223,6 +316,80 @@ public class TrackingService extends Service implements LocationListener {
             broadcastStatus((moving ? "GPS زنده" : "GPS پایدار") + " ±" +
                     Math.round(candidate.hasAccuracy() ? candidate.getAccuracy() : 0f) + "m", false);
         } catch (Exception ignored) { }
+    }
+
+    private synchronized void resetRawLog(int rideId) {
+        closeRawWriter();
+        rawWriterRideId = 0;
+        if (rideId <= 0) return;
+        try {
+            File dir = new File(getFilesDir(), "raw_gps");
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, "ride_" + rideId + ".jsonl");
+            if (file.exists()) file.delete();
+        } catch (Throwable ignored) { }
+    }
+
+    private synchronized void ensureRawWriter() {
+        int rideId = prefs.getInt("ride_id", 0);
+        if (rideId <= 0) return;
+        if (rawWriter != null && rawWriterRideId == rideId) return;
+        closeRawWriter();
+        try {
+            File dir = new File(getFilesDir(), "raw_gps");
+            if (!dir.exists() && !dir.mkdirs()) return;
+            File file = new File(dir, "ride_" + rideId + ".jsonl");
+            rawWriter = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(file, true), StandardCharsets.UTF_8));
+            rawWriterRideId = rideId;
+        } catch (Throwable ignored) {
+            rawWriter = null;
+            rawWriterRideId = 0;
+        }
+    }
+
+    private synchronized void appendRawPoint(Location loc, String source) {
+        try {
+            ensureRawWriter();
+            if (rawWriter == null) return;
+            JSONObject p = new JSONObject();
+            p.put("lat", loc.getLatitude());
+            p.put("lng", loc.getLongitude());
+            p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
+            p.put("source", source == null ? "unknown" : source);
+            p.put("provider", loc.getProvider() == null ? JSONObject.NULL : loc.getProvider());
+            p.put("accuracy", loc.hasAccuracy() ? loc.getAccuracy() : JSONObject.NULL);
+            p.put("speed_mps", loc.hasSpeed() ? loc.getSpeed() : JSONObject.NULL);
+            p.put("bearing", loc.hasBearing() ? loc.getBearing() : JSONObject.NULL);
+            p.put("altitude", loc.hasAltitude() ? loc.getAltitude() : JSONObject.NULL);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                p.put("vertical_accuracy", loc.hasVerticalAccuracy() ? loc.getVerticalAccuracyMeters() : JSONObject.NULL);
+                p.put("speed_accuracy", loc.hasSpeedAccuracy() ? loc.getSpeedAccuracyMetersPerSecond() : JSONObject.NULL);
+                p.put("bearing_accuracy", loc.hasBearingAccuracy() ? loc.getBearingAccuracyDegrees() : JSONObject.NULL);
+            }
+            rawWriter.write(p.toString());
+            rawWriter.newLine();
+            rawWriter.flush();
+        } catch (Throwable ignored) { }
+    }
+
+    private synchronized void closeRawWriter() {
+        if (rawWriter != null) {
+            try { rawWriter.flush(); } catch (Throwable ignored) { }
+            try { rawWriter.close(); } catch (Throwable ignored) { }
+        }
+        rawWriter = null;
+        rawWriterRideId = 0;
+    }
+
+    private synchronized void deleteRawLogForCurrentRide() {
+        int rideId = prefs.getInt("ride_id", 0);
+        closeRawWriter();
+        if (rideId <= 0) return;
+        try {
+            File file = new File(new File(getFilesDir(), "raw_gps"), "ride_" + rideId + ".jsonl");
+            if (file.exists()) file.delete();
+        } catch (Throwable ignored) { }
     }
 
     private JSONObject locationJson(Location loc) throws Exception {
@@ -469,15 +636,15 @@ public class TrackingService extends Service implements LocationListener {
 
     private void stopTracking() {
         prefs.edit().putBoolean("active", false).apply();
-        if (locationManager != null) {
-            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
-        }
+        stopAllLocationUpdates();
+        closeRawWriter();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
 
     private void discardTracking() {
+        deleteRawLogForCurrentRide();
         prefs.edit()
                 .putBoolean("active", false)
                 .remove("pending")
@@ -488,12 +655,23 @@ public class TrackingService extends Service implements LocationListener {
         acceptedWindow.clear();
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
-        if (locationManager != null) {
-            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
-        }
+        stopAllLocationUpdates();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
+    }
+
+    private void stopAllLocationUpdates() {
+        if (fusedClient != null && fusedCallback != null) {
+            try { fusedClient.removeLocationUpdates(fusedCallback); } catch (Throwable ignored) { }
+        }
+        fusedCallback = null;
+        fusedClient = null;
+        usingFused = false;
+        legacyFallbackStarted = false;
+        if (locationManager != null) {
+            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
+        }
     }
 
     private void createChannel() {
@@ -542,9 +720,8 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     @Override public void onDestroy() {
-        if (locationManager != null) {
-            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
-        }
+        stopAllLocationUpdates();
+        closeRawWriter();
         releaseWakeLock();
         network.shutdownNow();
         super.onDestroy();
