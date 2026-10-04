@@ -167,72 +167,85 @@ public class TrackingService extends Service implements LocationListener {
         }
 
         rawWindow.addLast(new Location(loc));
-        while (rawWindow.size() > 5) rawWindow.removeFirst();
+        while (rawWindow.size() > 4) rawWindow.removeFirst();
 
-        Location filtered = medianLocation(rawWindow, loc);
-        if (filtered == null) return;
+        Location candidate = stabilizedCandidate(rawWindow, loc);
+        if (candidate == null) return;
 
-        if (!isPlausible(filtered)) {
+        if (!isPlausible(candidate)) {
             broadcastStatus("پرش غیرمنطقی GPS حذف شد", false);
             return;
         }
 
-        long interval = prefs.getLong("interval_ms", 2500L);
-        if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) return;
+        long interval = Math.min(1800L, prefs.getLong("interval_ms", 2500L));
+        if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) {
+            broadcastPoint(locationJson(candidate), null);
+            return;
+        }
 
-        if (lastAcceptedLocation != null) {
-            double meters = lastAcceptedLocation.distanceTo(filtered);
-            float prevAcc = lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 12f;
-            float curAcc = filtered.hasAccuracy() ? filtered.getAccuracy() : 12f;
-            double noiseRadius = Math.max(3.0, Math.min(9.0, Math.sqrt(Math.max(1.0, prevAcc * curAcc)) * 0.55));
-            if (meters < noiseRadius && now - lastAcceptedAt < 15000L) {
-                broadcastStatus("GPS پایدار — حرکت کاذب حذف شد", false);
-                return;
-            }
+        double meters = lastAcceptedLocation == null ? 0.0 : lastAcceptedLocation.distanceTo(candidate);
+        long dtMs = lastAcceptedLocation == null ? 0L : candidate.getTime() - lastAcceptedLocation.getTime();
+        float prevAcc = lastAcceptedLocation != null && lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 10f;
+        float curAcc = candidate.hasAccuracy() ? candidate.getAccuracy() : 10f;
+        double noiseRadius = Math.max(1.5, Math.min(5.0, Math.sqrt(Math.max(1.0, prevAcc * curAcc)) * 0.28));
 
-            long dtMs = filtered.getTime() - lastAcceptedLocation.getTime();
-            if (dtMs > 0 && dtMs < 120000L) {
-                double kmh = meters / (dtMs / 1000.0) * 3.6;
-                float alpha = kmh < 5 ? 0.40f : (kmh < 20 ? 0.64f : 0.84f);
-                if (filtered.hasAccuracy() && lastAcceptedLocation.hasAccuracy() &&
-                        filtered.getAccuracy() > lastAcceptedLocation.getAccuracy() * 1.4f) alpha *= 0.75f;
-                Location smooth = new Location(filtered);
-                smooth.setLatitude(lastAcceptedLocation.getLatitude() +
-                        alpha * (filtered.getLatitude() - lastAcceptedLocation.getLatitude()));
-                smooth.setLongitude(lastAcceptedLocation.getLongitude() +
-                        alpha * (filtered.getLongitude() - lastAcceptedLocation.getLongitude()));
-                double smoothMeters = lastAcceptedLocation.distanceTo(smooth);
-                double speedMps = smoothMeters / (dtMs / 1000.0);
-                // Never trust Android's instantaneous speed while stationary. Derive speed from the filtered route.
-                if (smoothMeters < 2.0 || speedMps < 0.70) smooth.setSpeed(0f);
-                else smooth.setSpeed((float)Math.min(speedMps, prefs.getFloat("max_speed_kmh", 100f) / 3.6));
-                filtered = smooth;
-            } else {
-                filtered.setSpeed(0f);
-            }
+        double speedMps = 0.0;
+        if (lastAcceptedLocation != null && dtMs > 0 && dtMs < 120000L)
+            speedMps = meters / (dtMs / 1000.0);
+
+        boolean osMoving = loc.hasSpeed() && loc.getSpeed() >= 0.55f;
+        boolean moving = lastAcceptedLocation != null &&
+                (meters >= Math.max(0.8, noiseRadius * 0.55)) &&
+                (speedMps >= 0.50 || osMoving);
+
+        if (!moving && lastAcceptedLocation != null) {
+            candidate.setLatitude(lastAcceptedLocation.getLatitude());
+            candidate.setLongitude(lastAcceptedLocation.getLongitude());
+            candidate.setSpeed(0f);
+        } else if (moving) {
+            candidate.setSpeed((float)Math.min(speedMps,
+                    prefs.getFloat("max_speed_kmh", 100f) / 3.6));
         } else {
-            filtered.setSpeed(0f);
+            candidate.setSpeed(0f);
         }
 
         lastAcceptedAt = now;
-        lastAcceptedLocation = new Location(filtered);
-        acceptedWindow.addLast(new Location(filtered));
+        lastAcceptedLocation = new Location(candidate);
+        acceptedWindow.addLast(new Location(candidate));
         while (acceptedWindow.size() > 8) acceptedWindow.removeFirst();
 
         try {
-            JSONObject p = new JSONObject();
-            p.put("lat", filtered.getLatitude());
-            p.put("lng", filtered.getLongitude());
-            if (filtered.hasAltitude()) p.put("altitude", filtered.getAltitude()); else p.put("altitude", JSONObject.NULL);
-            if (filtered.hasSpeed()) p.put("speed_kmh", filtered.getSpeed() * 3.6); else p.put("speed_kmh", JSONObject.NULL);
-            if (filtered.hasAccuracy()) p.put("accuracy", filtered.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
-            p.put("timestamp", filtered.getTime() > 0 ? filtered.getTime() : now);
-            if (filtered.hasBearing()) p.put("bearing", filtered.getBearing());
+            JSONObject p = locationJson(candidate);
             appendPending(p);
             broadcastPoint(p, null);
             flushPending();
-            broadcastStatus("GPS پایدار ±" + Math.round(filtered.hasAccuracy() ? filtered.getAccuracy() : 0f) + "m — فیلتر پرش فعال", false);
+            broadcastStatus((moving ? "GPS زنده" : "GPS پایدار") + " ±" +
+                    Math.round(candidate.hasAccuracy() ? candidate.getAccuracy() : 0f) + "m", false);
         } catch (Exception ignored) { }
+    }
+
+    private JSONObject locationJson(Location loc) throws Exception {
+        JSONObject p = new JSONObject();
+        p.put("lat", loc.getLatitude());
+        p.put("lng", loc.getLongitude());
+        if (loc.hasAltitude()) p.put("altitude", loc.getAltitude()); else p.put("altitude", JSONObject.NULL);
+        if (loc.hasSpeed()) p.put("speed_kmh", loc.getSpeed() * 3.6); else p.put("speed_kmh", JSONObject.NULL);
+        if (loc.hasAccuracy()) p.put("accuracy", loc.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
+        p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
+        if (loc.hasBearing()) p.put("bearing", loc.getBearing());
+        return p;
+    }
+
+    private Location stabilizedCandidate(ArrayDeque<Location> source, Location newest) {
+        if (source.size() < 3) return new Location(newest);
+        List<Location> rows = new ArrayList<>(source);
+        Location a = rows.get(rows.size() - 3), b = rows.get(rows.size() - 2), c = rows.get(rows.size() - 1);
+        Location med = medianLocation(source, newest);
+        double gate = Math.max(10.0, Math.min(35.0, (newest.hasAccuracy() ? newest.getAccuracy() : 12f) * 1.15));
+        double newestDeviation = newest.distanceTo(med);
+        double priorSpread = a.distanceTo(b);
+        if (newestDeviation > gate && priorSpread < gate * 0.55) return med;
+        return new Location(newest);
     }
 
     private Location medianLocation(ArrayDeque<Location> source, Location newest) {
@@ -267,8 +280,8 @@ public class TrackingService extends Service implements LocationListener {
         double kmh = meters / (dtMs / 1000.0) * 3.6;
         double configuredMax = Math.max(30.0, prefs.getFloat("max_speed_kmh", 100f));
         double medianRecent = medianRecentSpeedKmh();
-        double dynamicLimit = Math.max(55.0, medianRecent * 3.0 + 18.0);
-        return kmh <= configuredMax * 1.08 && !(meters > 25.0 && kmh > dynamicLimit);
+        double dynamicLimit = Math.max(70.0, medianRecent * 4.0 + 25.0);
+        return kmh <= configuredMax * 1.22 && !(meters > 35.0 && kmh > dynamicLimit);
     }
 
     private double medianRecentSpeedKmh() {
