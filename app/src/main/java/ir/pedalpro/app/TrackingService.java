@@ -110,13 +110,18 @@ public class TrackingService extends Service implements LocationListener {
                 stopSelf();
                 return START_NOT_STICKY;
             }
+            // GPS Engine V2 owns the safe operating envelope. Legacy server/admin
+            // values that are too strict (e.g. 10m / 2000ms / 50kmh) must not
+            // degrade tracking quality or delete legitimate downhill fixes.
+            float requestedAccuracy = (float) intent.getDoubleExtra("max_accuracy", 25);
+            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 80);
             prefs.edit()
                     .putBoolean("active", true)
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
-                    .putFloat("max_accuracy", (float) intent.getDoubleExtra("max_accuracy", 25))
-                    .putFloat("max_speed_kmh", (float) intent.getDoubleExtra("max_speed_kmh", 100))
-                    .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 1000L)))
+                    .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
+                    .putFloat("max_speed_kmh", Math.max(80f, requestedMaxSpeed))
+                    .putLong("interval_ms", 1000L)
                     .apply();
             if (previousRideId != rideId) resetRawLog(rideId);
         }
