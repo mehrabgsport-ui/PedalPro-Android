@@ -11,8 +11,20 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 4
-        versionName '1.3.0'
+        versionCode 5
+        versionName '1.4.0'
+    }
+
+    flavorDimensions 'distribution'
+    productFlavors {
+        googlePlay {
+            dimension 'distribution'
+            buildConfigField 'String', 'STORE_CHANNEL', '"googlePlay"'
+        }
+        bazaar {
+            dimension 'distribution'
+            buildConfigField 'String', 'STORE_CHANNEL', '"bazaar"'
+        }
     }
 
     buildTypes {
