@@ -26,6 +26,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
+import android.view.WindowManager;
 
 import org.json.JSONObject;
 
@@ -188,6 +189,7 @@ public class MainActivity extends Activity {
     public class NativeBridge {
         @JavascriptInterface public void startTracking(String json) {
             runOnUiThread(() -> {
+                setRideScreenAwake(true);
                 if (!hasFineLocation()) {
                     pendingTrackingJson = json;
                     requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
@@ -198,6 +200,7 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void stopTracking() {
             runOnUiThread(() -> {
+                setRideScreenAwake(false);
                 Intent i = new Intent(MainActivity.this, TrackingService.class);
                 i.setAction(TrackingService.ACTION_STOP);
                 startService(i);
@@ -205,6 +208,7 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void discardTracking() {
             runOnUiThread(() -> {
+                setRideScreenAwake(false);
                 Intent i = new Intent(MainActivity.this, TrackingService.class);
                 i.setAction(TrackingService.ACTION_DISCARD);
                 startService(i);
@@ -222,6 +226,13 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+    }
+
+    private void setRideScreenAwake(boolean keepAwake) {
+        try {
+            if (keepAwake) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Throwable ignored) { }
     }
 
     private void startNativeTracking(String json) {
@@ -311,6 +322,8 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        boolean tracking = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("active", false);
+        setRideScreenAwake(tracking);
         NotificationJobService.fetchNow(getApplicationContext());
         FirebaseConfigManager.sync(getApplicationContext());
     }
