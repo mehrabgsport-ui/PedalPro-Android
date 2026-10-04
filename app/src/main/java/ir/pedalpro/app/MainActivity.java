@@ -14,11 +14,15 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
+import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -44,6 +48,332 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE = 1103;
     private static final int REQ_NOTIFICATIONS = 1104;
     private static final int REQ_AUDIO = 1105;
+    private static final String WALKIE_LOG_TAG = "PedalProWalkie";
+
+    private static final String WALKIE_DIAGNOSTICS_JS = """
+(function(){
+  try {
+    if (window.__PP_WALKIE_PROBE_INSTALLED__) return;
+    window.__PP_WALKIE_PROBE_INSTALLED__ = true;
+
+    const MAX_BODY = 1200;
+    const probeVersion = "1.4.11-e2e";
+
+    function errInfo(e) {
+      if (!e) return null;
+      return {
+        name: String(e.name || ""),
+        message: String(e.message || e),
+        stack: String(e.stack || "").split("\\n").slice(0, 8).join(" | ")
+      };
+    }
+
+    function emit(stage, data) {
+      const payload = {
+        t: new Date().toISOString(),
+        stage: stage,
+        page: location.href,
+        data: data == null ? null : data
+      };
+      let encoded;
+      try { encoded = JSON.stringify(payload); }
+      catch (e) { encoded = JSON.stringify({t:new Date().toISOString(), stage:stage, data:{encodeError:String(e)}}); }
+      try { console.log("[PP_WALKIE] " + encoded); } catch (_) {}
+      try {
+        if (window.AndroidBridge && typeof window.AndroidBridge.walkieDebug === "function") {
+          window.AndroidBridge.walkieDebug(encoded);
+        }
+      } catch (_) {}
+    }
+
+    function targetInfo(t) {
+      if (!t) return null;
+      let text = "";
+      try { text = String((t.innerText || t.textContent || "")).trim().replace(/\\s+/g, " ").slice(0, 100); } catch (_) {}
+      return {
+        tag: String(t.tagName || ""),
+        id: String(t.id || ""),
+        cls: String(t.className || "").slice(0, 160),
+        role: String((t.getAttribute && t.getAttribute("role")) || ""),
+        aria: String((t.getAttribute && t.getAttribute("aria-label")) || ""),
+        title: String((t.getAttribute && t.getAttribute("title")) || ""),
+        text: text
+      };
+    }
+
+    window.__PP_WALKIE_DEBUG__ = { emit: emit, version: probeVersion };
+    emit("PROBE_READY", {
+      version: probeVersion,
+      secureContext: !!window.isSecureContext,
+      hasMediaDevices: !!(navigator.mediaDevices),
+      hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      hasMediaRecorder: !!window.MediaRecorder,
+      visibility: document.visibilityState,
+      ua: navigator.userAgent
+    });
+
+    ["pointerdown","pointerup","pointercancel","touchstart","touchend","touchcancel","mousedown","mouseup"].forEach(function(name){
+      document.addEventListener(name, function(e){
+        const d = { target: targetInfo(e.target), trusted: !!e.isTrusted, defaultPrevented: !!e.defaultPrevented };
+        if ("pointerId" in e) {
+          d.pointerId = e.pointerId;
+          d.pointerType = e.pointerType;
+          d.buttons = e.buttons;
+          d.pressure = e.pressure;
+        }
+        if (e.changedTouches) d.changedTouches = e.changedTouches.length;
+        emit("INPUT_" + name.toUpperCase(), d);
+      }, {capture:true, passive:true});
+    });
+
+    document.addEventListener("visibilitychange", function(){
+      emit("PAGE_VISIBILITY", {visibility: document.visibilityState, hidden: document.hidden});
+    }, true);
+    window.addEventListener("pagehide", function(e){ emit("PAGE_HIDE", {persisted:!!e.persisted}); }, true);
+    window.addEventListener("pageshow", function(e){ emit("PAGE_SHOW", {persisted:!!e.persisted}); }, true);
+
+    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+      try {
+        const originalGum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = function(constraints) {
+          emit("GUM_REQUEST", {constraints: constraints});
+          let p;
+          try { p = originalGum(constraints); }
+          catch (e) {
+            emit("GUM_THROW", errInfo(e));
+            throw e;
+          }
+          return p.then(function(stream){
+            let tracks = [];
+            try {
+              tracks = stream.getTracks().map(function(t){
+                let settings = {};
+                try { settings = t.getSettings ? t.getSettings() : {}; } catch (_) {}
+                return {kind:t.kind, label:t.label, enabled:t.enabled, muted:t.muted, readyState:t.readyState, settings:settings};
+              });
+            } catch (_) {}
+            emit("GUM_OK", {active:stream.active, tracks:tracks});
+            return stream;
+          }, function(e){
+            emit("GUM_FAIL", errInfo(e));
+            throw e;
+          });
+        };
+      } catch (e) {
+        emit("GUM_PATCH_FAIL", errInfo(e));
+      }
+    }
+
+    if (window.MediaRecorder && window.MediaRecorder.prototype) {
+      try {
+        const MR = window.MediaRecorder;
+        const hooked = new WeakSet();
+        function hookRecorder(rec) {
+          if (hooked.has(rec)) return;
+          hooked.add(rec);
+          ["start","stop","pause","resume"].forEach(function(name){
+            rec.addEventListener(name, function(){ emit("REC_EVENT_" + name.toUpperCase(), {state:rec.state, mimeType:rec.mimeType}); });
+          });
+          rec.addEventListener("dataavailable", function(e){
+            emit("REC_DATA", {state:rec.state, size:e.data ? e.data.size : 0, type:e.data ? e.data.type : ""});
+          });
+          rec.addEventListener("error", function(e){
+            emit("REC_ERROR", errInfo(e && (e.error || e)));
+          });
+        }
+
+        const originalStart = MR.prototype.start;
+        MR.prototype.start = function(timeslice) {
+          hookRecorder(this);
+          emit("REC_START_CALL", {state:this.state, mimeType:this.mimeType, timeslice:timeslice == null ? null : timeslice});
+          try {
+            const out = originalStart.apply(this, arguments);
+            emit("REC_START_RETURN", {state:this.state});
+            return out;
+          } catch (e) {
+            emit("REC_START_THROW", errInfo(e));
+            throw e;
+          }
+        };
+
+        const originalStop = MR.prototype.stop;
+        MR.prototype.stop = function() {
+          hookRecorder(this);
+          emit("REC_STOP_CALL", {state:this.state});
+          try {
+            const out = originalStop.apply(this, arguments);
+            emit("REC_STOP_RETURN", {state:this.state});
+            return out;
+          } catch (e) {
+            emit("REC_STOP_THROW", errInfo(e));
+            throw e;
+          }
+        };
+      } catch (e) {
+        emit("REC_PATCH_FAIL", errInfo(e));
+      }
+    }
+
+    function inspectBody(body) {
+      const out = {type: body == null ? "none" : (body.constructor && body.constructor.name) || typeof body, action:""};
+      try {
+        if (window.FormData && body instanceof FormData) {
+          const keys = [];
+          body.forEach(function(v,k){
+            keys.push(k);
+            if (!out.action && String(k).toLowerCase() === "action") out.action = String(v);
+            if (v && typeof Blob !== "undefined" && v instanceof Blob) {
+              out[k] = {blobSize:v.size, blobType:v.type};
+            } else if (String(k).toLowerCase() !== "csrf") {
+              out[k] = String(v).slice(0, 160);
+            }
+          });
+          out.keys = keys;
+        } else if (window.URLSearchParams && body instanceof URLSearchParams) {
+          out.action = String(body.get("action") || "");
+          out.text = body.toString().slice(0, 500);
+        } else if (typeof body === "string") {
+          out.text = body.slice(0, 500);
+          try { out.action = String(new URLSearchParams(body).get("action") || ""); } catch (_) {}
+          if (!out.action) {
+            try { const j = JSON.parse(body); out.action = String(j.action || ""); } catch (_) {}
+          }
+        } else if (typeof Blob !== "undefined" && body instanceof Blob) {
+          out.blobSize = body.size;
+          out.blobType = body.type;
+        }
+      } catch (e) {
+        out.inspectError = String(e);
+      }
+      return out;
+    }
+
+    function requestMeta(input, init) {
+      let url = "";
+      let method = "GET";
+      try {
+        if (typeof input === "string") url = input;
+        else if (input && input.url) { url = input.url; method = input.method || method; }
+      } catch (_) {}
+      if (init && init.method) method = init.method;
+      const bodyInfo = inspectBody(init && init.body);
+      const hay = (url + " " + (bodyInfo.action || "") + " " + (bodyInfo.text || "")).toLowerCase();
+      return {
+        interesting: hay.indexOf("walkie") >= 0,
+        url:url,
+        method:String(method || "GET").toUpperCase(),
+        body:bodyInfo,
+        stack:String((new Error()).stack || "").split("\\n").slice(2,7).join(" | ")
+      };
+    }
+
+    if (typeof window.fetch === "function") {
+      const originalFetch = window.fetch;
+      window.fetch = function(input, init) {
+        const meta = requestMeta(input, init);
+        if (meta.interesting) emit("FETCH_REQUEST", meta);
+        let p;
+        try { p = originalFetch.apply(this, arguments); }
+        catch (e) {
+          if (meta.interesting) emit("FETCH_THROW", {request:meta, error:errInfo(e)});
+          throw e;
+        }
+        if (!meta.interesting) return p;
+        return p.then(function(resp){
+          emit("FETCH_RESPONSE", {url:meta.url, status:resp.status, ok:resp.ok, redirected:resp.redirected, type:resp.type});
+          try {
+            resp.clone().text().then(function(t){
+              emit("FETCH_BODY", {url:meta.url, status:resp.status, body:String(t).slice(0, MAX_BODY)});
+            }).catch(function(e){ emit("FETCH_BODY_FAIL", errInfo(e)); });
+          } catch (e) { emit("FETCH_BODY_FAIL", errInfo(e)); }
+          return resp;
+        }, function(e){
+          emit("FETCH_ERROR", {request:meta, error:errInfo(e)});
+          throw e;
+        });
+      };
+    }
+
+    if (window.XMLHttpRequest && window.XMLHttpRequest.prototype) {
+      try {
+        const XP = window.XMLHttpRequest.prototype;
+        const originalOpen = XP.open;
+        const originalSend = XP.send;
+
+        XP.open = function(method, url) {
+          this.__ppMethod = String(method || "GET").toUpperCase();
+          this.__ppUrl = String(url || "");
+          return originalOpen.apply(this, arguments);
+        };
+
+        XP.send = function(body) {
+          const bodyInfo = inspectBody(body);
+          const hay = (String(this.__ppUrl || "") + " " + (bodyInfo.action || "") + " " + (bodyInfo.text || "")).toLowerCase();
+          this.__ppWalkie = hay.indexOf("walkie") >= 0;
+          if (this.__ppWalkie) {
+            emit("XHR_REQUEST", {
+              url:this.__ppUrl,
+              method:this.__ppMethod,
+              body:bodyInfo,
+              stack:String((new Error()).stack || "").split("\\n").slice(2,7).join(" | ")
+            });
+            if (!this.__ppListeners) {
+              this.__ppListeners = true;
+              this.addEventListener("loadend", function(){
+                let response = "";
+                try {
+                  if (!this.responseType || this.responseType === "text") response = String(this.responseText || "").slice(0, MAX_BODY);
+                } catch (_) {}
+                emit("XHR_RESPONSE", {url:this.__ppUrl, method:this.__ppMethod, status:this.status, responseType:this.responseType, body:response});
+              });
+              this.addEventListener("error", function(){ emit("XHR_ERROR", {url:this.__ppUrl, status:this.status}); });
+              this.addEventListener("timeout", function(){ emit("XHR_TIMEOUT", {url:this.__ppUrl, status:this.status}); });
+              this.addEventListener("abort", function(){ emit("XHR_ABORT", {url:this.__ppUrl, status:this.status}); });
+            }
+          }
+          return originalSend.apply(this, arguments);
+        };
+      } catch (e) {
+        emit("XHR_PATCH_FAIL", errInfo(e));
+      }
+    }
+
+    window.addEventListener("error", function(e){
+      emit("JS_ERROR", {message:String(e.message || ""), file:String(e.filename || ""), line:e.lineno || 0, col:e.colno || 0, error:errInfo(e.error)});
+    }, true);
+    window.addEventListener("unhandledrejection", function(e){
+      emit("UNHANDLED_REJECTION", errInfo(e.reason));
+    }, true);
+
+    let reconnectShown = false;
+    let observerTimer = 0;
+    function scanReconnect() {
+      observerTimer = 0;
+      let text = "";
+      try { text = document.body ? String(document.body.innerText || "") : ""; } catch (_) {}
+      const now = text.indexOf("در حال اتصال مجدد واکی") >= 0 ||
+                  text.indexOf("اتصال مجدد واکی") >= 0 ||
+                  /walkie.{0,40}reconnect|reconnect.{0,40}walkie/i.test(text);
+      if (now !== reconnectShown) {
+        reconnectShown = now;
+        emit(now ? "UI_RECONNECT_SHOWN" : "UI_RECONNECT_HIDDEN", {});
+      }
+    }
+    if (document.body && window.MutationObserver) {
+      new MutationObserver(function(){
+        if (!observerTimer) observerTimer = setTimeout(scanReconnect, 80);
+      }).observe(document.body, {subtree:true, childList:true, characterData:true, attributes:true});
+      scanReconnect();
+    }
+  } catch (fatal) {
+    try {
+      const encoded = JSON.stringify({t:new Date().toISOString(),stage:"PROBE_FATAL",data:{name:fatal && fatal.name,message:String(fatal && (fatal.message || fatal))}});
+      console.log("[PP_WALKIE] " + encoded);
+      if (window.AndroidBridge && typeof window.AndroidBridge.walkieDebug === "function") window.AndroidBridge.walkieDebug(encoded);
+    } catch (_) {}
+  }
+})();
+""";
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
@@ -147,12 +477,54 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                if (isPedalProOrigin(url)) {
+                    walkieLog("PAGE_FINISHED", url);
+                    view.evaluateJavascript(WALKIE_DIAGNOSTICS_JS, value -> walkieLog("PROBE_INJECTED", String.valueOf(value)));
+                }
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
+            }
+
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                try {
+                    String url = request.getUrl() == null ? "" : request.getUrl().toString();
+                    if (isWalkieUrl(url)) walkieLog("NATIVE_NET_REQUEST", request.getMethod() + " " + url);
+                } catch (Throwable ignored) { }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                try {
+                    String url = request.getUrl() == null ? "" : request.getUrl().toString();
+                    if (request.isForMainFrame() || isWalkieUrl(url)) {
+                        walkieLog("WEB_RESOURCE_ERROR", "code=" + error.getErrorCode() + " url=" + url + " desc=" + error.getDescription());
+                    }
+                } catch (Throwable ignored) { }
+                super.onReceivedError(view, request, error);
+            }
+
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                try {
+                    String url = request.getUrl() == null ? "" : request.getUrl().toString();
+                    if (isWalkieUrl(url)) {
+                        walkieLog("WEB_HTTP_ERROR", "status=" + errorResponse.getStatusCode() + " url=" + url);
+                    }
+                } catch (Throwable ignored) { }
+                super.onReceivedHttpError(view, request, errorResponse);
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                try {
+                    String message = consoleMessage == null ? "" : consoleMessage.message();
+                    if (message != null && message.contains("[PP_WALKIE]")) {
+                        walkieLog("JS_CONSOLE", message);
+                    }
+                } catch (Throwable ignored) { }
+                return super.onConsoleMessage(consoleMessage);
+            }
+
             @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 if (!isPedalProOrigin(origin)) { callback.invoke(origin, false, false); return; }
                 if (hasLocation()) callback.invoke(origin, true, false);
@@ -165,7 +537,13 @@ public class MainActivity extends Activity {
             @Override public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> {
                     try {
-                        if (request.getOrigin() == null || !isPedalProOrigin(request.getOrigin().toString())) {
+                        String origin = request.getOrigin() == null ? "" : request.getOrigin().toString();
+                        String resources = java.util.Arrays.toString(request.getResources());
+                        walkieLog("WEB_PERMISSION_REQUEST", "origin=" + origin + " resources=" + resources +
+                                " androidAudioGranted=" + (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED));
+
+                        if (request.getOrigin() == null || !isPedalProOrigin(origin)) {
+                            walkieLog("WEB_PERMISSION_DENY_ORIGIN", origin);
                             request.deny();
                             return;
                         }
@@ -176,6 +554,7 @@ public class MainActivity extends Activity {
                             if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) needsAudio = true;
                         }
                         if (needsAudio && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            walkieLog("AUDIO_ANDROID_PERMISSION_PROMPT", origin);
                             pendingWebPermission = request;
                             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
                             return;
@@ -186,10 +565,18 @@ public class MainActivity extends Activity {
                             return;
                         }
                         request.grant(request.getResources());
+                        walkieLog("WEB_PERMISSION_GRANTED", "origin=" + origin + " resources=" + resources);
                     } catch (Throwable e) {
+                        walkieLog("WEB_PERMISSION_EXCEPTION", e.getClass().getSimpleName() + ": " + e.getMessage());
                         request.deny();
                     }
                 });
+            }
+
+            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                String origin = request != null && request.getOrigin() != null ? request.getOrigin().toString() : "";
+                walkieLog("WEB_PERMISSION_CANCELED", origin);
+                super.onPermissionRequestCanceled(request);
             }
 
             @Override public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
@@ -271,6 +658,9 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public void walkieDebug(String json) {
+            walkieLog("JS", json == null ? "null" : json);
+        }
     }
 
     private void checkReleasePolicy(boolean manual) {
@@ -361,6 +751,18 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    private void walkieLog(String stage, String detail) {
+        try {
+            Log.i(WALKIE_LOG_TAG, System.currentTimeMillis() + " [" + stage + "] " + (detail == null ? "" : detail));
+        } catch (Throwable ignored) { }
+    }
+
+    private boolean isWalkieUrl(String url) {
+        if (url == null) return false;
+        String s = url.toLowerCase(Locale.ROOT);
+        return s.contains("walkie") || (s.contains("api.php") && s.contains("action=walkie"));
     }
 
     private boolean isPedalProOrigin(String origin) {
@@ -470,9 +872,15 @@ public class MainActivity extends Activity {
             else pendingWebPermission.deny();
             pendingWebPermission = null;
         } else if (requestCode == REQ_AUDIO && pendingWebPermission != null) {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            boolean granted = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+            walkieLog("AUDIO_ANDROID_PERMISSION_RESULT", "granted=" + granted);
+            if (granted) {
                 pendingWebPermission.grant(pendingWebPermission.getResources());
-            else pendingWebPermission.deny();
+                walkieLog("WEB_PERMISSION_GRANTED_AFTER_PROMPT", java.util.Arrays.toString(pendingWebPermission.getResources()));
+            } else {
+                pendingWebPermission.deny();
+                walkieLog("WEB_PERMISSION_DENIED_AFTER_PROMPT", "");
+            }
             pendingWebPermission = null;
         }
     }
