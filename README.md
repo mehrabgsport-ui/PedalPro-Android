@@ -1,11 +1,21 @@
 # PedalPro Android
 
-Official Android wrapper for https://pedalpro.ir/
+Official Android app wrapper for https://pedalpro.ir/
 
+## Release 1.4.0
 - applicationId: `ir.pedalpro.app`
-- compileSdk: 36
-- targetSdk: 36
-- minSdk: 26
-- Java: 17
+- versionCode: `5`
+- compileSdk / targetSdk: `36`
+- minSdk: `26`
+- Java: `17`
+- Firebase Cloud Messaging enabled
+- Native foreground GPS tracking with offline queue
+- Android Back navigation follows PedalPro/WebView history before closing
+- Store-safe update flow (Google Play / Cafe Bazaar)
+- No `REQUEST_INSTALL_PACKAGES` permission in store builds
 
-APK is built by GitHub Actions using the official Android SDK toolchain.
+## Distribution
+- `googlePlayRelease`: AAB/APK for Google Play.
+- `bazaarRelease`: APK for Cafe Bazaar.
+
+Release artifacts are built by GitHub Actions. Final production artifacts must be signed with the permanent PedalPro release/upload key; the private key must never be committed to this public repository.
