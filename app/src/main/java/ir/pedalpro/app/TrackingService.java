@@ -30,6 +30,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -52,6 +56,10 @@ public class TrackingService extends Service implements LocationListener {
     private final AtomicBoolean flushing = new AtomicBoolean(false);
     private PowerManager.WakeLock wakeLock;
     private long lastAcceptedAt = 0L;
+    private long trackingStartedAt = 0L;
+    private Location lastAcceptedLocation;
+    private final ArrayDeque<Location> rawWindow = new ArrayDeque<>();
+    private final ArrayDeque<Location> acceptedWindow = new ArrayDeque<>();
 
     @Override public void onCreate() {
         super.onCreate();
@@ -77,6 +85,7 @@ public class TrackingService extends Service implements LocationListener {
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
                     .putFloat("max_accuracy", (float) intent.getDoubleExtra("max_accuracy", 25))
+                    .putFloat("max_speed_kmh", (float) intent.getDoubleExtra("max_speed_kmh", 100))
                     .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 2500L)))
                     .apply();
         }
@@ -88,6 +97,11 @@ public class TrackingService extends Service implements LocationListener {
 
         startForeground(NOTIFICATION_ID, buildNotification("ثبت مسیر در حال انجام است"));
         acquireWakeLock();
+        trackingStartedAt = System.currentTimeMillis();
+        rawWindow.clear();
+        acceptedWindow.clear();
+        lastAcceptedLocation = null;
+        lastAcceptedAt = 0L;
         beginLocationUpdates();
         flushPending();
         broadcastStatus("GPS اندروید فعال — ثبت پس‌زمینه", false);
@@ -103,41 +117,170 @@ public class TrackingService extends Service implements LocationListener {
         }
         if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         long interval = prefs.getLong("interval_ms", 2500L);
+
+        // Warm start: a fresh last-known fix prevents waiting minutes for the first map position.
+        try {
+            Location best = null;
+            for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+                Location x = locationManager.getLastKnownLocation(provider);
+                if (x == null) continue;
+                long age = Math.abs(System.currentTimeMillis() - x.getTime());
+                if (age > 30000L) continue;
+                if (best == null || (!x.hasAccuracy() || !best.hasAccuracy()) ||
+                        (x.hasAccuracy() && best.hasAccuracy() && x.getAccuracy() < best.getAccuracy())) best = x;
+            }
+            if (best != null && (!best.hasAccuracy() || best.getAccuracy() <= 70f)) onLocationChanged(best);
+        } catch (Exception ignored) { }
+
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
-                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, 1.5f, this, Looper.getMainLooper());
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
         } catch (Exception ignored) { }
         try {
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
-                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, Math.max(5000L, interval * 2), 5f, this, Looper.getMainLooper());
+                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, Math.max(2000L, interval), 0f, this, Looper.getMainLooper());
         } catch (Exception ignored) { }
+        broadcastStatus("در حال دریافت چند نمونه GPS برای قفل دقیق موقعیت…", false);
     }
 
     @Override public void onLocationChanged(Location loc) {
-        if (!prefs.getBoolean("active", false)) return;
-        float maxAccuracy = prefs.getFloat("max_accuracy", 25f);
-        if (loc.hasAccuracy() && loc.getAccuracy() > maxAccuracy) {
-            broadcastStatus("GPS ضعیف ±" + Math.round(loc.getAccuracy()) + "m", false);
+        if (!prefs.getBoolean("active", false) || loc == null) return;
+
+        long now = System.currentTimeMillis();
+        long age = loc.getTime() > 0 ? Math.abs(now - loc.getTime()) : 0L;
+        if (age > 30000L) return;
+
+        float configuredMax = prefs.getFloat("max_accuracy", 25f);
+        float normalMax = Math.max(configuredMax, 35f);
+        float firstFixMax = Math.max(normalMax, 60f);
+        float effectiveMax = lastAcceptedLocation == null ? firstFixMax : normalMax;
+
+        if (loc.hasAccuracy() && loc.getAccuracy() > effectiveMax) {
+            broadcastStatus("GPS ضعیف ±" + Math.round(loc.getAccuracy()) + "m — در حال دقیق‌تر شدن", false);
             return;
         }
-        long now = System.currentTimeMillis();
+
+        rawWindow.addLast(new Location(loc));
+        while (rawWindow.size() > 5) rawWindow.removeFirst();
+
+        Location filtered = medianLocation(rawWindow, loc);
+        if (filtered == null) return;
+
+        if (!isPlausible(filtered)) {
+            broadcastStatus("پرش غیرمنطقی GPS حذف شد", false);
+            return;
+        }
+
         long interval = prefs.getLong("interval_ms", 2500L);
         if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) return;
+
+        if (lastAcceptedLocation != null) {
+            double meters = lastAcceptedLocation.distanceTo(filtered);
+            float prevAcc = lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 12f;
+            float curAcc = filtered.hasAccuracy() ? filtered.getAccuracy() : 12f;
+            double noiseRadius = Math.max(1.8, Math.min(6.0, Math.sqrt(Math.max(1.0, prevAcc * curAcc)) * 0.24));
+            if (meters < noiseRadius && now - lastAcceptedAt < 15000L) {
+                broadcastStatus("GPS پایدار — حرکت کاذب حذف شد", false);
+                return;
+            }
+
+            long dtMs = filtered.getTime() - lastAcceptedLocation.getTime();
+            if (dtMs > 0 && dtMs < 120000L) {
+                double kmh = meters / (dtMs / 1000.0) * 3.6;
+                float alpha = kmh < 5 ? 0.40f : (kmh < 20 ? 0.64f : 0.84f);
+                if (filtered.hasAccuracy() && lastAcceptedLocation.hasAccuracy() &&
+                        filtered.getAccuracy() > lastAcceptedLocation.getAccuracy() * 1.4f) alpha *= 0.75f;
+                Location smooth = new Location(filtered);
+                smooth.setLatitude(lastAcceptedLocation.getLatitude() +
+                        alpha * (filtered.getLatitude() - lastAcceptedLocation.getLatitude()));
+                smooth.setLongitude(lastAcceptedLocation.getLongitude() +
+                        alpha * (filtered.getLongitude() - lastAcceptedLocation.getLongitude()));
+                filtered = smooth;
+            }
+        }
+
         lastAcceptedAt = now;
+        lastAcceptedLocation = new Location(filtered);
+        acceptedWindow.addLast(new Location(filtered));
+        while (acceptedWindow.size() > 8) acceptedWindow.removeFirst();
 
         try {
             JSONObject p = new JSONObject();
-            p.put("lat", loc.getLatitude());
-            p.put("lng", loc.getLongitude());
-            if (loc.hasAltitude()) p.put("altitude", loc.getAltitude()); else p.put("altitude", JSONObject.NULL);
-            if (loc.hasSpeed()) p.put("speed_kmh", loc.getSpeed() * 3.6); else p.put("speed_kmh", JSONObject.NULL);
-            if (loc.hasAccuracy()) p.put("accuracy", loc.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
-            p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : now);
-            if (loc.hasBearing()) p.put("bearing", loc.getBearing());
+            p.put("lat", filtered.getLatitude());
+            p.put("lng", filtered.getLongitude());
+            if (filtered.hasAltitude()) p.put("altitude", filtered.getAltitude()); else p.put("altitude", JSONObject.NULL);
+            if (filtered.hasSpeed()) p.put("speed_kmh", filtered.getSpeed() * 3.6); else p.put("speed_kmh", JSONObject.NULL);
+            if (filtered.hasAccuracy()) p.put("accuracy", filtered.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
+            p.put("timestamp", filtered.getTime() > 0 ? filtered.getTime() : now);
+            if (filtered.hasBearing()) p.put("bearing", filtered.getBearing());
             appendPending(p);
             broadcastPoint(p, null);
             flushPending();
+            broadcastStatus("GPS پایدار ±" + Math.round(filtered.hasAccuracy() ? filtered.getAccuracy() : 0f) + "m — فیلتر پرش فعال", false);
         } catch (Exception ignored) { }
+    }
+
+    private Location medianLocation(ArrayDeque<Location> source, Location newest) {
+        if (source.isEmpty()) return null;
+        if (source.size() < 3) return new Location(newest);
+        List<Double> lats = new ArrayList<>();
+        List<Double> lngs = new ArrayList<>();
+        List<Float> accuracies = new ArrayList<>();
+        List<Double> altitudes = new ArrayList<>();
+        List<Float> speeds = new ArrayList<>();
+        for (Location x : source) {
+            lats.add(x.getLatitude());
+            lngs.add(x.getLongitude());
+            if (x.hasAccuracy()) accuracies.add(x.getAccuracy());
+            if (x.hasAltitude()) altitudes.add(x.getAltitude());
+            if (x.hasSpeed()) speeds.add(x.getSpeed());
+        }
+        Location out = new Location(newest);
+        out.setLatitude(medianDouble(lats));
+        out.setLongitude(medianDouble(lngs));
+        if (!accuracies.isEmpty()) out.setAccuracy(medianFloat(accuracies));
+        if (!altitudes.isEmpty()) out.setAltitude(medianDouble(altitudes));
+        if (!speeds.isEmpty()) out.setSpeed(medianFloat(speeds));
+        return out;
+    }
+
+    private boolean isPlausible(Location current) {
+        if (lastAcceptedLocation == null) return true;
+        long dtMs = current.getTime() - lastAcceptedLocation.getTime();
+        if (dtMs <= 0 || dtMs > 120000L) return true;
+        double meters = lastAcceptedLocation.distanceTo(current);
+        double kmh = meters / (dtMs / 1000.0) * 3.6;
+        double configuredMax = Math.max(30.0, prefs.getFloat("max_speed_kmh", 100f));
+        double medianRecent = medianRecentSpeedKmh();
+        double dynamicLimit = Math.max(55.0, medianRecent * 3.0 + 18.0);
+        return kmh <= configuredMax * 1.08 && !(meters > 25.0 && kmh > dynamicLimit);
+    }
+
+    private double medianRecentSpeedKmh() {
+        if (acceptedWindow.size() < 2) return 0.0;
+        List<Location> rows = new ArrayList<>(acceptedWindow);
+        List<Double> values = new ArrayList<>();
+        for (int i = 1; i < rows.size(); i++) {
+            Location a = rows.get(i - 1), b = rows.get(i);
+            long dt = b.getTime() - a.getTime();
+            if (dt <= 0 || dt > 60000L) continue;
+            values.add(a.distanceTo(b) / (dt / 1000.0) * 3.6);
+        }
+        return values.isEmpty() ? 0.0 : medianDouble(values);
+    }
+
+    private static double medianDouble(List<Double> values) {
+        List<Double> x = new ArrayList<>(values);
+        Collections.sort(x);
+        int n = x.size(), m = n / 2;
+        return n % 2 == 1 ? x.get(m) : (x.get(m - 1) + x.get(m)) / 2.0;
+    }
+
+    private static float medianFloat(List<Float> values) {
+        List<Float> x = new ArrayList<>(values);
+        Collections.sort(x);
+        int n = x.size(), m = n / 2;
+        return n % 2 == 1 ? x.get(m) : (x.get(m - 1) + x.get(m)) / 2f;
     }
 
     @Override public void onProviderEnabled(String provider) { }
