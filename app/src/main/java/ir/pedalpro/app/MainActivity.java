@@ -739,7 +739,6 @@ public class MainActivity extends Activity {
             walkieLog(stage, raw);
             boolean showReport =
                     "JS_UI_RECONNECT_SHOWN".equals(stage) ||
-                    "JS_REC_STOP_EARLY".equals(stage) ||
                     "JS_GUM_FAIL".equals(stage) ||
                     "JS_GUM_THROW".equals(stage) ||
                     "JS_REC_START_THROW".equals(stage) ||
