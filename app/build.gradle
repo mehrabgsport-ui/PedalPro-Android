@@ -11,16 +11,12 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 12
-        versionName '1.4.7'
+        versionCode 13
+        versionName '1.4.8'
     }
 
     flavorDimensions 'distribution'
     productFlavors {
-        googlePlay {
-            dimension 'distribution'
-            buildConfigField 'String', 'STORE_CHANNEL', '"googlePlay"'
-        }
         bazaar {
             dimension 'distribution'
             buildConfigField 'String', 'STORE_CHANNEL', '"bazaar"'
@@ -43,4 +39,5 @@ android {
 dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'com.google.firebase:firebase-messaging:24.1.2'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }
