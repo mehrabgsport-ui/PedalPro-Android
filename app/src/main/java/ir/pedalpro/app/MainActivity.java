@@ -189,6 +189,7 @@ public class MainActivity extends Activity {
           emit("REC_START_CALL", {state:this.state, mimeType:this.mimeType, timeslice:timeslice == null ? null : timeslice});
           try {
             const out = originalStart.apply(this, arguments);
+            this.__ppStartAt = Date.now();
             emit("REC_START_RETURN", {state:this.state});
             return out;
           } catch (e) {
@@ -200,10 +201,14 @@ public class MainActivity extends Activity {
         const originalStop = MR.prototype.stop;
         MR.prototype.stop = function() {
           hookRecorder(this);
-          emit("REC_STOP_CALL", {state:this.state});
+          const durationMs = this.__ppStartAt ? Math.max(0, Date.now() - this.__ppStartAt) : null;
+          emit("REC_STOP_CALL", {state:this.state, durationMs:durationMs});
+          if (durationMs != null && durationMs < 4500) {
+            emit("REC_STOP_EARLY", {durationMs:durationMs, state:this.state});
+          }
           try {
             const out = originalStop.apply(this, arguments);
-            emit("REC_STOP_RETURN", {state:this.state});
+            emit("REC_STOP_RETURN", {state:this.state, durationMs:durationMs});
             return out;
           } catch (e) {
             emit("REC_STOP_THROW", errInfo(e));
@@ -282,9 +287,17 @@ public class MainActivity extends Activity {
         if (!meta.interesting) return p;
         return p.then(function(resp){
           emit("FETCH_RESPONSE", {url:meta.url, status:resp.status, ok:resp.ok, redirected:resp.redirected, type:resp.type});
+          if (!resp.ok) emit("FETCH_HTTP_FAIL", {url:meta.url, status:resp.status});
           try {
             resp.clone().text().then(function(t){
-              emit("FETCH_BODY", {url:meta.url, status:resp.status, body:String(t).slice(0, MAX_BODY)});
+              const bodyText = String(t);
+              emit("FETCH_BODY", {url:meta.url, status:resp.status, body:bodyText.slice(0, MAX_BODY)});
+              try {
+                JSON.parse(bodyText);
+                emit("FETCH_JSON_OK", {url:meta.url, status:resp.status});
+              } catch (e) {
+                emit("FETCH_JSON_INVALID", {url:meta.url, status:resp.status, error:errInfo(e), body:bodyText.slice(0, 500)});
+              }
             }).catch(function(e){ emit("FETCH_BODY_FAIL", errInfo(e)); });
           } catch (e) { emit("FETCH_BODY_FAIL", errInfo(e)); }
           return resp;
@@ -326,6 +339,17 @@ public class MainActivity extends Activity {
                   if (!this.responseType || this.responseType === "text") response = String(this.responseText || "").slice(0, MAX_BODY);
                 } catch (_) {}
                 emit("XHR_RESPONSE", {url:this.__ppUrl, method:this.__ppMethod, status:this.status, responseType:this.responseType, body:response});
+                if (this.status < 200 || this.status >= 300) {
+                  emit("XHR_HTTP_FAIL", {url:this.__ppUrl, method:this.__ppMethod, status:this.status, body:response.slice(0, 500)});
+                }
+                if (response) {
+                  try {
+                    JSON.parse(response);
+                    emit("XHR_JSON_OK", {url:this.__ppUrl, status:this.status});
+                  } catch (e) {
+                    emit("XHR_JSON_INVALID", {url:this.__ppUrl, status:this.status, error:errInfo(e), body:response.slice(0, 500)});
+                  }
+                }
               });
               this.addEventListener("error", function(){ emit("XHR_ERROR", {url:this.__ppUrl, status:this.status}); });
               this.addEventListener("timeout", function(){ emit("XHR_TIMEOUT", {url:this.__ppUrl, status:this.status}); });
@@ -671,7 +695,22 @@ public class MainActivity extends Activity {
                 if (jsStage != null && !jsStage.trim().isEmpty()) stage = "JS_" + jsStage.trim();
             } catch (Throwable ignored) { }
             walkieLog(stage, raw);
-            if ("JS_UI_RECONNECT_SHOWN".equals(stage)) {
+            boolean showReport =
+                    "JS_UI_RECONNECT_SHOWN".equals(stage) ||
+                    "JS_REC_STOP_EARLY".equals(stage) ||
+                    "JS_GUM_FAIL".equals(stage) ||
+                    "JS_GUM_THROW".equals(stage) ||
+                    "JS_REC_START_THROW".equals(stage) ||
+                    "JS_REC_ERROR".equals(stage) ||
+                    "JS_FETCH_ERROR".equals(stage) ||
+                    "JS_FETCH_THROW".equals(stage) ||
+                    "JS_FETCH_HTTP_FAIL".equals(stage) ||
+                    "JS_FETCH_JSON_INVALID".equals(stage) ||
+                    "JS_XHR_ERROR".equals(stage) ||
+                    "JS_XHR_TIMEOUT".equals(stage) ||
+                    "JS_XHR_HTTP_FAIL".equals(stage) ||
+                    "JS_XHR_JSON_INVALID".equals(stage);
+            if (showReport) {
                 runOnUiThread(MainActivity.this::showWalkieDebugReport);
             }
         }
