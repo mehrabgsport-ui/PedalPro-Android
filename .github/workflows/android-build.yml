@@ -38,18 +38,18 @@ jobs:
       - name: Upload Google Play AAB
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.4-googlePlay-AAB-unsigned
+          name: PedalPro-1.4.5-googlePlay-AAB-unsigned
           path: app/build/outputs/bundle/googlePlayRelease/*.aab
           if-no-files-found: error
       - name: Upload Google Play APK smoke build
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.4-googlePlay-APK-unsigned
+          name: PedalPro-1.4.5-googlePlay-APK-unsigned
           path: app/build/outputs/apk/googlePlay/release/*.apk
           if-no-files-found: error
       - name: Upload Cafe Bazaar APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.4-bazaar-APK-unsigned
+          name: PedalPro-1.4.5-bazaar-APK-unsigned
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
