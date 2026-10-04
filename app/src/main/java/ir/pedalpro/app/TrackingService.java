@@ -242,9 +242,10 @@ public class TrackingService extends Service implements LocationListener {
         handleLocation(loc, "legacy:" + (loc == null ? "unknown" : String.valueOf(loc.getProvider())));
     }
 
-    private void handleLocation(Location loc, String source) {{
+    private void handleLocation(Location loc, String source) {
         if (!prefs.getBoolean("active", false) || loc == null) return;
 
+        appendRawPoint(loc, source);
         long now = System.currentTimeMillis();
         long age = loc.getTime() > 0 ? Math.abs(now - loc.getTime()) : 0L;
         if (age > 30000L) return;
