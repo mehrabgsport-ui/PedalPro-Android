@@ -39,6 +39,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -384,6 +385,9 @@ public class MainActivity extends Activity {
     private volatile boolean updateCheckRunning = false;
     private long lastUpdateCheckMs = 0L;
     private android.app.AlertDialog forcedUpdateDialog;
+    private android.app.AlertDialog walkieDebugDialog;
+    private final ArrayDeque<String> walkieRecentLogs = new ArrayDeque<>();
+    private long lastWalkieDebugDialogMs = 0L;
     private boolean backDispatching = false;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
@@ -659,7 +663,17 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
         @JavascriptInterface public void walkieDebug(String json) {
-            walkieLog("JS", json == null ? "null" : json);
+            String raw = json == null ? "null" : json;
+            String stage = "JS_EVENT";
+            try {
+                JSONObject o = new JSONObject(raw);
+                String jsStage = o.optString("stage", "EVENT");
+                if (jsStage != null && !jsStage.trim().isEmpty()) stage = "JS_" + jsStage.trim();
+            } catch (Throwable ignored) { }
+            walkieLog(stage, raw);
+            if ("JS_UI_RECONNECT_SHOWN".equals(stage)) {
+                runOnUiThread(MainActivity.this::showWalkieDebugReport);
+            }
         }
     }
 
@@ -755,8 +769,62 @@ public class MainActivity extends Activity {
 
     private void walkieLog(String stage, String detail) {
         try {
-            Log.i(WALKIE_LOG_TAG, System.currentTimeMillis() + " [" + stage + "] " + (detail == null ? "" : detail));
+            String d = detail == null ? "" : detail;
+            if (d.length() > 1400) d = d.substring(0, 1400) + "…";
+            String line = System.currentTimeMillis() + " [" + stage + "] " + d;
+            Log.i(WALKIE_LOG_TAG, line);
+            synchronized (walkieRecentLogs) {
+                walkieRecentLogs.addLast(line);
+                while (walkieRecentLogs.size() > 60) walkieRecentLogs.removeFirst();
+            }
         } catch (Throwable ignored) { }
+    }
+
+    private String walkieDebugReportText() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("PedalPro Android ").append(BuildConfig.VERSION_NAME)
+                .append(" (").append(BuildConfig.VERSION_CODE).append(")\n");
+        sb.append("Walkie E2E diagnostic\n\n");
+        synchronized (walkieRecentLogs) {
+            int skip = Math.max(0, walkieRecentLogs.size() - 24);
+            int i = 0;
+            for (String line : walkieRecentLogs) {
+                if (i++ < skip) continue;
+                sb.append(line).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private void showWalkieDebugReport() {
+        try {
+            long now = System.currentTimeMillis();
+            if (now - lastWalkieDebugDialogMs < 2500L) return;
+            lastWalkieDebugDialogMs = now;
+            if (isFinishing() || isDestroyed()) return;
+            if (walkieDebugDialog != null && walkieDebugDialog.isShowing()) return;
+
+            String report = walkieDebugReportText();
+            walkieDebugDialog = new android.app.AlertDialog.Builder(this)
+                    .setTitle("گزارش تشخیصی واکی‌تاکی")
+                    .setMessage(report)
+                    .setPositiveButton("کپی گزارش", (d, w) -> {
+                        try {
+                            android.content.ClipboardManager cm =
+                                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                            if (cm != null) {
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("PedalPro Walkie Debug", report));
+                                Toast.makeText(this, "گزارش واکی‌تاکی کپی شد", Toast.LENGTH_SHORT).show();
+                            }
+                        } catch (Throwable ignored) { }
+                    })
+                    .setNegativeButton("بستن", null)
+                    .create();
+            walkieDebugDialog.setOnDismissListener(d -> walkieDebugDialog = null);
+            walkieDebugDialog.show();
+        } catch (Throwable e) {
+            walkieLog("DEBUG_DIALOG_ERROR", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     private boolean isWalkieUrl(String url) {
@@ -923,6 +991,10 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
+        if (walkieDebugDialog != null) {
+            try { walkieDebugDialog.dismiss(); } catch (Throwable ignored) { }
+            walkieDebugDialog = null;
+        }
         if (webView != null) {
             webView.stopLoading(); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy();
         }
