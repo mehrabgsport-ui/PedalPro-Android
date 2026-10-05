@@ -14,6 +14,8 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -56,16 +58,87 @@ public class MainActivity extends Activity {
     private android.app.AlertDialog forcedUpdateDialog;
     private boolean backDispatching = false;
 
+    // Back-pressure for native -> WebView GPS events. A busy live map must never build
+    // an unbounded evaluateJavascript queue; only the newest point is retained.
+    private final Handler nativeLocationHandler = new Handler(Looper.getMainLooper());
+    private String pendingNativeLocationPayload = null;
+    private long pendingNativeLocationTimestamp = 0L;
+    private boolean nativeLocationDispatchBusy = false;
+    private long lastNativeLocationDispatchAt = 0L;
+    private static final long NATIVE_LOCATION_MIN_INTERVAL_MS = 450L;
+
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             String payload = intent.getStringExtra(TrackingService.EXTRA_PAYLOAD);
             if (payload == null || webView == null) return;
-            String fn = TrackingService.ACTION_UPDATE.equals(intent.getAction())
-                    ? "PedalProNativeLocation" : "PedalProNativeStatus";
-            String script = "window." + fn + " && window." + fn + "(" + JSONObject.quote(payload) + ");";
-            webView.post(() -> webView.evaluateJavascript(script, null));
+            if (TrackingService.ACTION_UPDATE.equals(intent.getAction())) {
+                queueNativeLocation(payload);
+                return;
+            }
+            String script = "window.PedalProNativeStatus && window.PedalProNativeStatus(" +
+                    JSONObject.quote(payload) + ");";
+            webView.post(() -> {
+                try { webView.evaluateJavascript(script, null); } catch (Throwable ignored) { }
+            });
         }
     };
+
+    private void queueNativeLocation(String payload) {
+        webView.post(() -> {
+            long ts = System.currentTimeMillis();
+            try {
+                JSONObject o = new JSONObject(payload);
+                ts = o.optLong("timestamp", ts);
+            } catch (Throwable ignored) { }
+
+            // Server acknowledgements for old queued fixes can arrive later. Never let
+            // an older point replace a newer point that is already waiting for WebView.
+            if (pendingNativeLocationPayload != null && ts < pendingNativeLocationTimestamp) return;
+            pendingNativeLocationPayload = payload;
+            pendingNativeLocationTimestamp = ts;
+            pumpNativeLocation();
+        });
+    }
+
+    private void pumpNativeLocation() {
+        if (webView == null || nativeLocationDispatchBusy || pendingNativeLocationPayload == null) return;
+        long now = System.currentTimeMillis();
+        long wait = NATIVE_LOCATION_MIN_INTERVAL_MS - (now - lastNativeLocationDispatchAt);
+        if (wait > 0L) {
+            nativeLocationHandler.removeCallbacks(nativeLocationPumpRunnable);
+            nativeLocationHandler.postDelayed(nativeLocationPumpRunnable, wait);
+            return;
+        }
+
+        String payload = pendingNativeLocationPayload;
+        pendingNativeLocationPayload = null;
+        pendingNativeLocationTimestamp = 0L;
+        nativeLocationDispatchBusy = true;
+        lastNativeLocationDispatchAt = now;
+        String script = "window.PedalProNativeLocation && window.PedalProNativeLocation(" +
+                JSONObject.quote(payload) + ");";
+        try {
+            webView.evaluateJavascript(script, value -> {
+                nativeLocationDispatchBusy = false;
+                // If several GPS/server events arrived while JS was busy, only the newest
+                // one remains and is dispatched next.
+                nativeLocationHandler.postDelayed(nativeLocationPumpRunnable, 40L);
+            });
+        } catch (Throwable ignored) {
+            nativeLocationDispatchBusy = false;
+            nativeLocationHandler.postDelayed(nativeLocationPumpRunnable, 100L);
+        }
+    }
+
+    private final Runnable nativeLocationPumpRunnable = this::pumpNativeLocation;
+
+    private void resetNativeLocationBridge() {
+        nativeLocationHandler.removeCallbacks(nativeLocationPumpRunnable);
+        pendingNativeLocationPayload = null;
+        pendingNativeLocationTimestamp = 0L;
+        nativeLocationDispatchBusy = false;
+        lastNativeLocationDispatchAt = 0L;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -146,6 +219,7 @@ public class MainActivity extends Activity {
                 return handleUri(Uri.parse(url));
             }
             @Override public void onPageFinished(WebView view, String url) {
+                resetNativeLocationBridge();
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
                 NotificationJobService.fetchNow(getApplicationContext());
@@ -528,6 +602,7 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        resetNativeLocationBridge();
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
             webView.stopLoading(); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy();
