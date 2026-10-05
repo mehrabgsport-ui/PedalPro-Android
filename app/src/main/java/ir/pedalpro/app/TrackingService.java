@@ -65,6 +65,9 @@ public class TrackingService extends Service implements LocationListener {
     private static final String API = "https://pedalpro.ir/api.php";
     private static final String CHANNEL_ID = "pedalpro_ride_tracking";
     private static final int NOTIFICATION_ID = 4107;
+    private static final float FIRST_LOCK_ACCURACY_M = 18f;
+    private static final long MAX_FIX_AGE_MS = 8000L;
+    private static final long MIN_DISTINCT_FIX_MS = 450L;
 
     private LocationManager locationManager;
     private FusedLocationProviderClient fusedClient;
@@ -82,6 +85,10 @@ public class TrackingService extends Service implements LocationListener {
     private long trackingStartedAt = 0L;
     private long lastGapFallbackAt = 0L;
     private Location lastAcceptedLocation;
+    // One-fix quarantine: a point is persisted only after the following fix confirms
+    // that it was not an isolated GNSS teleport. This intentionally adds ~1s latency.
+    private Location pendingCandidate;
+    private long pendingCandidateReceivedAt = 0L;
     private int stationaryFixes = 0;
     private int movementConfirmFixes = 0;
     private int rejectedFixes = 0;
@@ -164,6 +171,8 @@ public class TrackingService extends Service implements LocationListener {
         rawWindow.clear();
         acceptedWindow.clear();
         lastAcceptedLocation = null;
+        pendingCandidate = null;
+        pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;
         lastRawFixAt = 0L;
         lastGapFallbackAt = 0L;
@@ -207,9 +216,11 @@ public class TrackingService extends Service implements LocationListener {
             fusedClient = LocationServices.getFusedLocationProviderClient(this);
             LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setGranularity(Granularity.GRANULARITY_FINE)
-                    .setMinUpdateIntervalMillis(500L)
-                    .setMaxUpdateDelayMillis(1000L)
-                    .setWaitForAccurateLocation(false)
+                    .setMinUpdateIntervalMillis(900L)
+                    .setMaxUpdateDelayMillis(0L)
+                    .setMaxUpdateAgeMillis(0L)
+                    .setMinUpdateDistanceMeters(0f)
+                    .setWaitForAccurateLocation(true)
                     .build();
 
             fusedCallback = new LocationCallback() {
@@ -220,16 +231,6 @@ public class TrackingService extends Service implements LocationListener {
                     }
                 }
             };
-
-            try {
-                fusedClient.getLastLocation().addOnSuccessListener(last -> {
-                    if (last == null || !prefs.getBoolean("active", false)) return;
-                    long age = Math.abs(System.currentTimeMillis() - last.getTime());
-                    if (age <= 30000L && (!last.hasAccuracy() || last.getAccuracy() <= 70f)) {
-                        handleLocation(last, "fused_last");
-                    }
-                });
-            } catch (Throwable ignored) { }
 
             fusedClient.requestLocationUpdates(request, fusedCallback, Looper.getMainLooper())
                     .addOnSuccessListener(v -> {
@@ -255,21 +256,6 @@ public class TrackingService extends Service implements LocationListener {
         long interval = Math.max(1000L, prefs.getLong("interval_ms", 1000L));
 
         try {
-            Location best = null;
-            for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
-                Location x = locationManager.getLastKnownLocation(provider);
-                if (x == null) continue;
-                long age = Math.abs(System.currentTimeMillis() - x.getTime());
-                if (age > 30000L) continue;
-                if (best == null || (!x.hasAccuracy() || !best.hasAccuracy()) ||
-                        (x.hasAccuracy() && best.hasAccuracy() && x.getAccuracy() < best.getAccuracy())) best = x;
-            }
-            if (best != null && (!best.hasAccuracy() || best.getAccuracy() <= 70f)) {
-                handleLocation(best, "legacy_last");
-            }
-        } catch (Exception ignored) { }
-
-        try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                         LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
@@ -291,81 +277,111 @@ public class TrackingService extends Service implements LocationListener {
     private void handleLocation(Location loc, String source) {
         if (!prefs.getBoolean("active", false) || loc == null) return;
 
-        // Always preserve the untouched fix before any quality/filter decision.
+        // Preserve the untouched sensor fix for diagnostics before filtering.
         appendRawPoint(loc, source);
 
         long now = System.currentTimeMillis();
         lastRawFixAt = now;
         long fixTime = loc.getTime() > 0 ? loc.getTime() : now;
         long age = Math.abs(now - fixTime);
-        if (age > 15000L) {
+        if (age > MAX_FIX_AGE_MS) {
             noteRejected("نمونه قدیمی GPS حذف شد");
             return;
         }
 
+        // Never seed a ride from a cached/coarse fix. The first anchor controls every
+        // distance that follows, so it must be materially tighter than normal tracking.
+        if (lastAcceptedLocation == null) {
+            if (!loc.hasAccuracy() || loc.getAccuracy() > FIRST_LOCK_ACCURACY_M) {
+                noteRejected("در انتظار قفل دقیق GPS");
+                return;
+            }
+            Location first = new Location(loc);
+            first.setSpeed(0f);
+            acceptCandidate(first, now, false);
+            return;
+        }
+
         float accuracyLimit = adaptiveAccuracyLimit(loc);
-        if (loc.hasAccuracy() && loc.getAccuracy() > accuracyLimit) {
-            noteRejected("GPS ضعیف ±" + Math.round(loc.getAccuracy()) + "m");
+        if (!loc.hasAccuracy() || loc.getAccuracy() > accuracyLimit) {
+            noteRejected("GPS ضعیف ±" + (loc.hasAccuracy() ? Math.round(loc.getAccuracy()) : "?") + "m");
             return;
         }
 
-        // Only quality-approved raw fixes participate in local outlier detection.
-        rawWindow.addLast(new Location(loc));
-        while (rawWindow.size() > 5) rawWindow.removeFirst();
+        Location candidate = new Location(loc);
+        if (isDuplicateFix(candidate)) return;
 
-        if (isIsolatedSpike(rawWindow, loc)) {
-            noteRejected("پرش لحظه‌ای GPS حذف شد");
+        // Keep a short quality window for telemetry and dynamic thresholds.
+        rawWindow.addLast(new Location(candidate));
+        while (rawWindow.size() > 6) rawWindow.removeFirst();
+
+        // One-fix look-ahead quarantine. A bad point is not allowed to reach the server
+        // until the next GNSS fix proves that the route genuinely continued through it.
+        if (pendingCandidate == null) {
+            pendingCandidate = candidate;
+            pendingCandidateReceivedAt = now;
             return;
         }
 
-        Location candidate = new Location(loc); // never median-shift the accepted track
-        if (!isPlausibleV2(candidate)) {
+        Location evaluating = pendingCandidate;
+        long evaluatingReceivedAt = pendingCandidateReceivedAt;
+        pendingCandidate = candidate;
+        pendingCandidateReceivedAt = now;
+
+        if (isPendingSpike(lastAcceptedLocation, evaluating, candidate)) {
+            noteRejected("پرش GPS با تأیید نقطه بعدی حذف شد");
+            return;
+        }
+
+        if (!isPlausibleV2(evaluating)) {
             noteRejected("پرش غیرمنطقی GPS حذف شد");
             return;
         }
 
-        long interval = Math.min(1800L, Math.max(1000L, prefs.getLong("interval_ms", 1000L)));
+        processCandidate(evaluating, candidate,
+                evaluatingReceivedAt > 0L ? evaluatingReceivedAt : now);
+    }
 
-        if (lastAcceptedLocation == null) {
-            candidate.setSpeed(0f);
-            acceptCandidate(candidate, now, interval, false);
-            return;
-        }
+    private void processCandidate(Location candidate, Location lookAhead, long receivedAt) {
+        if (lastAcceptedLocation == null) return;
 
         double meters = lastAcceptedLocation.distanceTo(candidate);
         long dtMs = candidate.getTime() - lastAcceptedLocation.getTime();
-        if (dtMs <= 0L) dtMs = Math.max(1L, now - lastAcceptedAt);
+        if (dtMs <= 0L) return;
 
         float prevAcc = lastAcceptedLocation.hasAccuracy() ? lastAcceptedLocation.getAccuracy() : 8f;
         float curAcc = candidate.hasAccuracy() ? candidate.getAccuracy() : 8f;
         double noiseRadius = stationaryNoiseRadius(prevAcc, curAcc);
 
-        double derivedMps = meters / Math.max(0.25, dtMs / 1000.0);
-        double osMps = loc.hasSpeed() ? Math.max(0.0, loc.getSpeed()) : 0.0;
+        double derivedMps = meters / Math.max(0.35, dtMs / 1000.0);
+        boolean reliableSpeed = hasReliableSpeed(candidate);
+        double osMps = reliableSpeed ? Math.max(0.0, candidate.getSpeed()) : 0.0;
 
-        // MTB/gravel slow movement: Doppler speed can prove motion before coordinate
-        // displacement grows beyond the full accuracy radius.
-        boolean dopplerMovement = osMps >= 0.55 &&
-                meters >= Math.max(1.8, noiseRadius * 0.55);
-        boolean geometricMovement = meters >= Math.max(2.5, noiseRadius) &&
-                derivedMps >= 0.45;
-        boolean accumulatedSlowMovement = meters >= Math.max(4.0, noiseRadius * 1.20) &&
-                dtMs >= 3000L;
+        double forwardMeters = lookAhead == null ? 0.0 : candidate.distanceTo(lookAhead);
+        double netMeters = lookAhead == null ? meters : lastAcceptedLocation.distanceTo(lookAhead);
+        long totalDtMs = lookAhead == null ? dtMs : lookAhead.getTime() - lastAcceptedLocation.getTime();
+        if (totalDtMs <= 0L) totalDtMs = dtMs;
+
+        boolean forwardSupport = lookAhead == null ||
+                (forwardMeters >= 1.2 && netMeters >= Math.max(3.0, noiseRadius * 0.85));
+        boolean dopplerMovement = reliableSpeed && osMps >= 0.65 &&
+                (meters >= 1.4 || netMeters >= 2.5);
+        boolean geometricMovement = meters >= Math.max(4.0, noiseRadius * 1.10) &&
+                derivedMps >= 0.50 && forwardSupport &&
+                netMeters >= Math.max(5.0, noiseRadius * 1.30);
+        boolean accumulatedSlowMovement = totalDtMs >= 2500L &&
+                netMeters >= Math.max(6.0, noiseRadius * 1.55);
         boolean moving = dopplerMovement || geometricMovement || accumulatedSlowMovement;
 
-        // Once we have been stationary for a few fixes, leaving the lock requires
-        // more than one plausible sample. This suppresses the classic 1-3m drift
-        // that Fused/GNSS can report while the phone is physically still.
+        // Stationary lock requires coherent motion, not one displaced coordinate.
         if (moving && stationaryFixes >= 2) {
-            double unlockDistance = Math.max(3.5, noiseRadius * 1.10);
+            double unlockDistance = Math.max(4.0, noiseRadius * 1.20);
             boolean strongEvidence =
-                    meters >= Math.max(5.0, noiseRadius * 1.45) ||
-                    (osMps >= 0.85 && meters >= unlockDistance) ||
-                    (derivedMps >= 0.95 && meters >= unlockDistance);
-
+                    (reliableSpeed && osMps >= 0.85 && netMeters >= unlockDistance) ||
+                    netMeters >= Math.max(6.0, noiseRadius * 1.55) ||
+                    (derivedMps >= 1.10 && meters >= unlockDistance && forwardSupport);
             if (strongEvidence) movementConfirmFixes++;
             else movementConfirmFixes = 0;
-
             if (movementConfirmFixes < 2) moving = false;
         } else if (!moving) {
             movementConfirmFixes = 0;
@@ -374,15 +390,12 @@ public class TrackingService extends Service implements LocationListener {
         if (!moving) {
             stationaryFixes++;
             Location frozen = new Location(lastAcceptedLocation);
-            frozen.setTime(fixTime);
+            frozen.setTime(candidate.getTime());
             frozen.setSpeed(0f);
             try { broadcastPoint(locationJson(frozen), null); } catch (Exception ignored) { }
-
-            // Keep the accepted anchor unchanged. Real slow movement therefore accumulates
-            // against this anchor instead of being reset to zero every second.
-            if (now - lastFilterStatusAt >= 4000L) {
-                lastFilterStatusAt = now;
-                broadcastStatus("GPS V2 پایدار — توقف/حرکت بسیار کم", false);
+            if (receivedAt - lastFilterStatusAt >= 4000L) {
+                lastFilterStatusAt = receivedAt;
+                broadcastStatus("GPS V3 پایدار — Drift سکون حذف می‌شود", false);
             }
             return;
         }
@@ -391,25 +404,70 @@ public class TrackingService extends Service implements LocationListener {
         movementConfirmFixes = 0;
         double maxMps = prefs.getFloat("max_speed_kmh", 100f) / 3.6;
         double chosenMps = derivedMps;
-        if (osMps > 0.0 && Math.abs(osMps - derivedMps) <= Math.max(2.0, derivedMps * 0.65)) {
-            // Blend only the speed value; coordinates remain the accepted real fix.
-            chosenMps = derivedMps * 0.72 + osMps * 0.28;
+        if (reliableSpeed && Math.abs(osMps - derivedMps) <= Math.max(1.8, derivedMps * 0.55)) {
+            chosenMps = derivedMps * 0.68 + osMps * 0.32;
         }
         candidate.setSpeed((float)Math.min(Math.max(0.0, chosenMps), maxMps));
-        acceptCandidate(candidate, now, interval, true);
+        acceptCandidate(candidate, receivedAt, true);
     }
 
-    private void acceptCandidate(Location candidate, long now, long interval, boolean moving) {
-        // UI may receive every accepted fix. Server persistence remains ~1 Hz.
-        if (lastAcceptedAt > 0 && now - lastAcceptedAt < interval) {
-            try { broadcastPoint(locationJson(candidate), null); } catch (Exception ignored) { }
-            return;
+    private boolean hasReliableSpeed(Location loc) {
+        if (loc == null || !loc.hasSpeed()) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && loc.hasSpeedAccuracy()) {
+            return loc.getSpeedAccuracyMetersPerSecond() <= 1.8f;
+        }
+        return true;
+    }
+
+    private boolean isDuplicateFix(Location candidate) {
+        Location ref = pendingCandidate != null ? pendingCandidate : lastAcceptedLocation;
+        if (ref == null) return false;
+        long dt = Math.abs(candidate.getTime() - ref.getTime());
+        return dt < MIN_DISTINCT_FIX_MS && ref.distanceTo(candidate) < 2.0f;
+    }
+
+    private boolean isPendingSpike(Location previous, Location middle, Location next) {
+        if (previous == null || middle == null || next == null) return false;
+        long dt1 = middle.getTime() - previous.getTime();
+        long dt2 = next.getTime() - middle.getTime();
+        if (dt1 <= 0L || dt2 <= 0L || dt1 > 15000L || dt2 > 15000L) return false;
+
+        double d1 = previous.distanceTo(middle);
+        double d2 = middle.distanceTo(next);
+        double direct = previous.distanceTo(next);
+        float pAcc = previous.hasAccuracy() ? previous.getAccuracy() : 8f;
+        float mAcc = middle.hasAccuracy() ? middle.getAccuracy() : 8f;
+        float nAcc = next.hasAccuracy() ? next.getAccuracy() : 8f;
+        double uncertainty = Math.max(8.0, Math.max(pAcc, Math.max(mAcc, nAcc)) * 1.25);
+
+        double detour = Math.max(0.0, d1 + d2 - direct);
+        double ratio = (d1 + d2) / Math.max(3.0, direct);
+        double middleKmh = Math.max(d1 / (dt1 / 1000.0), d2 / (dt2 / 1000.0)) * 3.6;
+        double directKmh = direct / ((dt1 + dt2) / 1000.0) * 3.6;
+        double recent = medianRecentSpeedKmh();
+        double dynamicLimit = Math.max(60.0, recent * 3.0 + 25.0);
+
+        boolean geometricSpike = d1 >= Math.max(18.0, uncertainty * 1.25) &&
+                d2 >= Math.max(18.0, uncertainty * 1.25) &&
+                detour >= Math.max(18.0, uncertainty * 1.35) && ratio >= 2.15;
+        boolean speedSpike = middleKmh > dynamicLimit &&
+                directKmh <= Math.max(55.0, recent * 2.5 + 22.0) &&
+                detour >= Math.max(15.0, uncertainty);
+        return geometricSpike || speedSpike;
+    }
+
+    private void acceptCandidate(Location candidate, long now, boolean moving) {
+        if (lastAcceptedLocation != null) {
+            long fixDt = candidate.getTime() - lastAcceptedLocation.getTime();
+            if (fixDt <= 0L) return;
+            // Prevent duplicate Fused/GPS fallback fixes from double-counting distance.
+            if (fixDt < 700L && lastAcceptedLocation.distanceTo(candidate) < 3.0f) return;
         }
 
         lastAcceptedAt = now;
         lastAcceptedLocation = new Location(candidate);
         acceptedWindow.addLast(new Location(candidate));
-        while (acceptedWindow.size() > 10) acceptedWindow.removeFirst();
+        while (acceptedWindow.size() > 12) acceptedWindow.removeFirst();
 
         try {
             JSONObject p = locationJson(candidate);
@@ -420,7 +478,7 @@ public class TrackingService extends Service implements LocationListener {
                 lastFilterStatusAt = now;
                 String quality = candidate.hasAccuracy()
                         ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
-                broadcastStatus((moving ? "GPS V2 زنده" : "GPS V2 قفل شد") + quality, false);
+                broadcastStatus((moving ? "GPS V3 زنده" : "GPS V3 قفل دقیق") + quality, false);
             }
         } catch (Exception ignored) { }
     }
@@ -429,20 +487,18 @@ public class TrackingService extends Service implements LocationListener {
         float configured = prefs.getFloat("max_accuracy", 25f);
         configured = Math.max(20f, Math.min(30f, configured));
 
-        // First lock may be slightly wider so tracking starts quickly, but once locked
-        // keep the accepted route materially tighter than the previous 30-40m envelope.
-        if (lastAcceptedLocation == null) return Math.max(35f, configured);
+        if (lastAcceptedLocation == null) return FIRST_LOCK_ACCURACY_M;
 
         double recentKmh = medianRecentSpeedKmh();
-        double osMps = loc.hasSpeed() ? Math.max(0.0, loc.getSpeed()) : 0.0;
-        if (recentKmh >= 8.0 || osMps >= 2.2) return Math.max(30f, configured);
-        if (recentKmh >= 1.0 || osMps >= 0.35) return Math.max(28f, configured);
-        return Math.max(25f, configured);
+        double osMps = hasReliableSpeed(loc) ? Math.max(0.0, loc.getSpeed()) : 0.0;
+        if (recentKmh >= 12.0 || osMps >= 3.3) return Math.max(28f, configured);
+        if (recentKmh >= 3.0 || osMps >= 0.85) return Math.max(25f, configured);
+        return Math.min(22f, configured);
     }
 
     private double stationaryNoiseRadius(float prevAcc, float curAcc) {
         double a = Math.max(1.0, Math.max(prevAcc, curAcc));
-        return Math.max(3.0, Math.min(8.0, a * 0.45));
+        return Math.max(3.5, Math.min(9.0, a * 0.55));
     }
 
     private boolean isIsolatedSpike(ArrayDeque<Location> source, Location newest) {
@@ -590,7 +646,7 @@ public class TrackingService extends Service implements LocationListener {
         if (loc.hasAccuracy()) p.put("accuracy", loc.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
         p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
         if (loc.hasBearing()) p.put("bearing", loc.getBearing());
-        p.put("gps_engine", "v2-phase2");
+        p.put("gps_engine", "v3-lookahead");
         p.put("filter_rejected", rejectedFixes);
         return p;
     }
@@ -798,6 +854,8 @@ public class TrackingService extends Service implements LocationListener {
         rawWindow.clear();
         acceptedWindow.clear();
         lastAcceptedLocation = null;
+        pendingCandidate = null;
+        pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;
         lastRawFixAt = 0L;
         lastGapFallbackAt = 0L;
