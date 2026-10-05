@@ -386,6 +386,11 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public void setNeshanServiceKey(String key) {
+            if (!NeshanRoadMatcher.validKey(key)) return;
+            getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
+                    .edit().putString("neshan_service_key", key.trim()).apply();
+        }
     }
 
     private void checkReleasePolicy(boolean manual) {
@@ -472,6 +477,12 @@ public class MainActivity extends Activity {
             i.putExtra("max_accuracy", o.optDouble("max_accuracy", 25));
             i.putExtra("max_speed_kmh", o.optDouble("max_speed_kmh", 100));
             i.putExtra("interval_ms", o.optLong("interval_ms", 2500));
+            String neshanKey = o.optString("neshan_service_key", "");
+            if (!NeshanRoadMatcher.validKey(neshanKey)) {
+                neshanKey = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
+                        .getString("neshan_service_key", "");
+            }
+            if (NeshanRoadMatcher.validKey(neshanKey)) i.putExtra("neshan_service_key", neshanKey);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i); else startService(i);
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
