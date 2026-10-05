@@ -211,6 +211,10 @@ public class MainActivity extends Activity {
 
         webView.addJavascriptInterface(new NativeBridge(), "AndroidBridge");
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try { webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true); } catch (Throwable ignored) { }
+        }
+
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return handleUri(request.getUrl());
@@ -222,6 +226,7 @@ public class MainActivity extends Activity {
                 resetNativeLocationBridge();
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                installWebPerformanceGuard(view);
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
             }
@@ -306,6 +311,39 @@ public class MainActivity extends Activity {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
+    }
+
+    private void installWebPerformanceGuard(WebView view) {
+        if (view == null) return;
+        String js =
+                "(function(){try{" +
+                "if(window.__PP_PERF_GUARD__)return;window.__PP_PERF_GUARD__=1;" +
+                "var OF=window.fetch;" +
+                "if(OF){var IF=new Map(),CA=new Map();" +
+                "window.fetch=function(input,init){try{" +
+                "var method=((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();" +
+                "var url=(typeof input==='string')?input:((input&&input.url)||'');" +
+                "if(method==='GET'&&/(?:^|\\\\/)api\\\\.php(?:\\\\?|$)/i.test(url)){" +
+                "var now=Date.now(),c=CA.get(url);if(c&&now-c.t<350){return Promise.resolve(c.r.clone());}" +
+                "var a=IF.get(url);if(a){return a.then(function(r){return r.clone();});}" +
+                "var p=OF.apply(this,arguments).then(function(r){try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;})" +
+                ".finally(function(){IF.delete(url);});IF.set(url,p);return p;}" +
+                "}catch(e){}return OF.apply(this,arguments);};}" +
+                "var OSI=window.setInterval;window.setInterval=function(fn,delay){" +
+                "var d=Number(delay)||0;try{var src=(typeof fn==='function')?Function.prototype.toString.call(fn):String(fn);" +
+                "if(d<800&&/(api\\\\.php|fetch\\\\(|XMLHttpRequest|live|track|setLatLngs|polyline)/i.test(src))d=800;}catch(e){}" +
+                "var args=Array.prototype.slice.call(arguments,2);return OSI.apply(window,[fn,d].concat(args));};" +
+                "function thin(a){if(!Array.isArray(a)||a.length<=1200)return a;var st=Math.ceil(a.length/1200),o=[];" +
+                "for(var i=0;i<a.length;i+=st)o.push(a[i]);if(o[o.length-1]!==a[a.length-1])o.push(a[a.length-1]);return o;}" +
+                "function patchLeaflet(){try{if(!window.L||!L.Polyline||L.Polyline.prototype.__pp)return;" +
+                "var p=L.Polyline.prototype,orig=p.setLatLngs;p.setLatLngs=function(a){try{a=thin(a);}catch(e){}return orig.call(this,a);};p.__pp=1;" +
+                "if(L.Map&&L.Map.prototype&&!L.Map.prototype.__ppfit){var fb=L.Map.prototype.fitBounds,last=0;" +
+                "L.Map.prototype.fitBounds=function(){var n=Date.now();if(n-last<250)return this;last=n;" +
+                "try{if(arguments[1])arguments[1].animate=false;}catch(e){}return fb.apply(this,arguments);};L.Map.prototype.__ppfit=1;}" +
+                "}catch(e){}}" +
+                "patchLeaflet();OSI(patchLeaflet,2000);" +
+                "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
 
     public class NativeBridge {
