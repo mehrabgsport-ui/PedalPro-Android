@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
+        android:enableOnBackInvokedCallback="true"
         android:name=".PedalProApp"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"

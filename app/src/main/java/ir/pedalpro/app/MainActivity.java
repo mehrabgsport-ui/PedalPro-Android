@@ -77,6 +77,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         setupWebView();
+        registerPredictiveBackHandler();
         registerTrackingReceiver();
         requestNotificationIfNeeded();
         scheduleNotificationJob();
@@ -483,9 +484,17 @@ public class MainActivity extends Activity {
         }
     }
 
-    @Override public void onBackPressed() {
+    private void registerPredictiveBackHandler() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    this::handleBackNavigation);
+        }
+    }
+
+    private void handleBackNavigation() {
         if (webView == null) {
-            super.onBackPressed();
+            finishAfterTransition();
             return;
         }
         if (backDispatching) return;
@@ -502,9 +511,16 @@ public class MainActivity extends Activity {
         });
     }
 
+    @Override public void onBackPressed() {
+        handleBackNavigation();
+    }
+
     private void fallbackNativeBack() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            finishAfterTransition();
+        }
     }
 
     @Override protected void onSaveInstanceState(Bundle outState) {
