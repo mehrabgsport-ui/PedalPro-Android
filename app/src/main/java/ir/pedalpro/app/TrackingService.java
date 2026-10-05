@@ -111,7 +111,16 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private int rawWriterRideId = 0;
     private SharedPreferences prefs;
     private final ExecutorService network = Executors.newSingleThreadExecutor();
+    private final ExecutorService roadMatching = Executors.newSingleThreadExecutor();
     private final AtomicBoolean flushing = new AtomicBoolean(false);
+    private final AtomicBoolean roadMatchRunning = new AtomicBoolean(false);
+    private final ArrayDeque<Location> roadMatchHistory = new ArrayDeque<>();
+    private final ArrayDeque<Location> roadMatchOutputBuffer = new ArrayDeque<>();
+    private volatile String neshanServiceKey = "";
+    private long lastRoadMatchAttemptAt = 0L;
+    private static final long ROAD_MATCH_MIN_INTERVAL_MS = 2500L;
+    private static final int ROAD_MATCH_MIN_POINTS = 4;
+    private static final int ROAD_MATCH_MAX_HISTORY = 12;
     private PowerManager.WakeLock wakeLock;
     private long lastAcceptedAt = 0L;
     private long lastRawFixAt = 0L;
@@ -182,6 +191,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
             // degrade tracking quality or delete legitimate downhill fixes.
             float requestedAccuracy = (float) intent.getDoubleExtra("max_accuracy", 25);
             float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 80);
+            String suppliedNeshanKey = intent.getStringExtra("neshan_service_key");
+            if (NeshanRoadMatcher.validKey(suppliedNeshanKey)) {
+                neshanServiceKey = suppliedNeshanKey.trim();
+            } else {
+                neshanServiceKey = prefs.getString("neshan_service_key", "");
+            }
             prefs.edit()
                     .putBoolean("active", true)
                     .putInt("ride_id", rideId)
@@ -189,6 +204,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
                     .putFloat("max_speed_kmh", Math.max(80f, requestedMaxSpeed))
                     .putLong("interval_ms", 1000L)
+                    .putString("neshan_service_key", neshanServiceKey == null ? "" : neshanServiceKey)
                     .apply();
             if (previousRideId != rideId) resetRawLog(rideId);
         }
@@ -203,6 +219,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
         trackingStartedAt = System.currentTimeMillis();
         rawWindow.clear();
         acceptedWindow.clear();
+        synchronized (roadMatchOutputBuffer) {
+            roadMatchHistory.clear();
+            roadMatchOutputBuffer.clear();
+        }
+        roadMatchRunning.set(false);
+        lastRoadMatchAttemptAt = 0L;
         lastAcceptedLocation = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
@@ -720,18 +742,119 @@ public class TrackingService extends Service implements LocationListener, Sensor
         acceptedWindow.addLast(new Location(candidate));
         while (acceptedWindow.size() > 12) acceptedWindow.removeFirst();
 
+        queueRoadAwareOutput(candidate);
+        if (now - lastFilterStatusAt >= 3500L) {
+            lastFilterStatusAt = now;
+            String quality = candidate.hasAccuracy()
+                    ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
+            String road = NeshanRoadMatcher.validKey(neshanServiceKey) ? " + Map Matching نشان" : "";
+            broadcastStatus((moving ? "GPS V5" : "GPS V5 قفل دقیق") + road + quality, false);
+        }
+    }
+
+    private void queueRoadAwareOutput(Location candidate) {
+        if (candidate == null) return;
+        Location copy = new Location(candidate);
+        boolean emitNow = false;
+        synchronized (roadMatchOutputBuffer) {
+            roadMatchHistory.addLast(new Location(copy));
+            while (roadMatchHistory.size() > ROAD_MATCH_MAX_HISTORY) roadMatchHistory.removeFirst();
+
+            if (!NeshanRoadMatcher.validKey(neshanServiceKey) || roadMatchHistory.size() < ROAD_MATCH_MIN_POINTS) {
+                emitNow = true;
+            } else {
+                roadMatchOutputBuffer.addLast(copy);
+            }
+        }
+        if (emitNow) {
+            emitAcceptedPoint(copy, false, 0.0);
+            return;
+        }
+        maybeStartRoadMatch();
+    }
+
+    private void maybeStartRoadMatch() {
+        if (!NeshanRoadMatcher.validKey(neshanServiceKey) || roadMatchRunning.get()) return;
+        final long now = System.currentTimeMillis();
+        if (now - lastRoadMatchAttemptAt < ROAD_MATCH_MIN_INTERVAL_MS) return;
+
+        final List<Location> request = new ArrayList<>();
+        synchronized (roadMatchOutputBuffer) {
+            if (roadMatchHistory.size() < ROAD_MATCH_MIN_POINTS || roadMatchOutputBuffer.size() < 2) return;
+            for (Location p : roadMatchHistory) request.add(new Location(p));
+            while (roadMatchOutputBuffer.size() > 7) {
+                emitAcceptedPoint(roadMatchOutputBuffer.removeFirst(), false, 0.0);
+            }
+        }
+        if (!roadMatchRunning.compareAndSet(false, true)) return;
+        lastRoadMatchAttemptAt = now;
+
+        roadMatching.execute(() -> {
+            NeshanRoadMatcher.MatchResult result = NeshanRoadMatcher.match(neshanServiceKey, request);
+            try {
+                applyRoadMatchResult(request, result);
+            } finally {
+                roadMatchRunning.set(false);
+                gpsWatchdogHandler.postDelayed(this::maybeStartRoadMatch, ROAD_MATCH_MIN_INTERVAL_MS);
+            }
+        });
+    }
+
+    private void applyRoadMatchResult(List<Location> request, NeshanRoadMatcher.MatchResult result) {
+        if (request == null || request.isEmpty()) return;
+        long coveredThrough = request.get(request.size() - 1).getTime();
+        List<Location> ready = new ArrayList<>();
+        synchronized (roadMatchOutputBuffer) {
+            while (!roadMatchOutputBuffer.isEmpty()) {
+                Location p = roadMatchOutputBuffer.peekFirst();
+                if (p.getTime() > coveredThrough) break;
+                ready.add(roadMatchOutputBuffer.removeFirst());
+            }
+        }
+
+        for (Location raw : ready) {
+            Location output = new Location(raw);
+            boolean snapped = false;
+            if (result != null && result.accepted) {
+                int index = indexOfTimestamp(request, raw.getTime());
+                NeshanRoadMatcher.Snapped sp = result.get(index);
+                if (sp != null && sp.offsetMeters <= 34.0) {
+                    output.setLatitude(sp.latitude);
+                    output.setLongitude(sp.longitude);
+                    snapped = true;
+                }
+            }
+            emitAcceptedPoint(output, snapped, result == null ? 0.0 : result.confidence);
+        }
+    }
+
+    private static int indexOfTimestamp(List<Location> points, long timestamp) {
+        for (int i = 0; i < points.size(); i++) {
+            if (points.get(i).getTime() == timestamp) return i;
+        }
+        return -1;
+    }
+
+    private void emitAcceptedPoint(Location point, boolean roadMatched, double confidence) {
         try {
-            JSONObject p = locationJson(candidate);
+            JSONObject p = locationJson(point);
+            p.put("road_matched", roadMatched);
+            if (roadMatched) {
+                p.put("road_match_provider", "neshan");
+                p.put("road_match_confidence", Math.round(confidence * 1000.0) / 1000.0);
+            }
             appendPending(p);
             broadcastPoint(p, null);
             flushPending();
-            if (now - lastFilterStatusAt >= 3500L) {
-                lastFilterStatusAt = now;
-                String quality = candidate.hasAccuracy()
-                        ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
-                broadcastStatus((moving ? "GPS V4 Sensor Fusion" : "GPS V4 قفل دقیق") + quality, false);
-            }
         } catch (Exception ignored) { }
+    }
+
+    private void flushRoadMatchBufferRaw() {
+        List<Location> rest = new ArrayList<>();
+        synchronized (roadMatchOutputBuffer) {
+            while (!roadMatchOutputBuffer.isEmpty()) rest.add(roadMatchOutputBuffer.removeFirst());
+        }
+        for (Location p : rest) emitAcceptedPoint(p, false, 0.0);
     }
 
     private float adaptiveAccuracyLimit(Location loc) {
@@ -905,7 +1028,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         if (loc.hasAccuracy()) p.put("accuracy", loc.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
         p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
         if (loc.hasBearing()) p.put("bearing", loc.getBearing());
-        p.put("gps_engine", "v4-sensor-fusion");
+        p.put("gps_engine", "v5-sensor-fusion-road-aware");
         p.put("filter_rejected", rejectedFixes);
         return p;
     }
@@ -1053,11 +1176,34 @@ public class TrackingService extends Service implements LocationListener, Sensor
             if (code < 200 || code >= 300) return false;
             JSONObject j = new JSONObject(readBody(c.getInputStream()));
             String token = j.optString("csrf", "");
-            if (token.isEmpty()) return false;
-            prefs.edit().putString("csrf", token).apply();
+            String key = firstNeshanKey(j);
+            SharedPreferences.Editor e = prefs.edit();
+            if (NeshanRoadMatcher.validKey(key)) {
+                neshanServiceKey = key.trim();
+                e.putString("neshan_service_key", neshanServiceKey);
+            }
+            if (token.isEmpty()) { e.apply(); return false; }
+            e.putString("csrf", token).apply();
             return true;
         } catch (Exception e) { return false; }
         finally { if (c != null) c.disconnect(); }
+    }
+
+    private static String firstNeshanKey(JSONObject root) {
+        if (root == null) return "";
+        for (String name : new String[]{"neshan_service_key", "neshan_api_key", "map_matching_key"}) {
+            String x = root.optString(name, "");
+            if (NeshanRoadMatcher.validKey(x)) return x;
+        }
+        for (String container : new String[]{"config", "settings", "tracking", "map"}) {
+            JSONObject o = root.optJSONObject(container);
+            if (o == null) continue;
+            for (String name : new String[]{"neshan_service_key", "neshan_api_key", "map_matching_key"}) {
+                String x = o.optString(name, "");
+                if (NeshanRoadMatcher.validKey(x)) return x;
+            }
+        }
+        return "";
     }
 
     private static String readBody(InputStream in) throws Exception {
@@ -1081,6 +1227,9 @@ public class TrackingService extends Service implements LocationListener, Sensor
             out.put("accuracy", p.has("accuracy") ? p.opt("accuracy") : JSONObject.NULL);
             out.put("bearing", p.has("bearing") ? p.opt("bearing") : JSONObject.NULL);
             out.put("timestamp", p.optLong("timestamp", System.currentTimeMillis()));
+            out.put("road_matched", p.optBoolean("road_matched", false));
+            if (p.has("road_match_provider")) out.put("road_match_provider", p.optString("road_match_provider"));
+            if (p.has("road_match_confidence")) out.put("road_match_confidence", p.optDouble("road_match_confidence"));
             if (response != null) out.put("response", response);
             Intent i = new Intent(ACTION_UPDATE);
             i.setPackage(getPackageName());
@@ -1101,6 +1250,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private void stopTracking() {
+        flushRoadMatchBufferRaw();
         prefs.edit().putBoolean("active", false).apply();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
@@ -1122,6 +1272,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
                 .apply();
         rawWindow.clear();
         acceptedWindow.clear();
+        synchronized (roadMatchOutputBuffer) {
+            roadMatchHistory.clear();
+            roadMatchOutputBuffer.clear();
+        }
         lastAcceptedLocation = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
@@ -1208,6 +1362,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         closeRawWriter();
         releaseWakeLock();
         network.shutdownNow();
+        roadMatching.shutdownNow();
         super.onDestroy();
     }
 
