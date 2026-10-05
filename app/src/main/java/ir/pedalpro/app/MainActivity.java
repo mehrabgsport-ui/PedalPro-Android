@@ -736,24 +736,9 @@ public class MainActivity extends Activity {
                 String jsStage = o.optString("stage", "EVENT");
                 if (jsStage != null && !jsStage.trim().isEmpty()) stage = "JS_" + jsStage.trim();
             } catch (Throwable ignored) { }
+            // Keep full diagnostics in Logcat/native buffer, but never interrupt
+            // the live ride or walkie UI with an automatic diagnostic dialog.
             walkieLog(stage, raw);
-            boolean showReport =
-                    "JS_UI_RECONNECT_SHOWN".equals(stage) ||
-                    "JS_GUM_FAIL".equals(stage) ||
-                    "JS_GUM_THROW".equals(stage) ||
-                    "JS_REC_START_THROW".equals(stage) ||
-                    "JS_REC_ERROR".equals(stage) ||
-                    "JS_FETCH_ERROR".equals(stage) ||
-                    "JS_FETCH_THROW".equals(stage) ||
-                    "JS_FETCH_HTTP_FAIL".equals(stage) ||
-                    "JS_FETCH_JSON_INVALID".equals(stage) ||
-                    "JS_XHR_ERROR".equals(stage) ||
-                    "JS_XHR_TIMEOUT".equals(stage) ||
-                    "JS_XHR_HTTP_FAIL".equals(stage) ||
-                    "JS_XHR_JSON_INVALID".equals(stage);
-            if (showReport) {
-                runOnUiThread(MainActivity.this::showWalkieDebugReport);
-            }
         }
     }
 
