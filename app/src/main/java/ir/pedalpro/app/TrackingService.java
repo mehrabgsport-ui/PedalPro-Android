@@ -15,6 +15,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -23,6 +24,7 @@ import android.webkit.CookieManager;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.Granularity;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
@@ -76,7 +78,9 @@ public class TrackingService extends Service implements LocationListener {
     private final AtomicBoolean flushing = new AtomicBoolean(false);
     private PowerManager.WakeLock wakeLock;
     private long lastAcceptedAt = 0L;
+    private long lastRawFixAt = 0L;
     private long trackingStartedAt = 0L;
+    private long lastGapFallbackAt = 0L;
     private Location lastAcceptedLocation;
     private int stationaryFixes = 0;
     private int movementConfirmFixes = 0;
@@ -84,6 +88,29 @@ public class TrackingService extends Service implements LocationListener {
     private long lastFilterStatusAt = 0L;
     private final ArrayDeque<Location> rawWindow = new ArrayDeque<>();
     private final ArrayDeque<Location> acceptedWindow = new ArrayDeque<>();
+    private final Handler gpsWatchdogHandler = new Handler(Looper.getMainLooper());
+    private final Runnable gpsWatchdog = new Runnable() {
+        @Override public void run() {
+            try {
+                if (!prefs.getBoolean("active", false)) return;
+                long now = System.currentTimeMillis();
+                long reference = lastRawFixAt > 0L ? lastRawFixAt : trackingStartedAt;
+                long gap = reference > 0L ? now - reference : 0L;
+
+                if (usingFused && gap >= 6000L && !legacyFallbackStarted &&
+                        now - lastGapFallbackAt >= 10000L) {
+                    lastGapFallbackAt = now;
+                    broadcastStatus("گپ GPS تشخیص داده شد؛ فعال‌سازی GPS مستقیم اندروید", false);
+                    startLegacyLocationFallback();
+                }
+            } catch (Throwable ignored) {
+            } finally {
+                if (prefs != null && prefs.getBoolean("active", false)) {
+                    gpsWatchdogHandler.postDelayed(this, 3000L);
+                }
+            }
+        }
+    };
 
     @Override public void onCreate() {
         super.onCreate();
@@ -138,11 +165,15 @@ public class TrackingService extends Service implements LocationListener {
         acceptedWindow.clear();
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
+        lastRawFixAt = 0L;
+        lastGapFallbackAt = 0L;
         stationaryFixes = 0;
         movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
         beginLocationUpdates();
+        gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
+        gpsWatchdogHandler.postDelayed(gpsWatchdog, 3000L);
         flushPending();
         broadcastStatus("GPS اندروید فعال — ثبت پس‌زمینه", false);
         return START_STICKY;
@@ -175,8 +206,9 @@ public class TrackingService extends Service implements LocationListener {
 
             fusedClient = LocationServices.getFusedLocationProviderClient(this);
             LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
-                    .setMinUpdateIntervalMillis(750L)
-                    .setMaxUpdateDelayMillis(1500L)
+                    .setGranularity(Granularity.GRANULARITY_FINE)
+                    .setMinUpdateIntervalMillis(500L)
+                    .setMaxUpdateDelayMillis(1000L)
                     .setWaitForAccurateLocation(false)
                     .build();
 
@@ -263,6 +295,7 @@ public class TrackingService extends Service implements LocationListener {
         appendRawPoint(loc, source);
 
         long now = System.currentTimeMillis();
+        lastRawFixAt = now;
         long fixTime = loc.getTime() > 0 ? loc.getTime() : now;
         long age = Math.abs(now - fixTime);
         if (age > 15000L) {
@@ -394,14 +427,17 @@ public class TrackingService extends Service implements LocationListener {
 
     private float adaptiveAccuracyLimit(Location loc) {
         float configured = prefs.getFloat("max_accuracy", 25f);
-        configured = Math.max(20f, Math.min(35f, configured));
-        if (lastAcceptedLocation == null) return Math.max(55f, configured);
+        configured = Math.max(20f, Math.min(30f, configured));
+
+        // First lock may be slightly wider so tracking starts quickly, but once locked
+        // keep the accepted route materially tighter than the previous 30-40m envelope.
+        if (lastAcceptedLocation == null) return Math.max(35f, configured);
 
         double recentKmh = medianRecentSpeedKmh();
         double osMps = loc.hasSpeed() ? Math.max(0.0, loc.getSpeed()) : 0.0;
-        if (recentKmh >= 8.0 || osMps >= 2.2) return Math.max(40f, configured);
-        if (recentKmh >= 1.0 || osMps >= 0.35) return Math.max(35f, configured);
-        return Math.max(30f, configured);
+        if (recentKmh >= 8.0 || osMps >= 2.2) return Math.max(30f, configured);
+        if (recentKmh >= 1.0 || osMps >= 0.35) return Math.max(28f, configured);
+        return Math.max(25f, configured);
     }
 
     private double stationaryNoiseRadius(float prevAcc, float curAcc) {
@@ -743,6 +779,7 @@ public class TrackingService extends Service implements LocationListener {
 
     private void stopTracking() {
         prefs.edit().putBoolean("active", false).apply();
+        gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
         closeRawWriter();
         releaseWakeLock();
@@ -762,10 +799,13 @@ public class TrackingService extends Service implements LocationListener {
         acceptedWindow.clear();
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
+        lastRawFixAt = 0L;
+        lastGapFallbackAt = 0L;
         stationaryFixes = 0;
         movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
+        gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -831,6 +871,7 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     @Override public void onDestroy() {
+        gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
         closeRawWriter();
         releaseWakeLock();
