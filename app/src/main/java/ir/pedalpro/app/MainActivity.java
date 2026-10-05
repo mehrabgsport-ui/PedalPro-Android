@@ -26,6 +26,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 import android.view.WindowManager;
@@ -57,6 +60,8 @@ public class MainActivity extends Activity {
     private long lastUpdateCheckMs = 0L;
     private android.app.AlertDialog forcedUpdateDialog;
     private boolean backDispatching = false;
+    private String rideHudCssCache;
+    private String rideHudJsCache;
 
     // Back-pressure for native -> WebView GPS events. A busy live map must never build
     // an unbounded evaluateJavascript queue; only the newest point is retained.
@@ -227,6 +232,7 @@ public class MainActivity extends Activity {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
                 installWebPerformanceGuard(view);
+                installRideHud(view);
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
             }
@@ -311,6 +317,33 @@ public class MainActivity extends Activity {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
+    }
+
+    private void installRideHud(WebView view) {
+        if (view == null) return;
+        try {
+            if (rideHudCssCache == null) rideHudCssCache = readAssetText("pedalpro_ride_hud_v4.css");
+            if (rideHudJsCache == null) rideHudJsCache = readAssetText("pedalpro_ride_hud_v4.js");
+            String css = rideHudCssCache == null ? "" : rideHudCssCache;
+            String js = rideHudJsCache == null ? "" : rideHudJsCache;
+            if (!css.isEmpty()) {
+                String injectCss = "(function(){try{if(document.getElementById('pp-hud4-style'))return;" +
+                        "var s=document.createElement('style');s.id='pp-hud4-style';s.textContent=" +
+                        JSONObject.quote(css) + ";document.head.appendChild(s);}catch(e){}})();";
+                view.evaluateJavascript(injectCss, null);
+            }
+            if (!js.isEmpty()) view.evaluateJavascript(js, null);
+        } catch (Throwable ignored) { }
+    }
+
+    private String readAssetText(String name) {
+        StringBuilder sb = new StringBuilder();
+        try (InputStream in = getAssets().open(name);
+             BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line).append('\n');
+        } catch (Throwable ignored) { }
+        return sb.toString();
     }
 
     private void installWebPerformanceGuard(WebView view) {
