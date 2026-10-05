@@ -10,6 +10,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.location.GnssStatus;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -53,7 +58,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class TrackingService extends Service implements LocationListener {
+public class TrackingService extends Service implements LocationListener, SensorEventListener {
     public static final String PREFS = "pedalpro_native_tracking";
     public static final String ACTION_START = "ir.pedalpro.app.START_TRACKING";
     public static final String ACTION_STOP = "ir.pedalpro.app.STOP_TRACKING";
@@ -68,8 +73,36 @@ public class TrackingService extends Service implements LocationListener {
     private static final float FIRST_LOCK_ACCURACY_M = 18f;
     private static final long MAX_FIX_AGE_MS = 8000L;
     private static final long MIN_DISTINCT_FIX_MS = 450L;
+    private static final long IMU_STILL_ENTER_MS = 2500L;
+    private static final long IMU_STARTUP_GUARD_MS = 3500L;
+    private static final long IMU_FRESH_MS = 1800L;
+    private static final long IMU_MOTION_RECENT_MS = 1800L;
+    private static final double LINEAR_ACCEL_STILL_MPS2 = 0.18;
+    private static final double LINEAR_ACCEL_MOTION_MPS2 = 0.42;
+    private static final double GYRO_STILL_RADPS = 0.040;
+    private static final double GYRO_MOTION_RADPS = 0.090;
 
     private LocationManager locationManager;
+    private SensorManager sensorManager;
+    private Sensor accelerationSensor;
+    private Sensor gyroscopeSensor;
+    private boolean accelerationIsLinear = false;
+    private boolean imuAvailable = false;
+    private boolean imuStationary = false;
+    private long imuStillSince = 0L;
+    private long lastImuSampleAt = 0L;
+    private long lastImuMotionAt = 0L;
+    private long imuGpsMotionOverrideUntil = 0L;
+    private double accelEma = 0.0;
+    private double gyroEma = 0.0;
+    private boolean accelEmaReady = false;
+    private boolean gyroEmaReady = false;
+    private final float[] gravityEstimate = new float[3];
+    private boolean gravityReady = false;
+    private GnssStatus.Callback gnssStatusCallback;
+    private int gnssSatellitesUsed = 0;
+    private float gnssAverageCn0 = 0f;
+    private long lastGnssStatusAt = 0L;
     private FusedLocationProviderClient fusedClient;
     private LocationCallback fusedCallback;
     private boolean usingFused = false;
@@ -180,6 +213,7 @@ public class TrackingService extends Service implements LocationListener {
         movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
+        resetSensorFusionState();
         beginLocationUpdates();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         gpsWatchdogHandler.postDelayed(gpsWatchdog, 3000L);
@@ -199,10 +233,185 @@ public class TrackingService extends Service implements LocationListener {
         legacyFallbackStarted = false;
         usingFused = false;
         ensureRawWriter();
+        startSensorFusion();
+        startGnssQualityMonitor();
 
         if (!startFusedLocationUpdates()) {
             startLegacyLocationFallback();
         }
+    }
+
+    private void resetSensorFusionState() {
+        imuAvailable = false;
+        imuStationary = false;
+        imuStillSince = 0L;
+        lastImuSampleAt = 0L;
+        lastImuMotionAt = 0L;
+        imuGpsMotionOverrideUntil = 0L;
+        accelEma = 0.0;
+        gyroEma = 0.0;
+        accelEmaReady = false;
+        gyroEmaReady = false;
+        gravityReady = false;
+        gravityEstimate[0] = gravityEstimate[1] = gravityEstimate[2] = 0f;
+        gnssSatellitesUsed = 0;
+        gnssAverageCn0 = 0f;
+        lastGnssStatusAt = 0L;
+    }
+
+    private void startSensorFusion() {
+        try {
+            sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+            if (sensorManager == null) return;
+            accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION);
+            accelerationIsLinear = accelerationSensor != null;
+            if (accelerationSensor == null) {
+                accelerationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+                accelerationIsLinear = false;
+            }
+            gyroscopeSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
+            boolean accelOk = accelerationSensor != null &&
+                    sensorManager.registerListener(this, accelerationSensor, SensorManager.SENSOR_DELAY_GAME);
+            boolean gyroOk = gyroscopeSensor != null &&
+                    sensorManager.registerListener(this, gyroscopeSensor, SensorManager.SENSOR_DELAY_GAME);
+            imuAvailable = accelOk || gyroOk;
+        } catch (Throwable ignored) {
+            imuAvailable = false;
+        }
+    }
+
+    private void stopSensorFusion() {
+        if (sensorManager != null) {
+            try { sensorManager.unregisterListener(this); } catch (Throwable ignored) { }
+        }
+        accelerationSensor = null;
+        gyroscopeSensor = null;
+        sensorManager = null;
+        imuAvailable = false;
+        imuStationary = false;
+    }
+
+    @Override public void onSensorChanged(SensorEvent event) {
+        if (event == null || event.sensor == null || event.values == null || event.values.length < 3) return;
+        long now = System.currentTimeMillis();
+        int type = event.sensor.getType();
+        if (type == Sensor.TYPE_LINEAR_ACCELERATION || type == Sensor.TYPE_ACCELEROMETER) {
+            double x = event.values[0], y = event.values[1], z = event.values[2];
+            if (type == Sensor.TYPE_ACCELEROMETER && !accelerationIsLinear) {
+                if (!gravityReady) {
+                    gravityEstimate[0] = event.values[0];
+                    gravityEstimate[1] = event.values[1];
+                    gravityEstimate[2] = event.values[2];
+                    gravityReady = true;
+                } else {
+                    final float alpha = 0.92f;
+                    gravityEstimate[0] = alpha * gravityEstimate[0] + (1f - alpha) * event.values[0];
+                    gravityEstimate[1] = alpha * gravityEstimate[1] + (1f - alpha) * event.values[1];
+                    gravityEstimate[2] = alpha * gravityEstimate[2] + (1f - alpha) * event.values[2];
+                }
+                x -= gravityEstimate[0];
+                y -= gravityEstimate[1];
+                z -= gravityEstimate[2];
+            }
+            double mag = Math.sqrt(x * x + y * y + z * z);
+            accelEma = accelEmaReady ? accelEma * 0.84 + mag * 0.16 : mag;
+            accelEmaReady = true;
+        } else if (type == Sensor.TYPE_GYROSCOPE) {
+            double x = event.values[0], y = event.values[1], z = event.values[2];
+            double mag = Math.sqrt(x * x + y * y + z * z);
+            gyroEma = gyroEmaReady ? gyroEma * 0.84 + mag * 0.16 : mag;
+            gyroEmaReady = true;
+        } else {
+            return;
+        }
+        lastImuSampleAt = now;
+        updateImuMotionState(now);
+    }
+
+    @Override public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+
+    private void updateImuMotionState(long now) {
+        boolean accelStill = !accelEmaReady || accelEma <= LINEAR_ACCEL_STILL_MPS2;
+        boolean gyroStill = !gyroEmaReady || gyroEma <= GYRO_STILL_RADPS;
+        boolean still = accelStill && gyroStill && (accelEmaReady || gyroEmaReady);
+        boolean motion = (accelEmaReady && accelEma >= LINEAR_ACCEL_MOTION_MPS2) ||
+                (gyroEmaReady && gyroEma >= GYRO_MOTION_RADPS);
+
+        if (motion) {
+            lastImuMotionAt = now;
+            imuStillSince = 0L;
+            imuStationary = false;
+            return;
+        }
+        if (still) {
+            if (imuStillSince == 0L) imuStillSince = now;
+            if (now - imuStillSince >= IMU_STILL_ENTER_MS && now >= imuGpsMotionOverrideUntil) {
+                imuStationary = true;
+            }
+        } else {
+            imuStillSince = 0L;
+        }
+    }
+
+    private boolean isImuFresh(long now) {
+        return imuAvailable && lastImuSampleAt > 0L && now - lastImuSampleAt <= IMU_FRESH_MS;
+    }
+
+    private boolean hasRecentImuMotion(long now) {
+        return isImuFresh(now) && lastImuMotionAt > 0L && now - lastImuMotionAt <= IMU_MOTION_RECENT_MS;
+    }
+
+    private boolean isImuStationaryStrong(long now) {
+        return isImuFresh(now) && imuStationary && now >= imuGpsMotionOverrideUntil;
+    }
+
+    private boolean isImuStartupGuard(long now) {
+        return isImuFresh(now) && now - trackingStartedAt < IMU_STARTUP_GUARD_MS && !hasRecentImuMotion(now);
+    }
+
+    private void startGnssQualityMonitor() {
+        try {
+            if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (locationManager == null || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+            gnssStatusCallback = new GnssStatus.Callback() {
+                @Override public void onSatelliteStatusChanged(GnssStatus status) {
+                    if (status == null) return;
+                    int used = 0;
+                    float total = 0f;
+                    for (int i = 0; i < status.getSatelliteCount(); i++) {
+                        if (status.usedInFix(i)) {
+                            used++;
+                            total += status.getCn0DbHz(i);
+                        }
+                    }
+                    gnssSatellitesUsed = used;
+                    gnssAverageCn0 = used > 0 ? total / used : 0f;
+                    lastGnssStatusAt = System.currentTimeMillis();
+                }
+            };
+            locationManager.registerGnssStatusCallback(gnssStatusCallback, new Handler(Looper.getMainLooper()));
+        } catch (Throwable ignored) {
+            gnssStatusCallback = null;
+        }
+    }
+
+    private void stopGnssQualityMonitor() {
+        if (locationManager != null && gnssStatusCallback != null) {
+            try { locationManager.unregisterGnssStatusCallback(gnssStatusCallback); } catch (Throwable ignored) { }
+        }
+        gnssStatusCallback = null;
+    }
+
+    private int gnssQualityScore(long now) {
+        if (lastGnssStatusAt <= 0L || now - lastGnssStatusAt > 5000L || gnssSatellitesUsed <= 0) return -1;
+        int satScore = Math.min(50, gnssSatellitesUsed * 7);
+        int cn0Score;
+        if (gnssAverageCn0 >= 35f) cn0Score = 50;
+        else if (gnssAverageCn0 >= 30f) cn0Score = 42;
+        else if (gnssAverageCn0 >= 25f) cn0Score = 32;
+        else if (gnssAverageCn0 >= 20f) cn0Score = 20;
+        else cn0Score = 8;
+        return Math.min(100, satScore + cn0Score);
     }
 
     private boolean startFusedLocationUpdates() {
@@ -292,7 +501,9 @@ public class TrackingService extends Service implements LocationListener {
         // Never seed a ride from a cached/coarse fix. The first anchor controls every
         // distance that follows, so it must be materially tighter than normal tracking.
         if (lastAcceptedLocation == null) {
-            if (!loc.hasAccuracy() || loc.getAccuracy() > FIRST_LOCK_ACCURACY_M) {
+            int quality = gnssQualityScore(now);
+            if (!loc.hasAccuracy() || loc.getAccuracy() > FIRST_LOCK_ACCURACY_M ||
+                    (quality >= 0 && quality < 28 && loc.getAccuracy() > 12f)) {
                 noteRejected("در انتظار قفل دقیق GPS");
                 return;
             }
@@ -373,13 +584,49 @@ public class TrackingService extends Service implements LocationListener {
                 netMeters >= Math.max(6.0, noiseRadius * 1.55);
         boolean moving = dopplerMovement || geometricMovement || accumulatedSlowMovement;
 
-        // Stationary lock requires coherent motion, not one displaced coordinate.
-        if (moving && stationaryFixes >= 2) {
+        long now = Math.max(receivedAt, System.currentTimeMillis());
+        boolean imuStill = isImuStationaryStrong(now) || isImuStartupGuard(now);
+        boolean imuMotion = hasRecentImuMotion(now);
+
+        // Zero-Velocity Update (ZUPT): when the phone's inertial sensors say it is
+        // physically still, GNSS wander is never allowed to add distance. Unlocking
+        // requires either recent inertial motion or three consecutive coherent fixes
+        // with reliable Doppler speed. This catches slow multi-fix drift, not only jumps.
+        if (imuStill && !imuMotion) {
+            boolean strongGpsMotion = reliableSpeed && osMps >= 1.35 && forwardSupport &&
+                    netMeters >= Math.max(7.0, noiseRadius * 1.45) &&
+                    derivedMps >= 0.75;
+            if (strongGpsMotion) movementConfirmFixes++;
+            else movementConfirmFixes = 0;
+
+            if (movementConfirmFixes < 3) {
+                freezeAtStationaryAnchor(candidate, receivedAt, "Sensor Fusion — سکون قفل شد");
+                return;
+            }
+
+            // Coherent GNSS/Doppler evidence overrides a falsely quiet IMU for 5s.
+            imuGpsMotionOverrideUntil = now + 5000L;
+            imuStationary = false;
+            imuStillSince = 0L;
+            movementConfirmFixes = 0;
+            moving = true;
+        }
+
+        // If GNSS quality is poor and the IMU does not independently show motion,
+        // require stronger geometry before accepting movement.
+        int quality = gnssQualityScore(now);
+        if (moving && quality >= 0 && quality < 25 && !imuMotion) {
+            boolean poorGnssOverride = reliableSpeed && osMps >= 1.5 && forwardSupport &&
+                    netMeters >= Math.max(9.0, noiseRadius * 1.8);
+            if (!poorGnssOverride) moving = false;
+        }
+
+        if (moving && stationaryFixes >= 2 && !imuMotion) {
             double unlockDistance = Math.max(4.0, noiseRadius * 1.20);
             boolean strongEvidence =
-                    (reliableSpeed && osMps >= 0.85 && netMeters >= unlockDistance) ||
-                    netMeters >= Math.max(6.0, noiseRadius * 1.55) ||
-                    (derivedMps >= 1.10 && meters >= unlockDistance && forwardSupport);
+                    (reliableSpeed && osMps >= 0.95 && netMeters >= unlockDistance) ||
+                    netMeters >= Math.max(7.0, noiseRadius * 1.65) ||
+                    (derivedMps >= 1.15 && meters >= unlockDistance && forwardSupport);
             if (strongEvidence) movementConfirmFixes++;
             else movementConfirmFixes = 0;
             if (movementConfirmFixes < 2) moving = false;
@@ -388,15 +635,7 @@ public class TrackingService extends Service implements LocationListener {
         }
 
         if (!moving) {
-            stationaryFixes++;
-            Location frozen = new Location(lastAcceptedLocation);
-            frozen.setTime(candidate.getTime());
-            frozen.setSpeed(0f);
-            try { broadcastPoint(locationJson(frozen), null); } catch (Exception ignored) { }
-            if (receivedAt - lastFilterStatusAt >= 4000L) {
-                lastFilterStatusAt = receivedAt;
-                broadcastStatus("GPS V3 پایدار — Drift سکون حذف می‌شود", false);
-            }
+            freezeAtStationaryAnchor(candidate, receivedAt, "Sensor Fusion — Drift حذف شد");
             return;
         }
 
@@ -405,10 +644,22 @@ public class TrackingService extends Service implements LocationListener {
         double maxMps = prefs.getFloat("max_speed_kmh", 100f) / 3.6;
         double chosenMps = derivedMps;
         if (reliableSpeed && Math.abs(osMps - derivedMps) <= Math.max(1.8, derivedMps * 0.55)) {
-            chosenMps = derivedMps * 0.68 + osMps * 0.32;
+            chosenMps = derivedMps * 0.64 + osMps * 0.36;
         }
         candidate.setSpeed((float)Math.min(Math.max(0.0, chosenMps), maxMps));
         acceptCandidate(candidate, receivedAt, true);
+    }
+
+    private void freezeAtStationaryAnchor(Location candidate, long receivedAt, String status) {
+        stationaryFixes++;
+        Location frozen = new Location(lastAcceptedLocation);
+        frozen.setTime(candidate.getTime());
+        frozen.setSpeed(0f);
+        try { broadcastPoint(locationJson(frozen), null); } catch (Exception ignored) { }
+        if (receivedAt - lastFilterStatusAt >= 3500L) {
+            lastFilterStatusAt = receivedAt;
+            broadcastStatus(status, false);
+        }
     }
 
     private boolean hasReliableSpeed(Location loc) {
@@ -478,7 +729,7 @@ public class TrackingService extends Service implements LocationListener {
                 lastFilterStatusAt = now;
                 String quality = candidate.hasAccuracy()
                         ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
-                broadcastStatus((moving ? "GPS V3 زنده" : "GPS V3 قفل دقیق") + quality, false);
+                broadcastStatus((moving ? "GPS V4 Sensor Fusion" : "GPS V4 قفل دقیق") + quality, false);
             }
         } catch (Exception ignored) { }
     }
@@ -491,9 +742,11 @@ public class TrackingService extends Service implements LocationListener {
 
         double recentKmh = medianRecentSpeedKmh();
         double osMps = hasReliableSpeed(loc) ? Math.max(0.0, loc.getSpeed()) : 0.0;
-        if (recentKmh >= 12.0 || osMps >= 3.3) return Math.max(28f, configured);
-        if (recentKmh >= 3.0 || osMps >= 0.85) return Math.max(25f, configured);
-        return Math.min(22f, configured);
+        int quality = gnssQualityScore(System.currentTimeMillis());
+        float penalty = quality >= 0 && quality < 25 ? 3f : 0f;
+        if (recentKmh >= 12.0 || osMps >= 3.3) return Math.max(24f, Math.max(28f, configured) - penalty);
+        if (recentKmh >= 3.0 || osMps >= 0.85) return Math.max(22f, Math.max(25f, configured) - penalty);
+        return Math.max(18f, Math.min(22f, configured) - penalty);
     }
 
     private double stationaryNoiseRadius(float prevAcc, float curAcc) {
@@ -559,7 +812,7 @@ public class TrackingService extends Service implements LocationListener {
         long now = System.currentTimeMillis();
         if (now - lastFilterStatusAt >= 3500L) {
             lastFilterStatusAt = now;
-            broadcastStatus(message + " • فیلتر V2", false);
+            broadcastStatus(message + " • فیلتر V4", false);
         }
     }
 
@@ -612,6 +865,12 @@ public class TrackingService extends Service implements LocationListener {
                 p.put("speed_accuracy", loc.hasSpeedAccuracy() ? loc.getSpeedAccuracyMetersPerSecond() : JSONObject.NULL);
                 p.put("bearing_accuracy", loc.hasBearingAccuracy() ? loc.getBearingAccuracyDegrees() : JSONObject.NULL);
             }
+            p.put("imu_available", imuAvailable);
+            p.put("imu_stationary", isImuStationaryStrong(System.currentTimeMillis()));
+            p.put("imu_accel_ema", accelEmaReady ? accelEma : JSONObject.NULL);
+            p.put("imu_gyro_ema", gyroEmaReady ? gyroEma : JSONObject.NULL);
+            p.put("gnss_used", gnssSatellitesUsed);
+            p.put("gnss_cn0_avg", gnssSatellitesUsed > 0 ? gnssAverageCn0 : JSONObject.NULL);
             rawWriter.write(p.toString());
             rawWriter.newLine();
             rawWriter.flush();
@@ -646,7 +905,7 @@ public class TrackingService extends Service implements LocationListener {
         if (loc.hasAccuracy()) p.put("accuracy", loc.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
         p.put("timestamp", loc.getTime() > 0 ? loc.getTime() : System.currentTimeMillis());
         if (loc.hasBearing()) p.put("bearing", loc.getBearing());
-        p.put("gps_engine", "v3-lookahead");
+        p.put("gps_engine", "v4-sensor-fusion");
         p.put("filter_rejected", rejectedFixes);
         return p;
     }
@@ -837,6 +1096,8 @@ public class TrackingService extends Service implements LocationListener {
         prefs.edit().putBoolean("active", false).apply();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
+        stopSensorFusion();
+        stopGnssQualityMonitor();
         closeRawWriter();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -863,8 +1124,11 @@ public class TrackingService extends Service implements LocationListener {
         movementConfirmFixes = 0;
         rejectedFixes = 0;
         lastFilterStatusAt = 0L;
+        resetSensorFusionState();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
+        stopSensorFusion();
+        stopGnssQualityMonitor();
         releaseWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
@@ -931,6 +1195,8 @@ public class TrackingService extends Service implements LocationListener {
     @Override public void onDestroy() {
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
+        stopSensorFusion();
+        stopGnssQualityMonitor();
         closeRawWriter();
         releaseWakeLock();
         network.shutdownNow();
