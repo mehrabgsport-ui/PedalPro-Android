@@ -46,6 +46,11 @@ public final class FirebaseConfigManager {
                 String appId = cfg.optString("app_id","");
                 String apiKey = cfg.optString("api_key","");
                 String senderId = cfg.optString("sender_id","");
+                String neshanServiceKey = cfg.optString("neshan_service_key", "");
+                if (NeshanRoadMatcher.validKey(neshanServiceKey)) {
+                    context.getSharedPreferences(TrackingService.PREFS, Context.MODE_PRIVATE)
+                            .edit().putString("neshan_service_key", neshanServiceKey.trim()).apply();
+                }
                 if (projectId.isEmpty() || appId.isEmpty() || apiKey.isEmpty() || senderId.isEmpty()) return;
 
                 FirebaseApp firebase;
