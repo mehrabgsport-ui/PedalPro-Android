@@ -981,7 +981,14 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     SendResult result = sendPoint(p, false);
                     if (!result.ok) break;
                     removeFirstPending();
-                    broadcastPoint(p, result.body);
+                    // Do not replay historical queued points into WebView. The point was
+                    // already delivered when it was recorded; only a near-current server
+                    // acknowledgement is useful to the UI.
+                    long pointTs = p.optLong("timestamp", 0L);
+                    long currentTs = lastAcceptedLocation == null ? 0L : lastAcceptedLocation.getTime();
+                    if (pointTs > 0L && currentTs > 0L && pointTs >= currentTs - 1800L) {
+                        broadcastPoint(p, result.body);
+                    }
                 }
             } finally {
                 flushing.set(false);
@@ -1073,6 +1080,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             else out.put("speed_mps", JSONObject.NULL);
             out.put("accuracy", p.has("accuracy") ? p.opt("accuracy") : JSONObject.NULL);
             out.put("bearing", p.has("bearing") ? p.opt("bearing") : JSONObject.NULL);
+            out.put("timestamp", p.optLong("timestamp", System.currentTimeMillis()));
             if (response != null) out.put("response", response);
             Intent i = new Intent(ACTION_UPDATE);
             i.setPackage(getPackageName());
