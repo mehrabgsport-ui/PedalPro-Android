@@ -41,3 +41,11 @@ jobs:
           name: PedalPro-1.4.23-bazaar-APK-unsigned
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
+      - name: Upload Android signing tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-Signing-Tools-36
+          path: |
+            /usr/local/lib/android/sdk/build-tools/36.0.0/lib/apksigner.jar
+            /usr/local/lib/android/sdk/build-tools/36.0.0/zipalign
+          if-no-files-found: error
