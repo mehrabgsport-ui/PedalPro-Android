@@ -351,12 +351,15 @@ public class MainActivity extends Activity {
         String js =
                 "(function(){try{" +
                 "if(window.__PP_PERF_GUARD__)return;window.__PP_PERF_GUARD__=1;" +
+                "function thinTo(a,max){if(!Array.isArray(a)||a.length<=max)return a;" +
+                "var out=[],step=(a.length-1)/(max-1);for(var i=0;i<max;i++)out.push(a[Math.min(a.length-1,Math.round(i*step))]);" +
+                "out[0]=a[0];out[out.length-1]=a[a.length-1];return out;}" +
                 "var OF=window.fetch;" +
                 "if(OF){var IF=new Map(),CA=new Map();" +
                 "window.fetch=function(input,init){try{" +
                 "var method=((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();" +
                 "var url=(typeof input==='string')?input:((input&&input.url)||'');" +
-                "if(method==='GET'&&/(?:^|\\\\/)api\\\\.php(?:\\\\?|$)/i.test(url)){" +
+                "if(method==='GET'&&/(?:^|\\/)api\\.php(?:\\?|$)/i.test(url)){" +
                 "var now=Date.now(),c=CA.get(url);if(c&&now-c.t<350){return Promise.resolve(c.r.clone());}" +
                 "var a=IF.get(url);if(a){return a.then(function(r){return r.clone();});}" +
                 "var p=OF.apply(this,arguments).then(function(r){try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;})" +
@@ -364,17 +367,49 @@ public class MainActivity extends Activity {
                 "}catch(e){}return OF.apply(this,arguments);};}" +
                 "var OSI=window.setInterval;window.setInterval=function(fn,delay){" +
                 "var d=Number(delay)||0;try{var src=(typeof fn==='function')?Function.prototype.toString.call(fn):String(fn);" +
-                "if(d<800&&/(api\\\\.php|fetch\\\\(|XMLHttpRequest|live|track|setLatLngs|polyline)/i.test(src))d=800;}catch(e){}" +
+                "if(d<800&&/(api\\.php|fetch\\(|XMLHttpRequest|live|track|setLatLngs|polyline)/i.test(src))d=800;}catch(e){}" +
                 "var args=Array.prototype.slice.call(arguments,2);return OSI.apply(window,[fn,d].concat(args));};" +
-                "function thin(a){if(!Array.isArray(a)||a.length<=1200)return a;var st=Math.ceil(a.length/1200),o=[];" +
-                "for(var i=0;i<a.length;i+=st)o.push(a[i]);if(o[o.length-1]!==a[a.length-1])o.push(a[a.length-1]);return o;}" +
                 "function patchLeaflet(){try{if(!window.L||!L.Polyline||L.Polyline.prototype.__pp)return;" +
-                "var p=L.Polyline.prototype,orig=p.setLatLngs;p.setLatLngs=function(a){try{a=thin(a);}catch(e){}return orig.call(this,a);};p.__pp=1;" +
+                "var p=L.Polyline.prototype,orig=p.setLatLngs;p.setLatLngs=function(a){try{a=thinTo(a,600);}catch(e){}return orig.call(this,a);};p.__pp=1;" +
                 "if(L.Map&&L.Map.prototype&&!L.Map.prototype.__ppfit){var fb=L.Map.prototype.fitBounds,last=0;" +
                 "L.Map.prototype.fitBounds=function(){var n=Date.now();if(n-last<250)return this;last=n;" +
                 "try{if(arguments[1])arguments[1].animate=false;}catch(e){}return fb.apply(this,arguments);};L.Map.prototype.__ppfit=1;}" +
                 "}catch(e){}}" +
-                "patchLeaflet();OSI(patchLeaflet,2000);" +
+                "function patchRideDetails(){try{" +
+                "if(window.speedChart&&!window.speedChart.__ppLite){var SC=window.speedChart;" +
+                "var SW=function(points){return SC.call(this,thinTo(points,260));};SW.__ppLite=1;window.speedChart=SW;}" +
+                "if(window.drawRide&&!window.drawRide.__ppLite){var DR=window.drawRide;" +
+                "var DW=function(id,ride,fit){try{" +
+                "if(id==='rideLiveMap'&&window.L){" +
+                "var m=null;try{m=(typeof maps!=='undefined'&&maps[id])?maps[id]:null;}catch(e){}" +
+                "if(!m||m.__neshan){try{if(m&&m.remove)m.remove();}catch(e){}try{if(typeof maps!=='undefined')delete maps[id];}catch(e){}" +
+                "try{m=(typeof initMap==='function')?initMap(id):null;}catch(e){m=null;}}" +
+                "if(m&&m.addLayer){" +
+                "try{if(m.__ppRideLayer)m.removeLayer(m.__ppRideLayer);}catch(e){}" +
+                "var g=L.featureGroup().addTo(m);m.__ppRideLayer=g;" +
+                "var src=thinTo((ride&&ride.points)||[],520),pts=[];" +
+                "for(var i=0;i<src.length;i++){var p=src[i]||{},lat=+(p.lat!=null?p.lat:p.latitude),lng=+(p.lng!=null?p.lng:p.longitude);" +
+                "if(Number.isFinite(lat)&&Number.isFinite(lng))pts.push([lat,lng]);}" +
+                "if(pts.length>1){var line=L.polyline(pts,{color:'#2ee6a6',weight:5,opacity:.9,smoothFactor:2}).addTo(g);" +
+                "L.circleMarker(pts[0],{radius:6,color:'#2ee6a6'}).addTo(g);" +
+                "L.circleMarker(pts[pts.length-1],{radius:7,color:'#ff557e',weight:2}).addTo(g);" +
+                "if(fit!==false)try{m.fitBounds(line.getBounds(),{padding:[20,20],maxZoom:17,animate:false});}catch(e){}" +
+                "}else if(pts.length===1){L.circleMarker(pts[0],{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(pts[0],17,{animate:false});}catch(e){}}" +
+                "else if(ride&&ride.last_lat&&ride.last_lng){var ll=[+ride.last_lat,+ride.last_lng];L.circleMarker(ll,{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(ll,17,{animate:false});}catch(e){}}" +
+                "return;}" +
+                "}" +
+                "var rr=ride;if(ride&&Array.isArray(ride.points)&&ride.points.length>600)rr=Object.assign({},ride,{points:thinTo(ride.points,600)});" +
+                "return DR.call(this,id,rr,fit);" +
+                "}catch(e){return DR.apply(this,arguments);}};DW.__ppLite=1;window.drawRide=DW;}" +
+                "if(window.openRide&&!window.openRide.__ppLite){var OR=window.openRide;" +
+                "var OW=function(id,fromPoll){var self=this,args=arguments;" +
+                "if(window.__PP_RIDE_DETAIL_BUSY__){return window.__PP_RIDE_DETAIL_BUSY__;}" +
+                "var task=new Promise(function(resolve){requestAnimationFrame(function(){resolve();});})" +
+                ".then(function(){return OR.apply(self,args);})" +
+                ".finally(function(){setTimeout(function(){if(window.__PP_RIDE_DETAIL_BUSY__===task)window.__PP_RIDE_DETAIL_BUSY__=null;},80);});" +
+                "window.__PP_RIDE_DETAIL_BUSY__=task;return task;};OW.__ppLite=1;window.openRide=OW;}" +
+                "}catch(e){}}" +
+                "patchLeaflet();patchRideDetails();OSI(patchLeaflet,2000);OSI(patchRideDetails,1200);" +
                 "}catch(e){}})();";
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
