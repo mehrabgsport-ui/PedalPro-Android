@@ -21,6 +21,10 @@ android {
             dimension 'distribution'
             buildConfigField 'String', 'STORE_CHANNEL', '"bazaar"'
         }
+        myket {
+            dimension 'distribution'
+            buildConfigField 'String', 'STORE_CHANNEL', '"myket"'
+        }
     }
 
     buildTypes {

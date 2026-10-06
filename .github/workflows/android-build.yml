@@ -1,4 +1,4 @@
-name: Android Bazaar Release Build
+name: Android Store Release Build
 
 on:
   workflow_dispatch:
@@ -34,10 +34,16 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Build store release artifacts
-        run: gradle :app:assembleBazaarRelease --stacktrace
+        run: gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
       - name: Upload Cafe Bazaar APK
         uses: actions/upload-artifact@v4
         with:
           name: PedalPro-1.4.23-bazaar-APK-unsigned
           path: app/build/outputs/apk/bazaar/release/*.apk
+          if-no-files-found: error
+      - name: Upload Myket APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PedalPro-1.4.23-myket-APK-unsigned
+          path: app/build/outputs/apk/myket/release/*.apk
           if-no-files-found: error
