@@ -35,6 +35,11 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > app/pedalpro-release.jks
       - name: Build release APKs
+        env:
+          KEYSTORE_FILE: pedalpro-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.PEDALPRO_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PEDALPRO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PEDALPRO_KEY_PASSWORD }}
         run: gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
       - name: Sign APKs
         env:
@@ -42,23 +47,24 @@ jobs:
           KEY_ALIAS: ${{ secrets.PEDALPRO_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.PEDALPRO_KEY_PASSWORD }}
         run: |
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -name zipalign | sort | tail -1)
+          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
           for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk; do
-            zipalign -p -f 4 "$apk" "${apk%.apk}-aligned.apk"
-            apksigner sign --ks app/pedalpro-release.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" --out "$apk" "${apk%.apk}-aligned.apk"
+            "$BUILD_TOOLS" -p -f 4 "$apk" "${apk%.apk}-aligned.apk"
+            "$APK_SIGNER" sign --ks app/pedalpro-release.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" --out "$apk" "${apk%.apk}-aligned.apk"
           done
       - name: Verify signatures
         run: |
-          apksigner verify --verbose app/build/outputs/apk/bazaar/release/*.apk
-          apksigner verify --verbose app/build/outputs/apk/myket/release/*.apk
+          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+          "$APK_SIGNER" verify --verbose app/build/outputs/apk/bazaar/release/*.apk
+          "$APK_SIGNER" verify --verbose app/build/outputs/apk/myket/release/*.apk
       - name: Upload Bazaar signed APK
         uses: actions/upload-artifact@v4
         with:
           name: PedalPro-bazaar-signed-release
           path: app/build/outputs/apk/bazaar/release/*.apk
-          if-no-files-found: error
       - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
         with:
           name: PedalPro-myket-signed-release
           path: app/build/outputs/apk/myket/release/*.apk
-          if-no-files-found: error
