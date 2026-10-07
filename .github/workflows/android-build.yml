@@ -33,17 +33,27 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build store release artifacts
+      - name: Configure signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PEDALPRO_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > app/pedalpro-release.jks
+      - name: Build signed store release artifacts
+        env:
+          KEYSTORE_FILE: pedalpro-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.PEDALPRO_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PEDALPRO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PEDALPRO_KEY_PASSWORD }}
         run: gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
       - name: Upload Cafe Bazaar APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.23-bazaar-APK-unsigned
+          name: PedalPro-signed-bazaar-release
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
       - name: Upload Myket APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.23-myket-APK-unsigned
+          name: PedalPro-signed-myket-release
           path: app/build/outputs/apk/myket/release/*.apk
           if-no-files-found: error
