@@ -10,23 +10,39 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/**
- * PedalPro Diagnostic Engine - lightweight local event logger.
- * Stores runtime events to help diagnose GPS, ride and network issues.
- */
 public final class DiagnosticLogger {
+
     private static File logFile;
 
-    private DiagnosticLogger() {}
-
-    public static void init(Context context) {
-        logFile = new File(context.getFilesDir(), "pedalpro_diagnostic.log");
-        log("SYSTEM", "Started " + Build.MODEL + " Android " + Build.VERSION.RELEASE);
+    private DiagnosticLogger() {
     }
 
+    // Compatibility constructor for old code
+    public DiagnosticLogger(Context context) {
+        init(context);
+    }
+
+    public static void init(Context context) {
+        logFile = new File(
+                context.getFilesDir(),
+                "pedalpro_diagnostic.log"
+        );
+
+        log(
+                "SYSTEM",
+                "Started " + Build.MODEL + " Android " + Build.VERSION.RELEASE
+        );
+    }
+
+    // New API
     public static void log(String category, String message) {
         if (logFile == null) return;
-        String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new Date());
+
+        String time = new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss",
+                Locale.getDefault()
+        ).format(new Date());
+
         try (FileWriter writer = new FileWriter(logFile, true)) {
             writer.append(time)
                     .append(" | ")
@@ -34,8 +50,14 @@ public final class DiagnosticLogger {
                     .append(" | ")
                     .append(message)
                     .append("\n");
+
         } catch (IOException ignored) {
         }
+    }
+
+    // Old API compatibility
+    public void log(String message) {
+        log("GENERAL", message);
     }
 
     public static File getReportFile() {
