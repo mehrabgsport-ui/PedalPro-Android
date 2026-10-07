@@ -19,14 +19,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Locate and install Android SDK 36
+      - name: Install Android SDK
         shell: bash
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found under $ANDROID_HOME"
-            exit 1
-          fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
       - name: Set up Gradle
@@ -38,22 +34,26 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.PEDALPRO_KEYSTORE_BASE64 }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > app/pedalpro-release.jks
-      - name: Build signed store release artifacts
+      - name: Build signed store release
         env:
           KEYSTORE_FILE: pedalpro-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.PEDALPRO_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.PEDALPRO_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.PEDALPRO_KEY_PASSWORD }}
         run: gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
-      - name: Upload Cafe Bazaar APK
+      - name: Verify signatures
+        run: |
+          apksigner verify --verbose app/build/outputs/apk/bazaar/release/*.apk
+          apksigner verify --verbose app/build/outputs/apk/myket/release/*.apk
+      - name: Upload Bazaar signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-signed-bazaar-release
+          name: PedalPro-bazaar-signed-release
           path: app/build/outputs/apk/bazaar/release/*.apk
           if-no-files-found: error
-      - name: Upload Myket APK
+      - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-signed-myket-release
+          name: PedalPro-myket-signed-release
           path: app/build/outputs/apk/myket/release/*.apk
           if-no-files-found: error
