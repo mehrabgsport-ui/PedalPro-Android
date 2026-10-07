@@ -1,65 +1,30 @@
-name: Android Store Release Build
-
-on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Install Android SDK
-        shell: bash
-        run: |
-          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
       - name: Configure signing key
         env:
-          KEYSTORE_BASE64: ${{ secrets.PEDALPRO_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.PEDALPRO_BAZAAR_KEYSTORE_BASE64 }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > app/pedalpro-release.jks
-      - name: Build release APKs
-        run: gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
+
       - name: Sign APKs
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.PEDALPRO_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.PEDALPRO_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.PEDALPRO_KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.BAZAAR_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BAZAAR_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BAZAAR_KEY_PASSWORD }}
         run: |
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -name zipalign | sort | tail -1)
           APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
+
           for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk; do
-            "$BUILD_TOOLS" -p -f 4 "$apk" "${apk%.apk}-aligned.apk"
-            "$APK_SIGNER" sign --ks-type JKS --ks app/pedalpro-release.jks --ks-key-alias "$KEY_ALIAS" --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" --out "$apk" "${apk%.apk}-aligned.apk"
+            ALIGNED="${apk%.apk}-aligned.apk"
+            SIGNED="${apk%.apk}-signed.apk"
+
+            "$BUILD_TOOLS" -f -p 4 "$apk" "$ALIGNED"
+
+            "$APK_SIGNER" sign \
+              --ks app/pedalpro-release.jks \
+              --ks-type JKS \
+              --ks-key-alias "$KEY_ALIAS" \
+              --ks-pass pass:"$KEYSTORE_PASSWORD" \
+              --key-pass pass:"$KEY_PASSWORD" \
+              --out "$SIGNED" \
+              "$ALIGNED"
           done
-      - name: Verify signatures
-        run: |
-          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
-          "$APK_SIGNER" verify --verbose app/build/outputs/apk/bazaar/release/*.apk
-          "$APK_SIGNER" verify --verbose app/build/outputs/apk/myket/release/*.apk
-      - name: Upload Bazaar signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PedalPro-bazaar-signed-release
-          path: app/build/outputs/apk/bazaar/release/*.apk
-      - name: Upload Myket signed APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PedalPro-myket-signed-release
-          path: app/build/outputs/apk/myket/release/*.apk
