@@ -21,23 +21,15 @@
         android:label="PedalPro"
         android:theme="@style/Theme.PedalPro">
 
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="unspecified">
+        <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="pedalpro.ir" />
-                <data android:scheme="https" android:host="www.pedalpro.ir" />
-            </intent-filter>
         </activity>
+
+        <activity android:name=".LowPowerRideActivity" android:exported="false" />
+        <activity android:name=".RouteHistoryActivity" android:exported="false" />
 
         <service
             android:name=".TrackingService"
