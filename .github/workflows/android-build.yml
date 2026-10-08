@@ -50,13 +50,14 @@ jobs:
         env:
           KEYSTORE_PASSWORD: ${{ secrets.BAZAAR_KEYSTORE_PASSWORD }}
         run: |
-          keytool -list -v -keystore app/pedalpro-release.jks -storepass "$KEYSTORE_PASSWORD"
+          keytool -list \
+          -v \
+          -keystore app/pedalpro-release.jks \
+          -storepass "$KEYSTORE_PASSWORD"
 
       - name: Build release APKs
         run: |
           gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
-
-      
 
       - name: Sign APKs
         env:
@@ -65,15 +66,25 @@ jobs:
           KEY_PASSWORD: ${{ secrets.BAZAAR_KEY_PASSWORD }}
         shell: bash
         run: |
+          set -e
+
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -name zipalign | sort | tail -1)
           APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
 
-          for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk; do
+          mkdir -p app/build/outputs/signed
 
-            ALIGNED="${apk%.apk}-aligned.apk"
-            SIGNED="${apk%.apk}-signed.apk"
+          for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk
+          do
+            NAME=$(basename "$apk" .apk)
 
-            "$BUILD_TOOLS" -f -p 4 "$apk" "$ALIGNED"
+            ALIGNED="app/build/outputs/signed/${NAME}-aligned.apk"
+            SIGNED="app/build/outputs/signed/${NAME}-signed.apk"
+
+            "$BUILD_TOOLS" \
+              -f \
+              -p 4 \
+              "$apk" \
+              "$ALIGNED"
 
             "$APK_SIGNER" sign \
               --ks app/pedalpro-release.jks \
@@ -84,26 +95,22 @@ jobs:
               --out "$SIGNED" \
               "$ALIGNED"
 
+            "$APK_SIGNER" verify \
+              --verbose \
+              "$SIGNED"
+
           done
-
-      - name: Verify Bazaar signature
-        run: |
-          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
-          "$APK_SIGNER" verify --verbose app/build/outputs/apk/bazaar/release/*-signed.apk
-
-      - name: Verify Myket signature
-        run: |
-          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
-          "$APK_SIGNER" verify --verbose app/build/outputs/apk/myket/release/*-signed.apk
 
       - name: Upload Bazaar signed APK
         uses: actions/upload-artifact@v4
         with:
           name: PedalPro-bazaar-signed-release
-          path: app/build/outputs/apk/bazaar/release/*-signed.apk
+          path: app/build/outputs/signed/*bazaar*-signed.apk
+          if-no-files-found: error
 
       - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
         with:
           name: PedalPro-myket-signed-release
-          path: app/build/outputs/apk/myket/release/*-signed.apk
+          path: app/build/outputs/signed/*myket*-signed.apk
+          if-no-files-found: error
