@@ -43,6 +43,8 @@ public class TrackingService extends Service implements LocationListener {
     public static final String ACTION_START = "ir.pedalpro.app.START_TRACKING";
     public static final String ACTION_STOP = "ir.pedalpro.app.STOP_TRACKING";
     public static final String ACTION_DISCARD = "ir.pedalpro.app.DISCARD_TRACKING";
+    public static final String ACTION_PAUSE = "ir.pedalpro.app.PAUSE_TRACKING";
+    public static final String ACTION_RESUME = "ir.pedalpro.app.RESUME_TRACKING";
     public static final String ACTION_UPDATE = "ir.pedalpro.app.TRACK_UPDATE";
     public static final String ACTION_STATUS = "ir.pedalpro.app.TRACK_STATUS";
     public static final String EXTRA_PAYLOAD = "payload";
@@ -79,8 +81,19 @@ public class TrackingService extends Service implements LocationListener {
             return START_NOT_STICKY;
         }
 
+        if (intent != null && ACTION_PAUSE.equals(intent.getAction())) {
+            pauseTracking();
+            return START_STICKY;
+        }
+
+        if (intent != null && ACTION_RESUME.equals(intent.getAction())) {
+            resumeTracking();
+            return START_STICKY;
+        }
+
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             int rideId = intent.getIntExtra("ride_id", 0);
+            int previousRideId = prefs.getInt("ride_id", 0);
             if (rideId <= 0) {
                 broadcastStatus("شناسه رکاب معتبر نیست", true);
                 stopSelf();
@@ -88,12 +101,20 @@ public class TrackingService extends Service implements LocationListener {
             }
             prefs.edit()
                     .putBoolean("active", true)
+                    .putBoolean("paused", false)
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
                     .putFloat("max_accuracy", (float) intent.getDoubleExtra("max_accuracy", 25))
                     .putFloat("max_speed_kmh", (float) intent.getDoubleExtra("max_speed_kmh", 100))
                     .putLong("interval_ms", Math.max(1000L, intent.getLongExtra("interval_ms", 2500L)))
                     .apply();
+            if (previousRideId != rideId) {
+                prefs.edit()
+                        .putFloat("distance_m", 0f)
+                        .putLong("elapsed_ms", 0L)
+                        .putFloat("last_speed_mps", 0f)
+                        .apply();
+            }
         }
 
         if (!prefs.getBoolean("active", false)) {
@@ -101,7 +122,13 @@ public class TrackingService extends Service implements LocationListener {
             return START_NOT_STICKY;
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("ثبت مسیر در حال انجام است"));
+        boolean paused = prefs.getBoolean("paused", false);
+        startForeground(NOTIFICATION_ID, buildNotification(paused ? "ثبت موقتاً متوقف است" : "ثبت مسیر در حال انجام است"));
+        if (paused) {
+            releaseWakeLock();
+            broadcastTrackingState("ثبت موقتاً متوقف است", false);
+            return START_STICKY;
+        }
         acquireWakeLock();
         trackingStartedAt = System.currentTimeMillis();
         rawWindow.clear();
@@ -110,7 +137,7 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedAt = 0L;
         beginLocationUpdates();
         flushPending();
-        broadcastStatus("GPS اندروید فعال — ثبت پس‌زمینه", false);
+        broadcastTrackingState("GPS اندروید فعال — ثبت پس‌زمینه", false);
         return START_STICKY;
     }
 
@@ -150,7 +177,7 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     @Override public void onLocationChanged(Location loc) {
-        if (!prefs.getBoolean("active", false) || loc == null) return;
+        if (!prefs.getBoolean("active", false) || prefs.getBoolean("paused", false) || loc == null) return;
 
         long now = System.currentTimeMillis();
         long age = loc.getTime() > 0 ? Math.abs(now - loc.getTime()) : 0L;
@@ -205,6 +232,13 @@ public class TrackingService extends Service implements LocationListener {
             }
         }
 
+        double segmentMeters = lastAcceptedLocation == null ? 0.0 : lastAcceptedLocation.distanceTo(filtered);
+        float totalDistance = prefs.getFloat("distance_m", 0f) + (float)Math.max(0.0, segmentMeters);
+        prefs.edit()
+                .putFloat("distance_m", totalDistance)
+                .putFloat("last_speed_mps", filtered.hasSpeed() ? Math.max(0f, filtered.getSpeed()) : 0f)
+                .apply();
+
         lastAcceptedAt = now;
         lastAcceptedLocation = new Location(filtered);
         acceptedWindow.addLast(new Location(filtered));
@@ -219,6 +253,9 @@ public class TrackingService extends Service implements LocationListener {
             if (filtered.hasAccuracy()) p.put("accuracy", filtered.getAccuracy()); else p.put("accuracy", JSONObject.NULL);
             p.put("timestamp", filtered.getTime() > 0 ? filtered.getTime() : now);
             if (filtered.hasBearing()) p.put("bearing", filtered.getBearing());
+            p.put("distance_m", prefs.getFloat("distance_m", 0f));
+            p.put("elapsed_ms", currentElapsedMs());
+            p.put("paused", false);
             appendPending(p);
             broadcastPoint(p, null);
             flushPending();
@@ -421,10 +458,16 @@ public class TrackingService extends Service implements LocationListener {
             out.put("lng", p.optDouble("lng"));
             out.put("altitude", p.has("altitude") ? p.opt("altitude") : JSONObject.NULL);
             Object kmh = p.opt("speed_kmh");
-            if (kmh instanceof Number) out.put("speed_mps", ((Number) kmh).doubleValue() / 3.6);
+            boolean paused = prefs.getBoolean("paused", false);
+            if (paused) out.put("speed_mps", 0.0);
+            else if (kmh instanceof Number) out.put("speed_mps", ((Number) kmh).doubleValue() / 3.6);
             else out.put("speed_mps", JSONObject.NULL);
             out.put("accuracy", p.has("accuracy") ? p.opt("accuracy") : JSONObject.NULL);
             out.put("bearing", p.has("bearing") ? p.opt("bearing") : JSONObject.NULL);
+            out.put("timestamp", p.optLong("timestamp", System.currentTimeMillis()));
+            out.put("paused", prefs.getBoolean("paused", false));
+            out.put("distance_m", prefs.getFloat("distance_m", 0f));
+            out.put("elapsed_ms", currentElapsedMs());
             if (response != null) out.put("response", response);
             Intent i = new Intent(ACTION_UPDATE);
             i.setPackage(getPackageName());
@@ -434,9 +477,17 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void broadcastStatus(String message, boolean error) {
+        broadcastTrackingState(message, error);
+    }
+
+    private void broadcastTrackingState(String message, boolean error) {
         try {
             JSONObject out = new JSONObject();
             if (error) out.put("error", message); else out.put("message", message);
+            out.put("paused", prefs.getBoolean("paused", false));
+            out.put("speed_mps", prefs.getBoolean("paused", false) ? 0.0 : prefs.getFloat("last_speed_mps", 0f));
+            out.put("distance_m", prefs.getFloat("distance_m", 0f));
+            out.put("elapsed_ms", currentElapsedMs());
             Intent i = new Intent(ACTION_STATUS);
             i.setPackage(getPackageName());
             i.putExtra(EXTRA_PAYLOAD, out.toString());
@@ -444,8 +495,54 @@ public class TrackingService extends Service implements LocationListener {
         } catch (Exception ignored) { }
     }
 
+    private long currentElapsedMs() {
+        long elapsed = prefs.getLong("elapsed_ms", 0L);
+        if (prefs.getBoolean("active", false) && !prefs.getBoolean("paused", false) && trackingStartedAt > 0L) {
+            elapsed += Math.max(0L, System.currentTimeMillis() - trackingStartedAt);
+        }
+        return elapsed;
+    }
+
+    private void persistElapsedNow() {
+        if (!prefs.getBoolean("paused", false) && trackingStartedAt > 0L) {
+            prefs.edit().putLong("elapsed_ms", currentElapsedMs()).apply();
+            trackingStartedAt = 0L;
+        }
+    }
+
+    private void pauseTracking() {
+        if (!prefs.getBoolean("active", false) || prefs.getBoolean("paused", false)) return;
+        persistElapsedNow();
+        prefs.edit().putBoolean("paused", true).putFloat("last_speed_mps", 0f).apply();
+        if (locationManager != null) {
+            try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
+        }
+        rawWindow.clear();
+        acceptedWindow.clear();
+        lastAcceptedLocation = null;
+        lastAcceptedAt = 0L;
+        releaseWakeLock();
+        startForeground(NOTIFICATION_ID, buildNotification("ثبت موقتاً متوقف است — سرعت 0"));
+        broadcastTrackingState("ثبت موقتاً متوقف شد", false);
+    }
+
+    private void resumeTracking() {
+        if (!prefs.getBoolean("active", false) || !prefs.getBoolean("paused", false)) return;
+        prefs.edit().putBoolean("paused", false).putFloat("last_speed_mps", 0f).apply();
+        rawWindow.clear();
+        acceptedWindow.clear();
+        lastAcceptedLocation = null;
+        lastAcceptedAt = 0L;
+        trackingStartedAt = System.currentTimeMillis();
+        acquireWakeLock();
+        beginLocationUpdates();
+        startForeground(NOTIFICATION_ID, buildNotification("ثبت مسیر در حال انجام است"));
+        broadcastTrackingState("ثبت ادامه پیدا کرد", false);
+    }
+
     private void stopTracking() {
-        prefs.edit().putBoolean("active", false).apply();
+        persistElapsedNow();
+        prefs.edit().putBoolean("active", false).putBoolean("paused", false).putFloat("last_speed_mps", 0f).apply();
         if (locationManager != null) {
             try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
         }
@@ -457,6 +554,8 @@ public class TrackingService extends Service implements LocationListener {
     private void discardTracking() {
         prefs.edit()
                 .putBoolean("active", false)
+                .putBoolean("paused", false)
+                .putFloat("last_speed_mps", 0f)
                 .remove("pending")
                 .remove("ride_id")
                 .remove("csrf")
@@ -492,6 +591,11 @@ public class TrackingService extends Service implements LocationListener {
         PendingIntent stopPi = PendingIntent.getService(
                 this, 2, stop, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
+        boolean paused = prefs != null && prefs.getBoolean("paused", false);
+        Intent toggle = new Intent(this, TrackingService.class).setAction(paused ? ACTION_RESUME : ACTION_PAUSE);
+        PendingIntent togglePi = PendingIntent.getService(
+                this, 3, toggle, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
         Notification.Builder b = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? new Notification.Builder(this, CHANNEL_ID) : new Notification.Builder(this);
         return b.setSmallIcon(android.R.drawable.ic_menu_mylocation)
@@ -500,6 +604,9 @@ public class TrackingService extends Service implements LocationListener {
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
+                .addAction(new Notification.Action.Builder(
+                        paused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        paused ? "ادامه" : "توقف", togglePi).build())
                 .addAction(new Notification.Action.Builder(
                         android.R.drawable.ic_menu_close_clear_cancel, "پایان ثبت", stopPi).build())
                 .build();
