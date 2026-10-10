@@ -107,7 +107,7 @@ function wrapNative(){
 function bind(){
  document.getElementById('pp-end').onclick=function(){if(!clickOld(['پایان','توقف ثبت','توقف']))toast('دکمه پایان فعلی پیدا نشد');};
  document.getElementById('pp-home').onclick=function(){if(!clickOld(['خانه','صفحه اصلی']))location.href='/';};
- document.getElementById('pp-eco').onclick=function(){var b=this;b.disabled=true;setTimeout(function(){b.disabled=false;},1200);try{if(window.AndroidBridge&&AndroidBridge.openLowPowerMode){AndroidBridge.openLowPowerMode();return;}}catch(e){}try{location.href='pedalpro://low-power';}catch(e2){toast('حالت کم‌مصرف در این دستگاه در دسترس نیست');}};
+ document.getElementById('pp-eco').onclick=function(){var b=this;b.disabled=true;setTimeout(function(){b.disabled=false;},900);try{if(window.AndroidBridge&&AndroidBridge.diagnosticLog)AndroidBridge.diagnosticLog('low_power','HUD button tapped');}catch(e){}try{location.href='pedalpro://low-power';}catch(e2){try{if(window.AndroidBridge&&AndroidBridge.openLowPowerMode)AndroidBridge.openLowPowerMode();}catch(e3){toast('حالت کم‌مصرف در این دستگاه در دسترس نیست');}}};
  document.getElementById('pp-start').addEventListener('click',function(v){if(v.target.closest('.pp-grip'))return;if(!clickOld(['شروع برنامه']))toast('شروع برنامه در دسترس نیست');});
  document.getElementById('pp-edit').addEventListener('click',function(v){if(v.target.closest('.pp-grip'))return;panel.classList.add('open');});
  document.getElementById('pp-close').onclick=function(){panel.classList.remove('open');};
