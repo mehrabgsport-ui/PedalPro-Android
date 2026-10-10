@@ -121,7 +121,9 @@ public class TrackingService extends Service implements LocationListener {
                         .remove("final_max_speed_kmh")
                         .apply();
                 RidePostProcessor.resetRide(getApplicationContext(), rideId);
+                BikeSensorManager.get().markRideStart();
             }
+            BikeSensorManager.get().autoConnect(getApplicationContext());
             DiagnosticLogger.log(this, "tracking", "start ride=" + rideId);
         }
 
@@ -261,10 +263,16 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void acceptStravaStylePoint(Location point, long now, double segmentMeters, double robustKmh) {
-        float totalDistance = prefs.getFloat("distance_m", 0f) + (float)Math.max(0.0, segmentMeters);
+        BikeSensorManager bikeSensor = BikeSensorManager.get();
+        boolean wheelFresh = bikeSensor.isFresh();
+        double chosenKmh = wheelFresh ? bikeSensor.getSpeedMps() * 3.6 : robustKmh;
+        float totalDistance = wheelFresh
+                ? (float)bikeSensor.getRideDistanceMeters()
+                : prefs.getFloat("distance_m", 0f) + (float)Math.max(0.0, segmentMeters);
         prefs.edit()
                 .putFloat("distance_m", totalDistance)
-                .putFloat("last_speed_mps", (float)Math.max(0.0, robustKmh / 3.6))
+                .putFloat("last_speed_mps", (float)Math.max(0.0, chosenKmh / 3.6))
+                .putString("distance_source", wheelFresh ? "wheel_csc" : "gps")
                 .apply();
 
         lastAcceptedAt = now;
@@ -277,7 +285,8 @@ public class TrackingService extends Service implements LocationListener {
             p.put("lat", point.getLatitude());
             p.put("lng", point.getLongitude());
             if (point.hasAltitude()) p.put("altitude", point.getAltitude()); else p.put("altitude", JSONObject.NULL);
-            p.put("speed_kmh", Math.max(0.0, robustKmh));
+            p.put("speed_kmh", Math.max(0.0, chosenKmh));
+            p.put("distance_source", wheelFresh ? "wheel_csc" : "gps");
             p.put("accuracy", point.getAccuracy());
             p.put("timestamp", point.getTime() > 0L ? point.getTime() : now);
             if (point.hasBearing()) p.put("bearing", point.getBearing());
@@ -580,6 +589,7 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedAt = 0L;
         releaseWakeLock();
         startForeground(NOTIFICATION_ID, buildNotification("ثبت موقتاً متوقف است — سرعت 0"));
+        BikeSensorManager.get().markRidePaused();
         DiagnosticLogger.log(this, "tracking", "pause ride=" + prefs.getInt("ride_id", 0));
         broadcastTrackingState("ثبت موقتاً متوقف شد", false);
     }
@@ -592,6 +602,7 @@ public class TrackingService extends Service implements LocationListener {
                 .putFloat("last_speed_mps", 0f)
                 .putInt("segment_id", nextSegment)
                 .apply();
+        BikeSensorManager.get().markRideResume();
         DiagnosticLogger.log(this, "tracking",
                 "resume ride=" + prefs.getInt("ride_id", 0) + " segment=" + nextSegment);
         rawWindow.clear();
@@ -611,6 +622,9 @@ public class TrackingService extends Service implements LocationListener {
 
     private void stopTracking() {
         int rideId = prefs.getInt("ride_id", 0);
+        double wheelDistanceM = BikeSensorManager.get().getRideDistanceMeters();
+        double wheelMaxKmh = BikeSensorManager.get().getMaxRideSpeedKmh();
+        boolean wheelUsed = "wheel_csc".equals(prefs.getString("distance_source", ""));
         persistElapsedNow();
         prefs.edit()
                 .putBoolean("active", false)
@@ -628,13 +642,19 @@ public class TrackingService extends Service implements LocationListener {
         Context app = getApplicationContext();
         RidePostProcessor.processAsync(app, rideId, result -> {
             if (result == null) return;
+            double finalDistanceM = wheelUsed && wheelDistanceM > 0.0 ? wheelDistanceM : result.distanceM;
+            double finalMaxKmh = wheelUsed && wheelMaxKmh > 0.0 ? wheelMaxKmh : result.maxSpeedKmh;
             app.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .putFloat("final_distance_m", (float) result.distanceM)
-                    .putFloat("final_max_speed_kmh", (float) result.maxSpeedKmh)
+                    .putFloat("final_distance_m", (float) finalDistanceM)
+                    .putFloat("final_max_speed_kmh", (float) finalMaxKmh)
+                    .putString("final_distance_source", wheelUsed ? "wheel_csc" : "gps_postprocess")
                     .apply();
-            DiagnosticLogger.log(app, "tracking_final", result.toJson().toString());
             try {
                 JSONObject out = result.toJson();
+                out.put("final_distance_m", Math.round(finalDistanceM * 10.0) / 10.0);
+                out.put("final_max_speed_kmh", Math.round(finalMaxKmh * 10.0) / 10.0);
+                out.put("distance_source", wheelUsed ? "wheel_csc" : "gps_postprocess");
+                DiagnosticLogger.log(app, "tracking_final", out.toString());
                 out.put("message", "پردازش نهایی مسیر انجام شد");
                 Intent status = new Intent(ACTION_STATUS);
                 status.setPackage(app.getPackageName());
