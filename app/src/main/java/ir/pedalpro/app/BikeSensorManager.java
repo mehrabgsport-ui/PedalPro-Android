@@ -37,6 +37,7 @@ public final class BikeSensorManager {
     private volatile double rideBaseDistanceM;
     private volatile double speedMps;
     private volatile double maxRideSpeedMps;
+    private volatile boolean ridePaused;
     private long lastWheelRevs = -1L;
     private int lastWheelEvent = -1;
     private double circumferenceM = 2.105;
@@ -70,16 +71,21 @@ public final class BikeSensorManager {
     public void markRideStart() {
         rideBaseDistanceM = totalDistanceM;
         maxRideSpeedMps = 0.0;
+        ridePaused = false;
+        lastWheelRevs = -1L;
+        lastWheelEvent = -1;
     }
 
     public void markRideResume() {
         // CSC cumulative wheel revolutions continue across pauses. Rebase the next
         // measurement so movement while manually paused cannot leak into ride distance.
+        ridePaused = false;
         lastWheelRevs = -1L;
         lastWheelEvent = -1;
     }
 
     public void markRidePaused() {
+        ridePaused = true;
         speedMps = 0.0;
         lastWheelRevs = -1L;
         lastWheelEvent = -1;
@@ -239,6 +245,13 @@ public final class BikeSensorManager {
             int event = (value[index] & 0xff) | ((value[index + 1] & 0xff) << 8);
 
             long now = System.currentTimeMillis();
+            if (ridePaused) {
+                lastWheelRevs = revs;
+                lastWheelEvent = event;
+                lastSampleAt = now;
+                speedMps = 0.0;
+                return;
+            }
             if (lastWheelRevs >= 0L && lastWheelEvent >= 0) {
                 long deltaRevs = (revs - lastWheelRevs) & 0xffffffffL;
                 int deltaEvent = (event - lastWheelEvent) & 0xffff;
