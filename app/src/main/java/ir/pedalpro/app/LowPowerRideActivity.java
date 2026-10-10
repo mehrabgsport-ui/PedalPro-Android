@@ -186,7 +186,7 @@ public class LowPowerRideActivity extends Activity {
         valueView.setTextSize(valueSize);
         valueView.setGravity(Gravity.CENTER);
         valueView.setIncludeFontPadding(false);
-        valueView.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BLACK));
+        valueView.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
         box.addView(valueView);
         return valueView;
     }
