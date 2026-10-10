@@ -293,24 +293,46 @@ public class MainActivity extends Activity {
         String js =
                 "(function(){try{" +
                 "if(window.__PP_PERF_GUARD__)return;window.__PP_PERF_GUARD__=1;" +
+                "function log(c,m){try{if(window.AndroidBridge&&AndroidBridge.diagnosticLog)AndroidBridge.diagnosticLog(c,String(m));}catch(e){}}" +
                 "function thinTo(a,max){if(!Array.isArray(a)||a.length<=max)return a;" +
                 "var out=[],step=(a.length-1)/(max-1);for(var i=0;i<max;i++)out.push(a[Math.min(a.length-1,Math.round(i*step))]);" +
                 "out[0]=a[0];out[out.length-1]=a[a.length-1];return out;}" +
                 "var OF=window.fetch;" +
                 "if(OF){var IF=new Map(),CA=new Map();" +
-                "window.fetch=function(input,init){try{" +
+                "window.fetch=function(input,init){var started=Date.now(),url=(typeof input==='string')?input:((input&&input.url)||'');try{" +
                 "var method=((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();" +
-                "var url=(typeof input==='string')?input:((input&&input.url)||'');" +
                 "if(method==='GET'&&/(?:^|\\/)api\\.php(?:\\?|$)/i.test(url)){" +
                 "var now=Date.now(),cc=CA.get(url);if(cc&&now-cc.t<350)return Promise.resolve(cc.r.clone());" +
                 "var aa=IF.get(url);if(aa)return aa.then(function(r){return r.clone();});" +
-                "var p=OF.apply(this,arguments).then(function(r){try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;})" +
+                "var p=OF.apply(this,arguments).then(function(r){var ms=Date.now()-started;if(ms>1400)log('api_slow',ms+'ms '+url);" +
+                "try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;},function(e){log('api_error',url+' '+e);throw e;})" +
                 ".finally(function(){IF.delete(url);});IF.set(url,p);return p;}" +
-                "}catch(e){}return OF.apply(this,arguments);};}" +
-                "if(window.L&&L.Polyline&&!L.Polyline.prototype.__ppThin){" +
-                "var orig=L.Polyline.prototype.setLatLngs;L.Polyline.prototype.setLatLngs=function(a){try{a=thinTo(a,900);}catch(e){}return orig.call(this,a);};L.Polyline.prototype.__ppThin=1;}" +
-                "}catch(e){}})();";
-        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
+                "}catch(e){}" +
+                "return OF.apply(this,arguments).then(function(r){var ms=Date.now()-started;if(ms>1800)log('fetch_slow',ms+'ms '+url);return r;});};}" +
+                "function patchLeaflet(){try{if(!window.L||!L.Polyline||L.Polyline.prototype.__ppThin)return;" +
+                "var orig=L.Polyline.prototype.setLatLngs;L.Polyline.prototype.setLatLngs=function(a){try{a=thinTo(a,900);}catch(e){}return orig.call(this,a);};" +
+                "L.Polyline.prototype.__ppThin=1;}catch(e){}}" +
+                "function patchDetails(){try{" +
+                "if(typeof window.speedChart==='function'&&!window.speedChart.__ppLite){var SC=window.speedChart;" +
+                "var SW=function(points){var p=thinTo(points,240);if(points&&points.length>240)log('detail_opt','speedChart '+points.length+'->'+p.length);return SC.call(this,p);};SW.__ppLite=1;window.speedChart=SW;}" +
+                "if(typeof window.drawRide==='function'&&!window.drawRide.__ppPerf){var DR=window.drawRide;" +
+                "var DW=function(id,ride,fit){try{var rr=ride;if(ride&&Array.isArray(ride.points)&&ride.points.length>700){" +
+                "rr=Object.assign({},ride,{points:thinTo(ride.points,700)});log('detail_opt','drawRide '+ride.points.length+'->700 id='+id);}" +
+                "return DR.call(this,id,rr,fit);}catch(e){log('detail_error','drawRide '+e);return DR.apply(this,arguments);}};" +
+                "DW.__ppPerf=1;window.drawRide=DW;}" +
+                "if(typeof window.openRide==='function'&&!window.openRide.__ppPerf){var OR=window.openRide;" +
+                "var OW=function(){var self=this,args=arguments;if(window.__PP_OPEN_RIDE_BUSY__){log('detail_busy','duplicate openRide blocked');return window.__PP_OPEN_RIDE_BUSY__;}" +
+                "var started=Date.now();var task=Promise.resolve().then(function(){return OR.apply(self,args);})" +
+                ".then(function(v){var ms=Date.now()-started;if(ms>1200)log('detail_slow','openRide '+ms+'ms id='+String(args[0]));return v;})" +
+                ".catch(function(e){log('detail_error','openRide '+e);throw e;})" +
+                ".finally(function(){setTimeout(function(){if(window.__PP_OPEN_RIDE_BUSY__===task)window.__PP_OPEN_RIDE_BUSY__=null;},120);});" +
+                "window.__PP_OPEN_RIDE_BUSY__=task;return task;};OW.__ppPerf=1;window.openRide=OW;}" +
+                "}catch(e){log('detail_patch_error',e);}}" +
+                "patchLeaflet();patchDetails();setInterval(function(){patchLeaflet();patchDetails();},1000);" +
+                "}catch(e){try{AndroidBridge.diagnosticLog('perf_guard_error',String(e));}catch(x){}}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable e) {
+            DiagnosticLogger.log(this, "perf_guard", "inject failed", e);
+        }
     }
 
     private void installRouteLazyGuard(WebView view) {
