@@ -112,11 +112,16 @@ public final class RidePostProcessor {
         return new File(dir(context), "ride_" + rideId + "_summary.json");
     }
 
+    private static File rejectedFile(Context context, int rideId) {
+        return new File(dir(context), "ride_" + rideId + "_rejected.jsonl");
+    }
+
     public static void resetRide(Context context, int rideId) {
         if (context == null || rideId <= 0) return;
         synchronized (WRITE_LOCK) {
             rawFile(context, rideId).delete();
             filteredFile(context, rideId).delete();
+            rejectedFile(context, rideId).delete();
             summaryFile(context, rideId).delete();
         }
         DiagnosticLogger.log(context, "gps_raw", "reset ride=" + rideId);
@@ -179,24 +184,29 @@ public final class RidePostProcessor {
         }
 
         int rejected = 0;
+        List<String> rejectedRows = new ArrayList<>();
         Fix previous = null;
         for (Fix f : raw) {
             if (!validCoordinate(f) || f.accuracy <= 0f || f.accuracy > 30f) {
                 rejected++;
+                rejectedRows.add(rejection(f, "invalid_or_low_accuracy"));
                 continue;
             }
             if ("network".equalsIgnoreCase(f.provider) && hasNearbyGps(gpsTimes, f.time, 10000L)) {
                 rejected++;
+                rejectedRows.add(rejection(f, "network_shadowed_by_gps"));
                 continue;
             }
             if (previous != null && previous.segment == f.segment) {
                 long dt = f.time - previous.time;
                 if (dt <= 0L) {
                     rejected++;
+                    rejectedRows.add(rejection(f, "non_monotonic_timestamp"));
                     continue;
                 }
                 if (dt < 400L && distance(previous, f) < 3.0) {
                     rejected++;
+                    rejectedRows.add(rejection(f, "duplicate_fix"));
                     continue;
                 }
             }
@@ -236,12 +246,14 @@ public final class RidePostProcessor {
         for (int i = 0; i < prelim.size(); i++) {
             if (spike[i]) {
                 rejected++;
+                rejectedRows.add(rejection(prelim.get(i), "abc_gps_spike"));
                 continue;
             }
             Fix f = prelim.get(i);
             if (accepted.isEmpty()) {
                 if (f.accuracy > 25f) {
                     rejected++;
+                    rejectedRows.add(rejection(f, "weak_first_anchor"));
                     continue;
                 }
                 accepted.add(f);
@@ -258,6 +270,7 @@ public final class RidePostProcessor {
             long dtMs = f.time - last.time;
             if (dtMs <= 0L) {
                 rejected++;
+                rejectedRows.add(rejection(f, "invalid_segment_time"));
                 continue;
             }
 
@@ -278,6 +291,8 @@ public final class RidePostProcessor {
 
             if (impossible || dynamicJump || accelJump) {
                 rejected++;
+                rejectedRows.add(rejection(f,
+                        impossible ? "hard_speed_outlier" : (dynamicJump ? "dynamic_speed_outlier" : "acceleration_outlier")));
                 continue;
             }
 
@@ -286,6 +301,7 @@ public final class RidePostProcessor {
             double noiseRadius = Math.max(1.2, Math.min(4.5, uncertainty * 0.22));
             if (meters < noiseRadius && (!reliableOsSpeed || f.speedMps < 0.75f)) {
                 rejected++;
+                rejectedRows.add(rejection(f, "stationary_gps_drift"));
                 continue;
             }
 
@@ -355,6 +371,7 @@ public final class RidePostProcessor {
                 movingMs);
 
         writeFiltered(context, rideId, accepted);
+        writeRejected(context, rideId, rejectedRows);
         writeSummary(context, result);
         DiagnosticLogger.log(context, "postprocess", result.toJson().toString());
         return result;
@@ -416,6 +433,37 @@ public final class RidePostProcessor {
             } catch (Throwable e) {
                 DiagnosticLogger.log(context, "postprocess_error", "write filtered ride=" + rideId, e);
             }
+        }
+    }
+
+    private static void writeRejected(Context context, int rideId, List<String> rows) {
+        synchronized (WRITE_LOCK) {
+            try (BufferedWriter out = new BufferedWriter(new FileWriter(rejectedFile(context, rideId), false))) {
+                for (String row : rows) {
+                    out.write(row == null ? "{}" : row);
+                    out.newLine();
+                }
+            } catch (Throwable e) {
+                DiagnosticLogger.log(context, "postprocess_error", "write rejected ride=" + rideId, e);
+            }
+        }
+    }
+
+    private static String rejection(Fix f, String reason) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("reason", reason == null ? "unknown" : reason);
+            if (f != null) {
+                o.put("lat", f.lat);
+                o.put("lng", f.lng);
+                o.put("time", f.time);
+                o.put("accuracy", f.accuracy);
+                o.put("provider", f.provider == null ? JSONObject.NULL : f.provider);
+                o.put("segment", f.segment);
+            }
+            return o.toString();
+        } catch (Throwable ignored) {
+            return "{\"reason\":\"unknown\"}";
         }
     }
 
