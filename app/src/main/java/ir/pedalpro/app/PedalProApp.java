@@ -20,6 +20,7 @@ public class PedalProApp extends Application {
         });
 
         DiagnosticLogger.log(getApplicationContext(), "app", "application start");
+        MainThreadWatchdog.start(getApplicationContext());
         FirebaseConfigManager.sync(getApplicationContext());
     }
 }
