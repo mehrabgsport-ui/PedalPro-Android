@@ -60,6 +60,8 @@ public class TrackingService extends Service implements LocationListener {
     private PowerManager.WakeLock wakeLock;
     private long lastAcceptedAt = 0L;
     private long trackingStartedAt = 0L;
+    private long resumeCutoffAt = 0L;
+    private boolean segmentBreakPending = false;
     private Location lastAcceptedLocation;
     private final ArrayDeque<Location> rawWindow = new ArrayDeque<>();
     private final ArrayDeque<Location> acceptedWindow = new ArrayDeque<>();
@@ -131,6 +133,8 @@ public class TrackingService extends Service implements LocationListener {
         }
         acquireWakeLock();
         trackingStartedAt = System.currentTimeMillis();
+        resumeCutoffAt = 0L;
+        segmentBreakPending = false;
         prefs.edit().putLong("segment_started_at", trackingStartedAt).apply();
         rawWindow.clear();
         acceptedWindow.clear();
@@ -181,6 +185,10 @@ public class TrackingService extends Service implements LocationListener {
         if (!prefs.getBoolean("active", false) || prefs.getBoolean("paused", false) || loc == null) return;
 
         long now = System.currentTimeMillis();
+        if (resumeCutoffAt > 0L) {
+            long fixTime = loc.getTime() > 0L ? loc.getTime() : now;
+            if (fixTime < resumeCutoffAt) return;
+        }
         long age = loc.getTime() > 0 ? Math.abs(now - loc.getTime()) : 0L;
         if (age > 30000L) return;
 
@@ -257,7 +265,10 @@ public class TrackingService extends Service implements LocationListener {
             p.put("distance_m", prefs.getFloat("distance_m", 0f));
             p.put("elapsed_ms", currentElapsedMs());
             p.put("paused", false);
+            p.put("segment_break", segmentBreakPending);
             appendPending(p);
+            segmentBreakPending = false;
+            resumeCutoffAt = 0L;
             broadcastPoint(p, null);
             flushPending();
             broadcastStatus("GPS پایدار ±" + Math.round(filtered.hasAccuracy() ? filtered.getAccuracy() : 0f) + "m — فیلتر پرش فعال", false);
@@ -535,6 +546,8 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
         trackingStartedAt = System.currentTimeMillis();
+        resumeCutoffAt = trackingStartedAt;
+        segmentBreakPending = true;
         prefs.edit().putLong("segment_started_at", trackingStartedAt).apply();
         acquireWakeLock();
         beginLocationUpdates();
