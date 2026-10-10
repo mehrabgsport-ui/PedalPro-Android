@@ -11,19 +11,19 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 7
-        versionName '1.4.2'
+        versionCode 8
+        versionName '1.4.3'
     }
 
     flavorDimensions 'distribution'
     productFlavors {
-        googlePlay {
-            dimension 'distribution'
-            buildConfigField 'String', 'STORE_CHANNEL', '"googlePlay"'
-        }
         bazaar {
             dimension 'distribution'
             buildConfigField 'String', 'STORE_CHANNEL', '"bazaar"'
+        }
+        myket {
+            dimension 'distribution'
+            buildConfigField 'String', 'STORE_CHANNEL', '"myket"'
         }
     }
 
