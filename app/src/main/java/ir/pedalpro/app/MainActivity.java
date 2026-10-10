@@ -299,6 +299,26 @@ public class MainActivity extends Activity {
         String js =
                 "(function(){try{" +
                 "if(window.__PP_ROUTE_LAZY__)return;window.__PP_ROUTE_LAZY__=1;" +
+                "function cardOf(el){while(el&&el!==document.body){var id=(el.id||'').toLowerCase(),cl=String(el.className||'').toLowerCase();" +
+                "if(el.dataset&&(el.dataset.rideId||el.dataset.routeId))return el;if(/ride-card|route-card|activity-card|ride-row|route-row/.test(cl+' '+id))return el;el=el.parentElement;}return null;}" +
+                "function enhanceHistory(){try{" +
+                "var cards=[].slice.call(document.querySelectorAll('[data-ride-id],[data-route-id],.ride-card,.route-card,.activity-card,.ride-row,.route-row'));" +
+                "if(cards.length<2)return;" +
+                "if(!document.getElementById('pp-route-date-filter')){" +
+                "var host=document.querySelector('[data-route-history],.route-history,.rides-history,.ride-history')||cards[0].parentElement;" +
+                "if(host){var box=document.createElement('div');box.id='pp-route-date-filter';box.style.cssText='display:flex;gap:8px;align-items:center;margin:10px 0;direction:rtl';" +
+                "box.innerHTML='<input type=\"date\" id=\"pp-route-date\" style=\"min-height:42px;border:1px solid #ccd3da;border-radius:12px;padding:6px 10px;background:#fff;color:#111\"><button type=\"button\" id=\"pp-route-date-clear\" style=\"min-height:42px;border:0;border-radius:12px;padding:6px 12px\">همه تاریخ‌ها</button>';" +
+                "host.insertBefore(box,host.firstChild);var inp=box.querySelector('#pp-route-date');var clear=box.querySelector('#pp-route-date-clear');" +
+                "function apply(){var v=(inp.value||'').replace(/-/g,'/');cards.forEach(function(card){if(!v){card.style.removeProperty('display');return;}" +
+                "var t=(card.getAttribute('data-date')||card.getAttribute('data-created-at')||card.innerText||'').replace(/-/g,'/');card.style.display=t.indexOf(v)>=0?'':'none';});}" +
+                "inp.onchange=apply;clear.onclick=function(){inp.value='';apply();};}}" +
+                "var role=((document.body&&document.body.getAttribute('data-role'))||'').toLowerCase();" +
+                "var admin=(role==='admin'||role==='administrator'||document.body.classList.contains('admin')||document.documentElement.classList.contains('admin'));" +
+                "if(admin){cards.forEach(function(card){if(card.querySelector('.pp-admin-delete'))return;var id=card.getAttribute('data-ride-id')||card.getAttribute('data-route-id');if(!id)return;" +
+                "if(typeof window.deleteRide!=='function'&&typeof window.deleteRoute!=='function')return;var b=document.createElement('button');b.type='button';b.className='pp-admin-delete';b.textContent='حذف';" +
+                "b.style.cssText='margin-inline-start:8px;border:0;border-radius:10px;padding:7px 12px;background:#b42318;color:#fff;font-weight:800';" +
+                "b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();if(!confirm('این مسیر حذف شود؟'))return;var fn=typeof window.deleteRide==='function'?window.deleteRide:window.deleteRoute;Promise.resolve(fn(id)).then(function(){card.remove();}).catch(function(){});};card.appendChild(b);});}" +
+                "}catch(e){}}" +
                 "function patch(){try{if(typeof window.drawRide!=='function'||window.drawRide.__ppLazy)return;" +
                 "var DR=window.drawRide;" +
                 "var DW=function(id,ride,fit){try{" +
@@ -313,7 +333,7 @@ public class MainActivity extends Activity {
                 "if(isRideMap&&el&&el.dataset.ppMapEnabled==='1'){var doFit=el.dataset.ppMapFitted!=='1'&&fit!==false;var r=DR.call(this,id,ride,doFit);el.dataset.ppMapFitted='1';return r;}" +
                 "return DR.apply(this,arguments);}catch(e){return DR.apply(this,arguments);}};" +
                 "DW.__ppLazy=1;window.drawRide=DW;}catch(e){}}" +
-                "patch();setInterval(patch,900);" +
+                "patch();enhanceHistory();setInterval(function(){patch();enhanceHistory();},1200);" +
                 "}catch(e){}})();";
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
