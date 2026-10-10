@@ -30,6 +30,7 @@
 
         <activity android:name=".LowPowerRideActivity" android:exported="false" />
         <activity android:name=".RouteHistoryActivity" android:exported="false" />
+        <activity android:name=".DiagnosticActivity" android:exported="false" />
 
         <service
             android:name=".TrackingService"
