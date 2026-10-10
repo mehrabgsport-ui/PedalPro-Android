@@ -345,7 +345,7 @@ public class MainActivity extends Activity {
             return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("paused", false);
         }
         @JavascriptInterface public void openLowPowerMode() {
-            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, LowPowerRideActivity.class)));
+            runOnUiThread(MainActivity.this::openLowPowerRide);
         }
         @JavascriptInterface public void discardTracking() {
             runOnUiThread(() -> {
@@ -402,9 +402,30 @@ public class MainActivity extends Activity {
         } catch (Throwable e) { return false; }
     }
 
+    private void openLowPowerRide() {
+        try {
+            boolean active = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
+                    .getBoolean("active", false);
+            if (!active) {
+                Toast.makeText(this, "ابتدا رکاب‌زنی را شروع کنید", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Intent i = new Intent(this, LowPowerRideActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(i);
+            overridePendingTransition(0, 0);
+        } catch (Throwable e) {
+            Toast.makeText(this, "حالت کم‌مصرف باز نشد", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private boolean handleUri(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        if ("pedalpro".equals(scheme) && ("low-power".equals(host) || "lowpower".equals(host))) {
+            openLowPowerRide();
+            return true;
+        }
         if (("https".equals(scheme) || "http".equals(scheme)) &&
                 ("pedalpro.ir".equals(host) || "www.pedalpro.ir".equals(host))) return false;
         if ("http".equals(scheme) || "https".equals(scheme) || "geo".equals(scheme) ||
