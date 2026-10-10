@@ -498,15 +498,13 @@ public class MainActivity extends Activity {
         try {
             boolean active = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
                     .getBoolean("active", false);
-            if (!active) {
-                Toast.makeText(this, "ابتدا رکاب‌زنی را شروع کنید", Toast.LENGTH_SHORT).show();
-                return;
-            }
+            DiagnosticLogger.log(this, "low_power", "open requested active=" + active);
             Intent i = new Intent(this, LowPowerRideActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(i);
             overridePendingTransition(0, 0);
         } catch (Throwable e) {
+            DiagnosticLogger.log(this, "low_power_error", "open failed", e);
             Toast.makeText(this, "حالت کم‌مصرف باز نشد", Toast.LENGTH_SHORT).show();
         }
     }
