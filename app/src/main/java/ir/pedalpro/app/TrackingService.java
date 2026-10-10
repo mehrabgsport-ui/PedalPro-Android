@@ -116,8 +116,13 @@ public class TrackingService extends Service implements LocationListener {
                         .putFloat("distance_m", 0f)
                         .putLong("elapsed_ms", 0L)
                         .putFloat("last_speed_mps", 0f)
+                        .putInt("segment_id", 0)
+                        .remove("final_distance_m")
+                        .remove("final_max_speed_kmh")
                         .apply();
+                RidePostProcessor.resetRide(getApplicationContext(), rideId);
             }
+            DiagnosticLogger.log(this, "tracking", "start ride=" + rideId);
         }
 
         if (!prefs.getBoolean("active", false)) {
@@ -173,6 +178,11 @@ public class TrackingService extends Service implements LocationListener {
 
     @Override public void onLocationChanged(Location loc) {
         if (!prefs.getBoolean("active", false) || prefs.getBoolean("paused", false) || loc == null) return;
+
+        int rideId = prefs.getInt("ride_id", 0);
+        int segmentId = prefs.getInt("segment_id", 0);
+        RidePostProcessor.appendRawFix(getApplicationContext(), rideId, segmentId, loc,
+                loc.getProvider() == null ? "unknown" : loc.getProvider());
 
         long now = System.currentTimeMillis();
         if (resumeCutoffAt > 0L) {
@@ -570,12 +580,20 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedAt = 0L;
         releaseWakeLock();
         startForeground(NOTIFICATION_ID, buildNotification("ثبت موقتاً متوقف است — سرعت 0"));
+        DiagnosticLogger.log(this, "tracking", "pause ride=" + prefs.getInt("ride_id", 0));
         broadcastTrackingState("ثبت موقتاً متوقف شد", false);
     }
 
     private void resumeTracking() {
         if (!prefs.getBoolean("active", false) || !prefs.getBoolean("paused", false)) return;
-        prefs.edit().putBoolean("paused", false).putFloat("last_speed_mps", 0f).apply();
+        int nextSegment = prefs.getInt("segment_id", 0) + 1;
+        prefs.edit()
+                .putBoolean("paused", false)
+                .putFloat("last_speed_mps", 0f)
+                .putInt("segment_id", nextSegment)
+                .apply();
+        DiagnosticLogger.log(this, "tracking",
+                "resume ride=" + prefs.getInt("ride_id", 0) + " segment=" + nextSegment);
         rawWindow.clear();
         acceptedWindow.clear();
         lastAcceptedLocation = null;
@@ -592,17 +610,47 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void stopTracking() {
+        int rideId = prefs.getInt("ride_id", 0);
         persistElapsedNow();
-        prefs.edit().putBoolean("active", false).putBoolean("paused", false).putFloat("last_speed_mps", 0f).putLong("segment_started_at", 0L).apply();
+        prefs.edit()
+                .putBoolean("active", false)
+                .putBoolean("paused", false)
+                .putFloat("last_speed_mps", 0f)
+                .putLong("segment_started_at", 0L)
+                .apply();
+
         if (locationManager != null) {
             try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
         }
         releaseWakeLock();
+
+        DiagnosticLogger.log(this, "tracking", "stop ride=" + rideId + " postprocess queued");
+        Context app = getApplicationContext();
+        RidePostProcessor.processAsync(app, rideId, result -> {
+            if (result == null) return;
+            app.getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                    .putFloat("final_distance_m", (float) result.distanceM)
+                    .putFloat("final_max_speed_kmh", (float) result.maxSpeedKmh)
+                    .apply();
+            DiagnosticLogger.log(app, "tracking_final", result.toJson().toString());
+            try {
+                JSONObject out = result.toJson();
+                out.put("message", "پردازش نهایی مسیر انجام شد");
+                Intent status = new Intent(ACTION_STATUS);
+                status.setPackage(app.getPackageName());
+                status.putExtra(EXTRA_PAYLOAD, out.toString());
+                app.sendBroadcast(status);
+            } catch (Throwable ignored) { }
+        });
+
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
 
     private void discardTracking() {
+        int rideId = prefs.getInt("ride_id", 0);
+        RidePostProcessor.deleteRide(getApplicationContext(), rideId);
+        DiagnosticLogger.log(this, "tracking", "discard ride=" + rideId);
         prefs.edit()
                 .putBoolean("active", false)
                 .putBoolean("paused", false)
