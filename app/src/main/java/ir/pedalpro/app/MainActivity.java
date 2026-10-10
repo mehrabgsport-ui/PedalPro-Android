@@ -62,8 +62,16 @@ public class MainActivity extends Activity {
             if (payload == null || webView == null) return;
             String fn = TrackingService.ACTION_UPDATE.equals(intent.getAction())
                     ? "PedalProNativeLocation" : "PedalProNativeStatus";
-            String script = "window." + fn + " && window." + fn + "(" + JSONObject.quote(payload) + ");";
-            webView.post(() -> webView.evaluateJavascript(script, null));
+            String quoted = JSONObject.quote(payload);
+            String script = "window." + fn + " && window." + fn + "(" + quoted + ");";
+            if (TrackingService.ACTION_STATUS.equals(intent.getAction()) && payload.contains("final_distance_m")) {
+                DiagnosticLogger.log(MainActivity.this, "tracking_final_ui", payload);
+                script += "try{var __ppfm=JSON.parse(" + quoted + ");" +
+                        "localStorage.setItem('pedalpro_last_final_metrics',JSON.stringify(__ppfm));" +
+                        "window.dispatchEvent(new CustomEvent('pedalpro:final-metrics',{detail:__ppfm}));}catch(e){}";
+            }
+            String finalScript = script;
+            webView.post(() -> webView.evaluateJavascript(finalScript, null));
         }
     };
 
