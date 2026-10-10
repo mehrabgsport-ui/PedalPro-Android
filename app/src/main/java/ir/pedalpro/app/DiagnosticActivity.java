@@ -34,10 +34,12 @@ public class DiagnosticActivity extends Activity {
         Button share = button("اشتراک");
         Button refresh = button("بروزرسانی");
         Button clear = button("پاک‌کردن");
+        Button sensor = button("سنسور");
         actions.addView(copy);
         actions.addView(share);
         actions.addView(refresh);
         actions.addView(clear);
+        actions.addView(sensor);
         root.addView(actions);
 
         ScrollView scroll = new ScrollView(this);
@@ -77,6 +79,9 @@ public class DiagnosticActivity extends Activity {
             DiagnosticLogger.log(this, "diagnostic", "log cleared by user");
             refresh();
         });
+
+        sensor.setOnClickListener(v ->
+                startActivity(new Intent(this, BikeSensorActivity.class)));
     }
 
     private void refresh() {
