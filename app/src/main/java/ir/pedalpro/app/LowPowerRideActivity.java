@@ -108,6 +108,8 @@ public class LowPowerRideActivity extends Activity {
         pauseButton.setOnClickListener(v -> togglePause());
 
         setContentView(root);
+        DiagnosticLogger.log(this, "low_power", "activity created active=" +
+                prefs.getBoolean("active", false) + " paused=" + prefs.getBoolean("paused", false));
         render();
     }
 
@@ -139,6 +141,7 @@ public class LowPowerRideActivity extends Activity {
 
     private void togglePause() {
         boolean paused = prefs.getBoolean("paused", false);
+        DiagnosticLogger.log(this, "low_power", paused ? "resume tapped" : "pause tapped");
         Intent i = new Intent(this, TrackingService.class);
         i.setAction(paused ? TrackingService.ACTION_RESUME : TrackingService.ACTION_PAUSE);
         startService(i);
