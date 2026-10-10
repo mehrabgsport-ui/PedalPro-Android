@@ -307,10 +307,11 @@ public class MainActivity extends Activity {
                 "if(!document.getElementById('pp-route-date-filter')){" +
                 "var host=document.querySelector('[data-route-history],.route-history,.rides-history,.ride-history')||cards[0].parentElement;" +
                 "if(host){var box=document.createElement('div');box.id='pp-route-date-filter';box.style.cssText='display:flex;gap:8px;align-items:center;margin:10px 0;direction:rtl';" +
-                "box.innerHTML='<input type=\"date\" id=\"pp-route-date\" style=\"min-height:42px;border:1px solid #ccd3da;border-radius:12px;padding:6px 10px;background:#fff;color:#111\"><button type=\"button\" id=\"pp-route-date-clear\" style=\"min-height:42px;border:0;border-radius:12px;padding:6px 12px\">همه تاریخ‌ها</button>';" +
+                "box.innerHTML='<input type=\"text\" inputmode=\"numeric\" placeholder=\"جستجوی تاریخ\" id=\"pp-route-date\" style=\"min-height:42px;border:1px solid #ccd3da;border-radius:12px;padding:6px 10px;background:#fff;color:#111\"><button type=\"button\" id=\"pp-route-date-clear\" style=\"min-height:42px;border:0;border-radius:12px;padding:6px 12px\">همه تاریخ‌ها</button>';" +
                 "host.insertBefore(box,host.firstChild);var inp=box.querySelector('#pp-route-date');var clear=box.querySelector('#pp-route-date-clear');" +
-                "function apply(){var v=(inp.value||'').replace(/-/g,'/');cards.forEach(function(card){if(!v){card.style.removeProperty('display');return;}" +
-                "var t=(card.getAttribute('data-date')||card.getAttribute('data-created-at')||card.innerText||'').replace(/-/g,'/');card.style.display=t.indexOf(v)>=0?'':'none';});}" +
+                "function nd(s){return String(s||'').replace(/[۰-۹]/g,function(ch){return '۰۱۲۳۴۵۶۷۸۹'.indexOf(ch);}).replace(/[٠-٩]/g,function(ch){return '٠١٢٣٤٥٦٧٨٩'.indexOf(ch);}).replace(/[-.]/g,'/').replace(/\\s+/g,'');}" +
+                "function apply(){var v=nd(inp.value);cards.forEach(function(card){if(!v){card.style.removeProperty('display');return;}" +
+                "var t=nd(card.getAttribute('data-date')||card.getAttribute('data-created-at')||card.innerText||'');card.style.display=t.indexOf(v)>=0?'':'none';});}" +
                 "inp.onchange=apply;clear.onclick=function(){inp.value='';apply();};}}" +
                 "var role=((document.body&&document.body.getAttribute('data-role'))||'').toLowerCase();" +
                 "var admin=(role==='admin'||role==='administrator'||document.body.classList.contains('admin')||document.documentElement.classList.contains('admin'));" +
