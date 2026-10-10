@@ -15,10 +15,14 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.CookieManager;
+import android.webkit.ConsoleMessage;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -145,14 +149,59 @@ public class MainActivity extends Activity {
                 installWebPerformanceGuard(view);
                 installRouteLazyGuard(view);
                 installRideHud(view);
+                installDiagnosticButton(view);
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
                 view.postDelayed(() -> injectNeshanKey(view), 1500L);
                 view.postDelayed(() -> injectNeshanKey(view), 4500L);
+                DiagnosticLogger.log(MainActivity.this, "web", "page_finished " + url);
+            }
+
+            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    DiagnosticLogger.log(MainActivity.this, "web_error",
+                            "main_frame code=" + (error == null ? "?" : error.getErrorCode()) +
+                                    " desc=" + (error == null ? "" : error.getDescription()) +
+                                    " url=" + request.getUrl());
+                }
+                super.onReceivedError(view, request, error);
+            }
+
+            @Override public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                if (request != null && request.isForMainFrame()) {
+                    DiagnosticLogger.log(MainActivity.this, "http_error",
+                            "status=" + (errorResponse == null ? "?" : errorResponse.getStatusCode()) +
+                                    " url=" + request.getUrl());
+                }
+                super.onReceivedHttpError(view, request, errorResponse);
+            }
+
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                DiagnosticLogger.log(MainActivity.this, "renderer",
+                        "gone crashed=" + (detail != null && detail.didCrash()) +
+                                " priority=" + (detail == null ? "?" : detail.rendererPriorityAtExit()));
+                try {
+                    if (view != null) {
+                        ((FrameLayout)view.getParent()).removeView(view);
+                        view.destroy();
+                    }
+                } catch (Throwable ignored) { }
+                Toast.makeText(MainActivity.this, "صفحه وب ریست شد؛ گزارش خطا ذخیره شد", Toast.LENGTH_LONG).show();
+                recreate();
+                return true;
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                if (message != null) {
+                    DiagnosticLogger.log(MainActivity.this, "js",
+                            message.messageLevel() + " " + message.sourceId() + ":" +
+                                    message.lineNumber() + " " + message.message());
+                }
+                return true;
+            }
+
             @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 if (!isPedalProOrigin(origin)) { callback.invoke(origin, false, false); return; }
                 if (hasLocation()) callback.invoke(origin, true, false);
@@ -195,6 +244,21 @@ public class MainActivity extends Activity {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
+    }
+
+    private void installDiagnosticButton(WebView view) {
+        if (view == null) return;
+        String js =
+                "(function(){try{" +
+                "if(document.getElementById('pp-native-diag'))return;" +
+                "var b=document.createElement('button');b.id='pp-native-diag';b.type='button';b.textContent='LOG';" +
+                "b.style.cssText='position:fixed;left:8px;top:45%;z-index:2147483646;border:1px solid rgba(255,255,255,.24);border-radius:10px;background:rgba(5,13,20,.72);color:#b8f4ff;font:700 10px sans-serif;padding:7px 8px;opacity:.72';" +
+                "b.onclick=function(){try{if(window.AndroidBridge&&AndroidBridge.openDiagnostics){AndroidBridge.openDiagnostics();}}catch(e){}};" +
+                "document.body.appendChild(b);" +
+                "window.addEventListener('error',function(e){try{AndroidBridge.diagnosticLog('js_error',String(e.message)+' @ '+String(e.filename)+':'+String(e.lineno));}catch(x){}});" +
+                "window.addEventListener('unhandledrejection',function(e){try{AndroidBridge.diagnosticLog('promise_rejection',String(e.reason));}catch(x){}});" +
+                "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
 
     private void installRideHud(WebView view) {
@@ -369,6 +433,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String neshanServiceKey() {
             String key = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
             return NeshanRoadMatcher.validKey(key) ? key : "";
+        }
+        @JavascriptInterface public void openDiagnostics() {
+            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, DiagnosticActivity.class)));
+        }
+        @JavascriptInterface public void diagnosticLog(String category, String message) {
+            DiagnosticLogger.log(MainActivity.this, category, message);
         }
     }
 
