@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
     private String pendingTrackingJson;
     private String rideHudCssCache;
     private String rideHudJsCache;
+    private boolean lowPowerModeRequested = false;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -543,11 +544,20 @@ public class MainActivity extends Activity {
             boolean active = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
                     .getBoolean("active", false);
             DiagnosticLogger.log(this, "low_power", "open requested active=" + active);
+            lowPowerModeRequested = true;
+            if (webView != null) {
+                try { webView.onPause(); } catch (Throwable ignored) { }
+                try { webView.pauseTimers(); } catch (Throwable ignored) { }
+            }
             Intent i = new Intent(this, LowPowerRideActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(i);
             overridePendingTransition(0, 0);
         } catch (Throwable e) {
+            lowPowerModeRequested = false;
+            if (webView != null) {
+                try { webView.resumeTimers(); webView.onResume(); } catch (Throwable ignored) { }
+            }
             DiagnosticLogger.log(this, "low_power_error", "open failed", e);
             Toast.makeText(this, "حالت کم‌مصرف باز نشد", Toast.LENGTH_SHORT).show();
         }
@@ -619,8 +629,26 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (webView != null) {
+            try { webView.resumeTimers(); } catch (Throwable ignored) { }
+            try { webView.onResume(); } catch (Throwable ignored) { }
+        }
+        if (lowPowerModeRequested) {
+            DiagnosticLogger.log(this, "low_power", "returned to main WebView");
+            lowPowerModeRequested = false;
+        }
         NotificationJobService.fetchNow(getApplicationContext());
         FirebaseConfigManager.sync(getApplicationContext());
+    }
+
+    @Override protected void onPause() {
+        if (webView != null) {
+            try { webView.onPause(); } catch (Throwable ignored) { }
+            if (lowPowerModeRequested) {
+                try { webView.pauseTimers(); } catch (Throwable ignored) { }
+            }
+        }
+        super.onPause();
     }
 
     @Override protected void onNewIntent(Intent intent) {
