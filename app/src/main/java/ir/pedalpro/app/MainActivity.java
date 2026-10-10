@@ -462,6 +462,22 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void diagnosticLog(String category, String message) {
             DiagnosticLogger.log(MainActivity.this, category, message);
         }
+        @JavascriptInterface public String ridePostProcessSummary(int rideId) {
+            return RidePostProcessor.summaryJson(MainActivity.this, rideId);
+        }
+        @JavascriptInterface public void recalculateRide(int rideId) {
+            if (rideId <= 0) return;
+            DiagnosticLogger.log(MainActivity.this, "postprocess", "manual recalculate ride=" + rideId);
+            RidePostProcessor.processAsync(getApplicationContext(), rideId, result -> {
+                if (result == null || webView == null) return;
+                String payload = result.toJson().toString();
+                webView.post(() -> {
+                    String js = "try{window.dispatchEvent(new CustomEvent('pedalpro:ride-recalculated',{detail:" +
+                            payload + "}));}catch(e){}";
+                    webView.evaluateJavascript(js, null);
+                });
+            });
+        }
     }
 
     private void startNativeTracking(String json) {
