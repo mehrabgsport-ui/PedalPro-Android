@@ -29,6 +29,10 @@ import android.widget.Toast;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -44,6 +48,8 @@ public class MainActivity extends Activity {
     private String geoOrigin;
     private PermissionRequest pendingWebPermission;
     private String pendingTrackingJson;
+    private String rideHudCssCache;
+    private String rideHudJsCache;
 
     private final BroadcastReceiver trackingReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
@@ -135,6 +141,9 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                installWebPerformanceGuard(view);
+                installRouteLazyGuard(view);
+                installRideHud(view);
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
             }
@@ -185,6 +194,125 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void installRideHud(WebView view) {
+        if (view == null) return;
+        try {
+            if (rideHudCssCache == null) rideHudCssCache = readAssetText("pedalpro_ride_hud_v4.css");
+            if (rideHudJsCache == null) rideHudJsCache = readAssetText("pedalpro_ride_hud_v4.js");
+            String css = rideHudCssCache == null ? "" : rideHudCssCache;
+            String js = rideHudJsCache == null ? "" : rideHudJsCache;
+            if (!css.isEmpty()) {
+                String injectCss = "(function(){try{if(document.getElementById('pp-hud4-style'))return;" +
+                        "var s=document.createElement('style');s.id='pp-hud4-style';s.textContent=" +
+                        JSONObject.quote(css) + ";document.head.appendChild(s);}catch(e){}})();";
+                view.evaluateJavascript(injectCss, null);
+            }
+            if (!js.isEmpty()) view.evaluateJavascript(js, null);
+        } catch (Throwable ignored) { }
+    }
+
+    private String readAssetText(String name) {
+        StringBuilder sb = new StringBuilder();
+        try (InputStream in = getAssets().open(name);
+             BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line).append('\n');
+        } catch (Throwable ignored) { }
+        return sb.toString();
+    }
+
+    private void installWebPerformanceGuard(WebView view) {
+        if (view == null) return;
+        String js =
+                "(function(){try{" +
+                "if(window.__PP_PERF_GUARD__)return;window.__PP_PERF_GUARD__=1;" +
+                "function thinTo(a,max){if(!Array.isArray(a)||a.length<=max)return a;" +
+                "var out=[],step=(a.length-1)/(max-1);for(var i=0;i<max;i++)out.push(a[Math.min(a.length-1,Math.round(i*step))]);" +
+                "out[0]=a[0];out[out.length-1]=a[a.length-1];return out;}" +
+                "var OF=window.fetch;" +
+                "if(OF){var IF=new Map(),CA=new Map();" +
+                "window.fetch=function(input,init){try{" +
+                "var method=((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();" +
+                "var url=(typeof input==='string')?input:((input&&input.url)||'');" +
+                "if(method==='GET'&&/(?:^|\\/)api\\.php(?:\\?|$)/i.test(url)){" +
+                "var now=Date.now(),c=CA.get(url);if(c&&now-c.t<350){return Promise.resolve(c.r.clone());}" +
+                "var a=IF.get(url);if(a){return a.then(function(r){return r.clone();});}" +
+                "var p=OF.apply(this,arguments).then(function(r){try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;})" +
+                ".finally(function(){IF.delete(url);});IF.set(url,p);return p;}" +
+                "}catch(e){}return OF.apply(this,arguments);};}" +
+                "var OSI=window.setInterval;window.setInterval=function(fn,delay){" +
+                "var d=Number(delay)||0;try{var src=(typeof fn==='function')?Function.prototype.toString.call(fn):String(fn);" +
+                "if(d<800&&/(api\\.php|fetch\\(|XMLHttpRequest|live|track|setLatLngs|polyline)/i.test(src))d=800;}catch(e){}" +
+                "var args=Array.prototype.slice.call(arguments,2);return OSI.apply(window,[fn,d].concat(args));};" +
+                "function patchLeaflet(){try{if(!window.L||!L.Polyline||L.Polyline.prototype.__pp)return;" +
+                "var p=L.Polyline.prototype,orig=p.setLatLngs;p.setLatLngs=function(a){try{a=thinTo(a,600);}catch(e){}return orig.call(this,a);};p.__pp=1;" +
+                "if(L.Map&&L.Map.prototype&&!L.Map.prototype.__ppfit){var fb=L.Map.prototype.fitBounds,last=0;" +
+                "L.Map.prototype.fitBounds=function(){var n=Date.now();if(n-last<250)return this;last=n;" +
+                "try{if(arguments[1])arguments[1].animate=false;}catch(e){}return fb.apply(this,arguments);};L.Map.prototype.__ppfit=1;}" +
+                "}catch(e){}}" +
+                "function patchRideDetails(){try{" +
+                "if(window.speedChart&&!window.speedChart.__ppLite){var SC=window.speedChart;" +
+                "var SW=function(points){return SC.call(this,thinTo(points,260));};SW.__ppLite=1;window.speedChart=SW;}" +
+                "if(window.drawRide&&!window.drawRide.__ppLite){var DR=window.drawRide;" +
+                "var DW=function(id,ride,fit){try{" +
+                "if(id==='rideLiveMap'&&window.L){" +
+                "var m=null;try{m=(typeof maps!=='undefined'&&maps[id])?maps[id]:null;}catch(e){}" +
+                "if(!m||m.__neshan){try{if(m&&m.remove)m.remove();}catch(e){}try{if(typeof maps!=='undefined')delete maps[id];}catch(e){}" +
+                "try{m=(typeof initMap==='function')?initMap(id):null;}catch(e){m=null;}}" +
+                "if(m&&m.addLayer){" +
+                "try{if(m.__ppRideLayer)m.removeLayer(m.__ppRideLayer);}catch(e){}" +
+                "var g=L.featureGroup().addTo(m);m.__ppRideLayer=g;" +
+                "var src=thinTo((ride&&ride.points)||[],520),pts=[];" +
+                "for(var i=0;i<src.length;i++){var p=src[i]||{},lat=+(p.lat!=null?p.lat:p.latitude),lng=+(p.lng!=null?p.lng:p.longitude);" +
+                "if(Number.isFinite(lat)&&Number.isFinite(lng))pts.push([lat,lng]);}" +
+                "if(pts.length>1){var line=L.polyline(pts,{color:'#2ee6a6',weight:5,opacity:.9,smoothFactor:2}).addTo(g);" +
+                "L.circleMarker(pts[0],{radius:6,color:'#2ee6a6'}).addTo(g);" +
+                "L.circleMarker(pts[pts.length-1],{radius:7,color:'#ff557e',weight:2}).addTo(g);" +
+                "if(fit!==false)try{m.fitBounds(line.getBounds(),{padding:[20,20],maxZoom:17,animate:false});}catch(e){}" +
+                "}else if(pts.length===1){L.circleMarker(pts[0],{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(pts[0],17,{animate:false});}catch(e){}}" +
+                "else if(ride&&ride.last_lat&&ride.last_lng){var ll=[+ride.last_lat,+ride.last_lng];L.circleMarker(ll,{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(ll,17,{animate:false});}catch(e){}}" +
+                "return;}" +
+                "}" +
+                "var rr=ride;if(ride&&Array.isArray(ride.points)&&ride.points.length>600)rr=Object.assign({},ride,{points:thinTo(ride.points,600)});" +
+                "return DR.call(this,id,rr,fit);" +
+                "}catch(e){return DR.apply(this,arguments);}};DW.__ppLite=1;window.drawRide=DW;}" +
+                "if(window.openRide&&!window.openRide.__ppLite){var OR=window.openRide;" +
+                "var OW=function(id,fromPoll){var self=this,args=arguments;" +
+                "if(window.__PP_RIDE_DETAIL_BUSY__){return window.__PP_RIDE_DETAIL_BUSY__;}" +
+                "var task=new Promise(function(resolve){requestAnimationFrame(function(){resolve();});})" +
+                ".then(function(){return OR.apply(self,args);})" +
+                ".finally(function(){setTimeout(function(){if(window.__PP_RIDE_DETAIL_BUSY__===task)window.__PP_RIDE_DETAIL_BUSY__=null;},80);});" +
+                "window.__PP_RIDE_DETAIL_BUSY__=task;return task;};OW.__ppLite=1;window.openRide=OW;}" +
+                "}catch(e){}}" +
+                "patchLeaflet();patchRideDetails();OSI(patchLeaflet,2000);OSI(patchRideDetails,1200);" +
+                "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
+    }
+
+    private void installRouteLazyGuard(WebView view) {
+        if (view == null) return;
+        String js =
+                "(function(){try{" +
+                "if(window.__PP_ROUTE_LAZY__)return;window.__PP_ROUTE_LAZY__=1;" +
+                "function patch(){try{if(typeof window.drawRide!=='function'||window.drawRide.__ppLazy)return;" +
+                "var DR=window.drawRide;" +
+                "var DW=function(id,ride,fit){try{" +
+                "var el=document.getElementById(id);var key=String(id||'').toLowerCase();" +
+                "var isRideMap=(id==='rideLiveMap'||(key.indexOf('ride')>=0&&key.indexOf('map')>=0));" +
+                "if(isRideMap&&el&&!el.dataset.ppMapEnabled){" +
+                "el.__ppPendingRide={id:id,ride:ride,fit:fit};el.style.minHeight='150px';el.style.display='flex';el.style.alignItems='center';el.style.justifyContent='center';" +
+                "if(!el.querySelector('.pp-show-route-map')){el.innerHTML='<button type=\"button\" class=\"pp-show-route-map\" style=\"border:0;border-radius:16px;padding:12px 20px;font-weight:800;background:#101820;color:#fff\">نمایش نقشه مسیر</button>';" +
+                "el.querySelector('.pp-show-route-map').onclick=function(){var p=el.__ppPendingRide;if(!p)return;el.dataset.ppMapEnabled='1';el.dataset.ppMapFitted='0';el.innerHTML='';" +
+                "try{DR.call(window,p.id,p.ride,true);el.dataset.ppMapFitted='1';}catch(e){};};}" +
+                "return;}" +
+                "if(isRideMap&&el&&el.dataset.ppMapEnabled==='1'){var doFit=el.dataset.ppMapFitted!=='1'&&fit!==false;var r=DR.call(this,id,ride,doFit);el.dataset.ppMapFitted='1';return r;}" +
+                "return DR.apply(this,arguments);}catch(e){return DR.apply(this,arguments);}};" +
+                "DW.__ppLazy=1;window.drawRide=DW;}catch(e){}}" +
+                "patch();setInterval(patch,900);" +
+                "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
+    }
+
     public class NativeBridge {
         @JavascriptInterface public void startTracking(String json) {
             runOnUiThread(() -> {
@@ -202,6 +330,26 @@ public class MainActivity extends Activity {
                 i.setAction(TrackingService.ACTION_STOP);
                 startService(i);
             });
+        }
+        @JavascriptInterface public void pauseTracking() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, TrackingService.class);
+                i.setAction(TrackingService.ACTION_PAUSE);
+                startService(i);
+            });
+        }
+        @JavascriptInterface public void resumeTracking() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, TrackingService.class);
+                i.setAction(TrackingService.ACTION_RESUME);
+                startService(i);
+            });
+        }
+        @JavascriptInterface public boolean isTrackingPaused() {
+            return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("paused", false);
+        }
+        @JavascriptInterface public void openLowPowerMode() {
+            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, LowPowerRideActivity.class)));
         }
         @JavascriptInterface public void discardTracking() {
             runOnUiThread(() -> {
