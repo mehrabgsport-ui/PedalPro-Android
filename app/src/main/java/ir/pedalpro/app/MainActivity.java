@@ -383,7 +383,15 @@ public class MainActivity extends Activity {
                 "if(isRideMap&&el&&el.dataset.ppMapEnabled==='1'){var doFit=el.dataset.ppMapFitted!=='1'&&fit!==false;var r=DR.call(this,id,ride,doFit);el.dataset.ppMapFitted='1';return r;}" +
                 "return DR.apply(this,arguments);}catch(e){return DR.apply(this,arguments);}};" +
                 "DW.__ppLazy=1;window.drawRide=DW;}catch(e){}}" +
-                "patch();enhanceHistory();setInterval(function(){patch();enhanceHistory();},1200);" +
+                "function wireSelectionGuard(){try{if(window.__PP_ROUTE_CLICK_GUARD__)return;window.__PP_ROUTE_CLICK_GUARD__=1;" +
+                "document.addEventListener('click',function(ev){try{var t=ev.target;if(!t||!t.closest)return;" +
+                "var row=t.closest('label,[role=radio],.ride-row,.route-row,.activity-card,.program-card,.list-group-item');if(!row)return;" +
+                "var tx=String(row.innerText||row.textContent||'').replace(/\\s+/g,' ').trim();if(!/(رکاب|برنامه|مسیر|منزل|محل کار)/.test(tx))return;" +
+                "var now=Date.now(),last=Number(row.dataset.ppLastTap||0);if(now-last<650){ev.preventDefault();ev.stopPropagation();return;}" +
+                "row.dataset.ppLastTap=String(now);row.style.touchAction='manipulation';" +
+                "try{if(window.AndroidBridge&&AndroidBridge.diagnosticLog)AndroidBridge.diagnosticLog('route_click',tx.slice(0,220));}catch(e){}" +
+                "}catch(e){}},true);}catch(e){}}" +
+                "wireSelectionGuard();patch();enhanceHistory();setInterval(function(){patch();enhanceHistory();},1200);" +
                 "}catch(e){}})();";
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
