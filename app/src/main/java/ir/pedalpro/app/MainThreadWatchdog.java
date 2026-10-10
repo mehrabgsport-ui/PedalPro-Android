@@ -5,6 +5,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+
 public final class MainThreadWatchdog {
     private static volatile boolean started = false;
 
@@ -15,22 +18,32 @@ public final class MainThreadWatchdog {
         started = true;
         Context app = context.getApplicationContext();
         Handler main = new Handler(Looper.getMainLooper());
+        AtomicBoolean pingPending = new AtomicBoolean(false);
+        AtomicLong pingSentAt = new AtomicLong(0L);
 
         Thread watcher = new Thread(() -> {
-            final long[] lastAck = {SystemClock.uptimeMillis()};
             long lastReport = 0L;
 
-            while (true) {
-                long postedAt = SystemClock.uptimeMillis();
-                try {
-                    main.post(() -> lastAck[0] = SystemClock.uptimeMillis());
-                } catch (Throwable ignored) { }
+            while (!Thread.currentThread().isInterrupted()) {
+                long now = SystemClock.uptimeMillis();
+                if (pingPending.compareAndSet(false, true)) {
+                    pingSentAt.set(now);
+                    try {
+                        main.post(() -> pingPending.set(false));
+                    } catch (Throwable e) {
+                        pingPending.set(false);
+                    }
+                }
 
                 try { Thread.sleep(1000L); }
-                catch (InterruptedException e) { return; }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
 
-                long now = SystemClock.uptimeMillis();
-                long blockedFor = now - Math.max(lastAck[0], postedAt);
+                now = SystemClock.uptimeMillis();
+                long sentAt = pingSentAt.get();
+                long blockedFor = pingPending.get() && sentAt > 0L ? now - sentAt : 0L;
                 if (blockedFor >= 2500L && now - lastReport >= 5000L) {
                     lastReport = now;
                     try {
