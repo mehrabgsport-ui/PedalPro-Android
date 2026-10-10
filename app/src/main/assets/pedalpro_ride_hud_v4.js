@@ -118,8 +118,11 @@ function bind(){
 }
 function ridePage(){
  if(document.getElementById(ROOT))return true;
- var maps=all('#map,.map,[class*="map"],[id*="map"]');for(var i=0;i<maps.length;i++){var r=maps[i].getBoundingClientRect();if(r.width>innerWidth*.65&&r.height>innerHeight*.45)return true;}
- var t=norm(document.body&&document.body.innerText);return t.indexOf('سرعت دوچرخه')>=0||t.indexOf('شروع برنامه')>=0||t.indexOf('مدت رکاب')>=0;
+ try{if(window.AndroidBridge&&AndroidBridge.isTracking&&AndroidBridge.isTracking())return true;}catch(e){}
+ var t=norm(document.body&&document.body.innerText);
+ var live=t.indexOf('درحال ثبت رکورد زنده')>=0||t.indexOf('در حال ثبت رکورد زنده')>=0;
+ var controls=t.indexOf('شروع برنامه')>=0&&t.indexOf('سرعت دوچرخه')>=0;
+ return live||controls;
 }
 function mount(){
  if(document.getElementById(ROOT))return;root=document.createElement('div');root.id=ROOT;root.innerHTML=html();document.body.appendChild(root);panel=document.getElementById('pp-settings');bind();visible();['pp-top','pp-start','pp-speed','pp-bottom','pp-edit'].forEach(applyPos);hideOriginal();wrapNative();render();
