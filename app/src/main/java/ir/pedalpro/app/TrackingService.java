@@ -131,6 +131,7 @@ public class TrackingService extends Service implements LocationListener {
         }
         acquireWakeLock();
         trackingStartedAt = System.currentTimeMillis();
+        prefs.edit().putLong("segment_started_at", trackingStartedAt).apply();
         rawWindow.clear();
         acceptedWindow.clear();
         lastAcceptedLocation = null;
@@ -505,7 +506,7 @@ public class TrackingService extends Service implements LocationListener {
 
     private void persistElapsedNow() {
         if (!prefs.getBoolean("paused", false) && trackingStartedAt > 0L) {
-            prefs.edit().putLong("elapsed_ms", currentElapsedMs()).apply();
+            prefs.edit().putLong("elapsed_ms", currentElapsedMs()).putLong("segment_started_at", 0L).apply();
             trackingStartedAt = 0L;
         }
     }
@@ -534,6 +535,7 @@ public class TrackingService extends Service implements LocationListener {
         lastAcceptedLocation = null;
         lastAcceptedAt = 0L;
         trackingStartedAt = System.currentTimeMillis();
+        prefs.edit().putLong("segment_started_at", trackingStartedAt).apply();
         acquireWakeLock();
         beginLocationUpdates();
         startForeground(NOTIFICATION_ID, buildNotification("ثبت مسیر در حال انجام است"));
@@ -542,7 +544,7 @@ public class TrackingService extends Service implements LocationListener {
 
     private void stopTracking() {
         persistElapsedNow();
-        prefs.edit().putBoolean("active", false).putBoolean("paused", false).putFloat("last_speed_mps", 0f).apply();
+        prefs.edit().putBoolean("active", false).putBoolean("paused", false).putFloat("last_speed_mps", 0f).putLong("segment_started_at", 0L).apply();
         if (locationManager != null) {
             try { locationManager.removeUpdates(this); } catch (Exception ignored) { }
         }
@@ -556,6 +558,7 @@ public class TrackingService extends Service implements LocationListener {
                 .putBoolean("active", false)
                 .putBoolean("paused", false)
                 .putFloat("last_speed_mps", 0f)
+                .putLong("segment_started_at", 0L)
                 .remove("pending")
                 .remove("ride_id")
                 .remove("csrf")
