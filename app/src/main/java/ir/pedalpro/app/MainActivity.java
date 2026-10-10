@@ -141,16 +141,14 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                injectNeshanKey(view);
                 installWebPerformanceGuard(view);
                 installRouteLazyGuard(view);
                 installRideHud(view);
-                String neshanKey = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
-                if (NeshanRoadMatcher.validKey(neshanKey)) {
-                    String q = JSONObject.quote(neshanKey);
-                    view.evaluateJavascript("window.PedalProNeshanServiceKey="+q+";window.NESHAN_API_KEY="+q+";try{localStorage.setItem(\'pedalpro_neshan_service_key\","+q+");}catch(e){}", null);
-                }
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
+                view.postDelayed(() -> injectNeshanKey(view), 1500L);
+                view.postDelayed(() -> injectNeshanKey(view), 4500L);
             }
         });
 
@@ -240,56 +238,13 @@ public class MainActivity extends Activity {
                 "var method=((init&&init.method)||((input&&input.method)||'GET')).toUpperCase();" +
                 "var url=(typeof input==='string')?input:((input&&input.url)||'');" +
                 "if(method==='GET'&&/(?:^|\\/)api\\.php(?:\\?|$)/i.test(url)){" +
-                "var now=Date.now(),c=CA.get(url);if(c&&now-c.t<350){return Promise.resolve(c.r.clone());}" +
-                "var a=IF.get(url);if(a){return a.then(function(r){return r.clone();});}" +
+                "var now=Date.now(),cc=CA.get(url);if(cc&&now-cc.t<350)return Promise.resolve(cc.r.clone());" +
+                "var aa=IF.get(url);if(aa)return aa.then(function(r){return r.clone();});" +
                 "var p=OF.apply(this,arguments).then(function(r){try{CA.set(url,{t:Date.now(),r:r.clone()});}catch(e){}return r;})" +
                 ".finally(function(){IF.delete(url);});IF.set(url,p);return p;}" +
                 "}catch(e){}return OF.apply(this,arguments);};}" +
-                "var OSI=window.setInterval;window.setInterval=function(fn,delay){" +
-                "var d=Number(delay)||0;try{var src=(typeof fn==='function')?Function.prototype.toString.call(fn):String(fn);" +
-                "if(d<800&&/(api\\.php|fetch\\(|XMLHttpRequest|live|track|setLatLngs|polyline)/i.test(src))d=800;}catch(e){}" +
-                "var args=Array.prototype.slice.call(arguments,2);return OSI.apply(window,[fn,d].concat(args));};" +
-                "function patchLeaflet(){try{if(!window.L||!L.Polyline||L.Polyline.prototype.__pp)return;" +
-                "var p=L.Polyline.prototype,orig=p.setLatLngs;p.setLatLngs=function(a){try{a=thinTo(a,600);}catch(e){}return orig.call(this,a);};p.__pp=1;" +
-                "if(L.Map&&L.Map.prototype&&!L.Map.prototype.__ppfit){var fb=L.Map.prototype.fitBounds,last=0;" +
-                "L.Map.prototype.fitBounds=function(){var n=Date.now();if(n-last<250)return this;last=n;" +
-                "try{if(arguments[1])arguments[1].animate=false;}catch(e){}return fb.apply(this,arguments);};L.Map.prototype.__ppfit=1;}" +
-                "}catch(e){}}" +
-                "function patchRideDetails(){try{" +
-                "if(window.speedChart&&!window.speedChart.__ppLite){var SC=window.speedChart;" +
-                "var SW=function(points){return SC.call(this,thinTo(points,260));};SW.__ppLite=1;window.speedChart=SW;}" +
-                "if(window.drawRide&&!window.drawRide.__ppLite){var DR=window.drawRide;" +
-                "var DW=function(id,ride,fit){try{" +
-                "if(id==='rideLiveMap'&&window.L){" +
-                "var m=null;try{m=(typeof maps!=='undefined'&&maps[id])?maps[id]:null;}catch(e){}" +
-                "if(!m||m.__neshan){try{if(m&&m.remove)m.remove();}catch(e){}try{if(typeof maps!=='undefined')delete maps[id];}catch(e){}" +
-                "try{m=(typeof initMap==='function')?initMap(id):null;}catch(e){m=null;}}" +
-                "if(m&&m.addLayer){" +
-                "try{if(m.__ppRideLayer)m.removeLayer(m.__ppRideLayer);}catch(e){}" +
-                "var g=L.featureGroup().addTo(m);m.__ppRideLayer=g;" +
-                "var src=thinTo((ride&&ride.points)||[],520),pts=[];" +
-                "for(var i=0;i<src.length;i++){var p=src[i]||{},lat=+(p.lat!=null?p.lat:p.latitude),lng=+(p.lng!=null?p.lng:p.longitude);" +
-                "if(Number.isFinite(lat)&&Number.isFinite(lng))pts.push([lat,lng]);}" +
-                "if(pts.length>1){var line=L.polyline(pts,{color:'#2ee6a6',weight:5,opacity:.9,smoothFactor:2}).addTo(g);" +
-                "L.circleMarker(pts[0],{radius:6,color:'#2ee6a6'}).addTo(g);" +
-                "L.circleMarker(pts[pts.length-1],{radius:7,color:'#ff557e',weight:2}).addTo(g);" +
-                "if(fit!==false)try{m.fitBounds(line.getBounds(),{padding:[20,20],maxZoom:17,animate:false});}catch(e){}" +
-                "}else if(pts.length===1){L.circleMarker(pts[0],{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(pts[0],17,{animate:false});}catch(e){}}" +
-                "else if(ride&&ride.last_lat&&ride.last_lng){var ll=[+ride.last_lat,+ride.last_lng];L.circleMarker(ll,{radius:8,color:'#2ee6a6',weight:2}).addTo(g);try{m.setView(ll,17,{animate:false});}catch(e){}}" +
-                "return;}" +
-                "}" +
-                "var rr=ride;if(ride&&Array.isArray(ride.points)&&ride.points.length>600)rr=Object.assign({},ride,{points:thinTo(ride.points,600)});" +
-                "return DR.call(this,id,rr,fit);" +
-                "}catch(e){return DR.apply(this,arguments);}};DW.__ppLite=1;window.drawRide=DW;}" +
-                "if(window.openRide&&!window.openRide.__ppLite){var OR=window.openRide;" +
-                "var OW=function(id,fromPoll){var self=this,args=arguments;" +
-                "if(window.__PP_RIDE_DETAIL_BUSY__){return window.__PP_RIDE_DETAIL_BUSY__;}" +
-                "var task=new Promise(function(resolve){requestAnimationFrame(function(){resolve();});})" +
-                ".then(function(){return OR.apply(self,args);})" +
-                ".finally(function(){setTimeout(function(){if(window.__PP_RIDE_DETAIL_BUSY__===task)window.__PP_RIDE_DETAIL_BUSY__=null;},80);});" +
-                "window.__PP_RIDE_DETAIL_BUSY__=task;return task;};OW.__ppLite=1;window.openRide=OW;}" +
-                "}catch(e){}}" +
-                "patchLeaflet();patchRideDetails();OSI(patchLeaflet,2000);OSI(patchRideDetails,1200);" +
+                "if(window.L&&L.Polyline&&!L.Polyline.prototype.__ppThin){" +
+                "var orig=L.Polyline.prototype.setLatLngs;L.Polyline.prototype.setLatLngs=function(a){try{a=thinTo(a,900);}catch(e){}return orig.call(this,a);};L.Polyline.prototype.__ppThin=1;}" +
                 "}catch(e){}})();";
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
@@ -336,6 +291,21 @@ public class MainActivity extends Activity {
                 "DW.__ppLazy=1;window.drawRide=DW;}catch(e){}}" +
                 "patch();enhanceHistory();setInterval(function(){patch();enhanceHistory();},1200);" +
                 "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
+    }
+
+    private void injectNeshanKey(WebView view) {
+        if (view == null) return;
+        String key = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
+                .getString("neshan_service_key", "");
+        if (!NeshanRoadMatcher.validKey(key)) return;
+        String q = JSONObject.quote(key);
+        String js = "try{" +
+                "window.PedalProNeshanServiceKey=" + q + ";" +
+                "window.NESHAN_API_KEY=" + q + ";" +
+                "localStorage.setItem('pedalpro_neshan_service_key'," + q + ");" +
+                "window.dispatchEvent(new CustomEvent('pedalpro:neshan-ready',{detail:{key:" + q + "}}));" +
+                "}catch(e){}";
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
 
