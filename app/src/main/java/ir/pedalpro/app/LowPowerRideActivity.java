@@ -55,7 +55,7 @@ public class LowPowerRideActivity extends Activity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             render();
-            handler.postDelayed(this, 250L);
+            handler.postDelayed(this, 1000L);
         }
     };
 
@@ -67,6 +67,9 @@ public class LowPowerRideActivity extends Activity {
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        WindowManager.LayoutParams attrs = getWindow().getAttributes();
+        attrs.screenBrightness = 0.08f;
+        getWindow().setAttributes(attrs);
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -77,7 +80,10 @@ public class LowPowerRideActivity extends Activity {
         backLp.topMargin = dp(14);
         backLp.leftMargin = dp(10);
         root.addView(back, backLp);
-        back.setOnClickListener(v -> finish());
+        back.setOnClickListener(v -> {
+            finish();
+            overridePendingTransition(0, 0);
+        });
 
         LinearLayout metrics = new LinearLayout(this);
         metrics.setOrientation(LinearLayout.VERTICAL);
