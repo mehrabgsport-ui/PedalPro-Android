@@ -76,13 +76,20 @@ function drag(h){
  h.addEventListener('pointerup',end);h.addEventListener('pointercancel',end);
 }
 function dist(a,b){var R=6371000,p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dp=(b.lat-a.lat)*Math.PI/180,dl=(b.lng-a.lng)*Math.PI/180,h=Math.sin(dp/2)*Math.sin(dp/2)+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);return 2*R*Math.atan2(Math.sqrt(h),Math.sqrt(1-h));}
+var nativeElapsedMs=0,nativePaused=false;
 function update(payload){
  var p=payload;try{if(typeof p==='string')p=JSON.parse(p);}catch(e){return;}if(!p||typeof p!=='object')return;
  var now=Date.now(),lat=Number(p.lat),lng=Number(p.lng),sp=Number(p.speed_mps),sk=Number(p.speed_kmh);
- if(Number.isFinite(sp))speedKmh=Math.max(0,sp*3.6);else if(Number.isFinite(sk))speedKmh=Math.max(0,sk);
+ nativePaused=!!p.paused;
+ if(nativePaused)speedKmh=0;else if(Number.isFinite(sp))speedKmh=Math.max(0,sp*3.6);else if(Number.isFinite(sk))speedKmh=Math.max(0,sk);
  var al=Number(p.altitude);if(Number.isFinite(al))altitude=al;if(!startedAt)startedAt=now;
- if(Number.isFinite(lat)&&Number.isFinite(lng)){var cur={lat:lat,lng:lng,t:Number(p.timestamp)||now};if(lastPoint){var d=dist(lastPoint,cur),dt=Math.max(0,(cur.t-lastPoint.t)/1000);if(d<90&&dt<20&&speedKmh<130)totalMeters+=d;}lastPoint=cur;}
- if(speedKmh>=0&&speedKmh<160){samples.push(speedKmh);if(samples.length>900)samples.shift();}
+ var dm=Number(p.distance_m);if(Number.isFinite(dm)&&dm>=0){totalMeters=dm;}else if(Number.isFinite(lat)&&Number.isFinite(lng)){
+   var cur={lat:lat,lng:lng,t:Number(p.timestamp)||now};
+   if(lastPoint){var d=dist(lastPoint,cur),dt=Math.max(0,(cur.t-lastPoint.t)/1000);if(d<90&&dt<20&&speedKmh<130)totalMeters+=d;}
+   lastPoint=cur;
+ }
+ var em=Number(p.elapsed_ms);if(Number.isFinite(em)&&em>=0)nativeElapsedMs=em;
+ if(speedKmh>=0&&speedKmh<120){samples.push(speedKmh);if(samples.length>900)samples.shift();}
  render();
 }
 function render(){
@@ -90,7 +97,7 @@ function render(){
  e=document.getElementById('pp-alt');if(e)e.textContent=Math.round(altitude||0);
  e=document.getElementById('pp-dist');if(e)e.textContent=(totalMeters/1000).toFixed(2);
  e=document.getElementById('pp-avg');if(e){var a=samples.filter(function(x){return x>.8;});var v=a.length?a.reduce(function(x,y){return x+y;},0)/a.length:0;e.textContent=v.toFixed(1);}
- e=document.getElementById('pp-time');if(e){var s=startedAt?Math.floor((Date.now()-startedAt)/1000):0,h=Math.floor(s/3600),m=Math.floor((s%3600)/60),q=s%60;e.textContent=[h,m,q].map(function(x){return String(x).padStart(2,'0');}).join(':');}
+ e=document.getElementById('pp-time');if(e){var ms=nativeElapsedMs>0?nativeElapsedMs:(startedAt?Date.now()-startedAt:0);var s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),q=s%60;e.textContent=[h,m,q].map(function(x){return String(x).padStart(2,'0');}).join(':');}
 }
 function wrapNative(){
  if(window.__PP_HUD4_WRAPPED__)return;var old=window.PedalProNativeLocation;
