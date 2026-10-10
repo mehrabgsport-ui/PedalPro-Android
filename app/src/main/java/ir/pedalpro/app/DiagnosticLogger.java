@@ -85,12 +85,26 @@ public final class DiagnosticLogger {
 
             try {
                 SharedPreferences p = context.getSharedPreferences(TrackingService.PREFS, Context.MODE_PRIVATE);
+                int rideId = p.getInt("ride_id", 0);
                 sb.append("tracking.active=").append(p.getBoolean("active", false))
                         .append(" paused=").append(p.getBoolean("paused", false))
-                        .append(" ride_id=").append(p.getInt("ride_id", 0))
+                        .append(" ride_id=").append(rideId)
                         .append(" distance_m=").append(p.getFloat("distance_m", 0f))
+                        .append(" final_distance_m=").append(p.getFloat("final_distance_m", 0f))
+                        .append(" final_max_speed_kmh=").append(p.getFloat("final_max_speed_kmh", 0f))
                         .append(" speed_mps=").append(p.getFloat("last_speed_mps", 0f))
                         .append(" elapsed_ms=").append(p.getLong("elapsed_ms", 0L))
+                        .append(" distance_source=").append(p.getString("distance_source", "gps"))
+                        .append("\n");
+                if (rideId > 0) {
+                    String summary = RidePostProcessor.summaryJson(context, rideId);
+                    if (summary != null && !summary.isEmpty()) {
+                        sb.append("postprocess=").append(summary).append("\n");
+                    }
+                }
+                sb.append("bike_sensor.connected=").append(BikeSensorManager.get().isConnected())
+                        .append(" speed_mps=").append(BikeSensorManager.get().getSpeedMps())
+                        .append(" ride_distance_m=").append(BikeSensorManager.get().getRideDistanceMeters())
                         .append("\n");
             } catch (Throwable ignored) { }
 
