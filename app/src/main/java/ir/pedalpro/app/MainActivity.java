@@ -145,6 +145,7 @@ public class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 CookieManager.getInstance().flush();
                 view.evaluateJavascript("document.documentElement.classList.add('pedalpro-native-app');", null);
+                captureNeshanKey(view);
                 injectNeshanKey(view);
                 installWebPerformanceGuard(view);
                 installRouteLazyGuard(view);
@@ -152,8 +153,14 @@ public class MainActivity extends Activity {
                 installDiagnosticButton(view);
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
-                view.postDelayed(() -> injectNeshanKey(view), 1500L);
-                view.postDelayed(() -> injectNeshanKey(view), 4500L);
+                view.postDelayed(() -> {
+                    captureNeshanKey(view);
+                    injectNeshanKey(view);
+                }, 1500L);
+                view.postDelayed(() -> {
+                    captureNeshanKey(view);
+                    injectNeshanKey(view);
+                }, 4500L);
                 DiagnosticLogger.log(MainActivity.this, "web", "page_finished " + url);
             }
 
@@ -380,11 +387,26 @@ public class MainActivity extends Activity {
         try { view.evaluateJavascript(js, null); } catch (Throwable ignored) { }
     }
 
+    private void captureNeshanKey(WebView view) {
+        if (view == null) return;
+        String js = "(function(){try{" +
+                "var k=window.NESHAN_API_KEY||window.NESHAN_SERVICE_KEY||window.PedalProNeshanServiceKey||" +
+                "localStorage.getItem('pedalpro_neshan_service_key')||'';" +
+                "if(k&&window.AndroidBridge&&AndroidBridge.setNeshanServiceKey)AndroidBridge.setNeshanServiceKey(String(k));" +
+                "}catch(e){}})();";
+        try { view.evaluateJavascript(js, null); } catch (Throwable e) {
+            DiagnosticLogger.log(this, "neshan_error", "capture key failed", e);
+        }
+    }
+
     private void injectNeshanKey(WebView view) {
         if (view == null) return;
         String key = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
                 .getString("neshan_service_key", "");
-        if (!NeshanRoadMatcher.validKey(key)) return;
+        if (!NeshanRoadMatcher.validKey(key)) {
+            DiagnosticLogger.log(this, "neshan", "native key missing");
+            return;
+        }
         String q = JSONObject.quote(key);
         String js = "try{" +
                 "window.PedalProNeshanServiceKey=" + q + ";" +
@@ -455,6 +477,12 @@ public class MainActivity extends Activity {
         @JavascriptInterface public String neshanServiceKey() {
             String key = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
             return NeshanRoadMatcher.validKey(key) ? key : "";
+        }
+        @JavascriptInterface public void setNeshanServiceKey(String key) {
+            if (!NeshanRoadMatcher.validKey(key)) return;
+            getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
+                    .edit().putString("neshan_service_key", key.trim()).apply();
+            DiagnosticLogger.log(MainActivity.this, "neshan", "web key captured");
         }
         @JavascriptInterface public void openDiagnostics() {
             runOnUiThread(() -> startActivity(new Intent(MainActivity.this, DiagnosticActivity.class)));
