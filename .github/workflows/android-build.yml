@@ -93,13 +93,13 @@ jobs:
       - name: Upload Bazaar signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.3-bazaar-signed
+          name: PedalPro-1.4.4-bazaar-signed
           path: app/build/outputs/apk/bazaar/release/*-signed.apk
           if-no-files-found: error
 
       - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: PedalPro-1.4.3-myket-signed
+          name: PedalPro-1.4.4-myket-signed
           path: app/build/outputs/apk/myket/release/*-signed.apk
           if-no-files-found: error
