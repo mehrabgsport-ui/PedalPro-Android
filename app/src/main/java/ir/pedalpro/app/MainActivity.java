@@ -144,6 +144,11 @@ public class MainActivity extends Activity {
                 installWebPerformanceGuard(view);
                 installRouteLazyGuard(view);
                 installRideHud(view);
+                String neshanKey = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
+                if (NeshanRoadMatcher.validKey(neshanKey)) {
+                    String q = JSONObject.quote(neshanKey);
+                    view.evaluateJavascript("window.PedalProNeshanServiceKey="+q+";window.NESHAN_API_KEY="+q+";try{localStorage.setItem(\'pedalpro_neshan_service_key\","+q+");}catch(e){}", null);
+                }
                 NotificationJobService.fetchNow(getApplicationContext());
                 FirebaseConfigManager.sync(getApplicationContext());
             }
@@ -370,6 +375,10 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public String neshanServiceKey() {
+            String key = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
+            return NeshanRoadMatcher.validKey(key) ? key : "";
+        }
     }
 
     private void startNativeTracking(String json) {
@@ -382,6 +391,11 @@ public class MainActivity extends Activity {
             i.putExtra("max_accuracy", o.optDouble("max_accuracy", 25));
             i.putExtra("max_speed_kmh", o.optDouble("max_speed_kmh", 100));
             i.putExtra("interval_ms", o.optLong("interval_ms", 2500));
+            String neshanKey = o.optString("neshan_service_key", "");
+            if (!NeshanRoadMatcher.validKey(neshanKey)) {
+                neshanKey = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getString("neshan_service_key", "");
+            }
+            if (NeshanRoadMatcher.validKey(neshanKey)) i.putExtra("neshan_service_key", neshanKey);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i); else startService(i);
         } catch (Exception e) {
             Toast.makeText(this, "شروع GPS اندروید ناموفق بود", Toast.LENGTH_SHORT).show();
