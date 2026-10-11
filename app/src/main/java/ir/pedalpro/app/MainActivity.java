@@ -314,6 +314,14 @@ public class MainActivity extends Activity {
         });
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) -> {
+            // Myket releases cannot initiate an APK download from the embedded website.
+            String path = Uri.parse(url).getPath();
+            boolean apk = (path != null && path.toLowerCase(Locale.ROOT).endsWith(".apk")) ||
+                    "application/vnd.android.package-archive".equalsIgnoreCase(mimetype);
+            if ("myket".equals(BuildConfig.STORE_CHANNEL) && apk) {
+                StoreUpdateManager.openUpdate(MainActivity.this);
+                return;
+            }
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
@@ -488,7 +496,10 @@ public class MainActivity extends Activity {
                 String version = rel.optString("version_name", String.valueOf(latest));
                 String notes = rel.optString("release_notes", "");
                 String apkUrl = rel.optString("apk_url", "");
-                boolean mandatory = rel.optBoolean("is_mandatory", false);
+                // The website's APK release may precede store approval.
+                // Never block Myket users for an unpublished web-only release.
+                boolean mandatory = rel.optBoolean("is_mandatory", false) &&
+                        !"myket".equals(BuildConfig.STORE_CHANNEL);
                 runOnUiThread(() -> {
                     if (latest > BuildConfig.VERSION_CODE) showReleaseDialog(version, notes, apkUrl, mandatory);
                     else {
@@ -570,10 +581,23 @@ public class MainActivity extends Activity {
     private boolean handleUri(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        if ("myket".equals(BuildConfig.STORE_CHANNEL)) {
+            String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+            boolean isOtherMarket = "bazaar".equals(scheme) ||
+                    ("market".equals(scheme) && "ir.pedalpro.app".equals(uri.getQueryParameter("id"))) ||
+                    "cafebazaar.ir".equals(host) || host.endsWith(".cafebazaar.ir");
+            boolean isExternalApk = ("http".equals(scheme) || "https".equals(scheme)) &&
+                    path.endsWith(".apk");
+            if (isOtherMarket || isExternalApk) {
+                StoreUpdateManager.openUpdate(this);
+                return true;
+            }
+        }
         if (("https".equals(scheme) || "http".equals(scheme)) &&
                 ("pedalpro.ir".equals(host) || "www.pedalpro.ir".equals(host))) return false;
         if ("http".equals(scheme) || "https".equals(scheme) || "geo".equals(scheme) ||
-                "market".equals(scheme) || "tel".equals(scheme) || "mailto".equals(scheme)) {
+                "market".equals(scheme) || "myket".equals(scheme) || "bazaar".equals(scheme) ||
+                "tel".equals(scheme) || "mailto".equals(scheme)) {
             try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
             catch (Exception e) { Toast.makeText(this, "برنامه مناسب برای باز کردن این لینک پیدا نشد", Toast.LENGTH_SHORT).show(); }
             return true;

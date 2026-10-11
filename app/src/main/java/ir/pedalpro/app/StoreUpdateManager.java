@@ -25,9 +25,8 @@ final class StoreUpdateManager {
             if (open(activity, "market://details?id=" + id)) return;
             if (open(activity, "https://play.google.com/store/apps/details?id=" + id)) return;
         }
-        if (directApkUrl != null && !directApkUrl.trim().isEmpty()) {
-            if (open(activity, directApkUrl.trim())) return;
-        }
+        // Store releases must never install or fetch an external APK.
+        // The server's apk_url is intentionally ignored for Myket/Bazaar builds.
         Toast.makeText(activity, "مسیر بروزرسانی این نسخه در دسترس نیست.", Toast.LENGTH_LONG).show();
     }
 
@@ -35,7 +34,7 @@ final class StoreUpdateManager {
         try {
             a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
             return true;
-        } catch (ActivityNotFoundException e) {
+        } catch (Exception e) {
             return false;
         }
     }
