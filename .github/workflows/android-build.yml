@@ -116,7 +116,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish signed Bazaar APK to CafeBazaar Pishkhan
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           BAZAAR_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
         shell: bash

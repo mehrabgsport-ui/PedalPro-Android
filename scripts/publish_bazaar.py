@@ -39,7 +39,7 @@ def main():
     commit = {
         "changelog_fa": "اصلاح باز شدن دوربین، کنترل نمایش ابزار عیب‌یابی و بهبود بروزرسانی اختصاصی بازار",
         "changelog_en": "Camera capture, administrator-only diagnostics UI and store update fixes",
-        "developer_note": "PedalPro signed Bazaar release from GitHub Actions",
+        "developer_note": "CAMERA permission is requested only on user action in Profile Photo, Bicycle Photo, and Ride/Event Album via the Camera button. ACTION_IMAGE_CAPTURE launches the device camera and FileProvider safely returns a captured image. Gallery selection is separate. No background camera capture. Bazaar APK updates only via CafeBazaar store.",
         "staged_rollout_percentage": 100,
         "auto_publish": bool(args.auto_publish),
     }
