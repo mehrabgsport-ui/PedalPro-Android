@@ -64,6 +64,7 @@ public class MainActivity extends Activity {
     private static final int REQ_CAMERA_FILE = 1105;
     private static final int REQ_BLE_HR = 1106;
     private static final int REQ_HEALTH_HEART_RATE = 1107;
+    private static final int REQ_CYCLING_SENSOR = 1108;
 
 
     private WebView webView;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity {
     private String rideHudCssCache;
     private String rideHudJsCache;
     private HeartRateBleManager heartRateManager;
+    private CyclingSensorManager cyclingSensorManager;
 
     // Back-pressure for native -> WebView GPS events. A busy live map must never build
     // an unbounded evaluateJavascript queue; only the newest point is retained.
@@ -173,6 +175,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         heartRateManager = new HeartRateBleManager(this, webView);
+        cyclingSensorManager = new CyclingSensorManager(this, webView);
         setupWebView();
         registerPredictiveBackHandler();
         registerTrackingReceiver();
@@ -508,6 +511,33 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void disconnectHeartRateDevice() {
             runOnUiThread(() -> { if (heartRateManager != null) heartRateManager.disconnect(); });
+        }
+
+        @JavascriptInterface public void startCyclingSensorScan() {
+            runOnUiThread(() -> {
+                if (cyclingSensorManager == null) return;
+                if (cyclingSensorManager.hasPermissions()) {
+                    cyclingSensorManager.startScan();
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= 31) {
+                    requestPermissions(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}, REQ_CYCLING_SENSOR);
+                } else {
+                    requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_CYCLING_SENSOR);
+                }
+            });
+        }
+        @JavascriptInterface public String cyclingSensorDevices() {
+            return cyclingSensorManager == null ? "[]" : cyclingSensorManager.devicesJson();
+        }
+        @JavascriptInterface public String cyclingSensorStatus() {
+            return cyclingSensorManager == null ? "{\"supported\":false}" : cyclingSensorManager.statusJson();
+        }
+        @JavascriptInterface public void connectCyclingSensor(String address) {
+            runOnUiThread(() -> { if (cyclingSensorManager != null) cyclingSensorManager.connect(address); });
+        }
+        @JavascriptInterface public void disconnectCyclingSensor() {
+            runOnUiThread(() -> { if (cyclingSensorManager != null) cyclingSensorManager.disconnect(); });
         }
         @JavascriptInterface public void openHealthConnectSettings() {
             runOnUiThread(MainActivity.this::openHealthConnectSettingsNative);
@@ -936,6 +966,9 @@ public class MainActivity extends Activity {
             if (Build.VERSION.SDK_INT >= 34 && checkSelfPermission(HealthPermissions.READ_HEART_RATE) == PackageManager.PERMISSION_GRANTED)
                 readLatestHealthConnectHeartRate();
             else Toast.makeText(this, "اجازه خواندن ضربان Health Connect داده نشد.", Toast.LENGTH_LONG).show();
+        } else if (requestCode == REQ_CYCLING_SENSOR) {
+            if (cyclingSensorManager != null && cyclingSensorManager.hasPermissions()) cyclingSensorManager.startScan();
+            else Toast.makeText(this, "برای اتصال سنسور Cadence/Power اجازه Bluetooth لازم است.", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1001,6 +1034,10 @@ public class MainActivity extends Activity {
         if (heartRateManager != null) {
             try { heartRateManager.stopScan(); } catch (Throwable ignored) { }
             try { heartRateManager.disconnect(); } catch (Throwable ignored) { }
+        }
+        if (cyclingSensorManager != null) {
+            try { cyclingSensorManager.stopScan(); } catch (Throwable ignored) { }
+            try { cyclingSensorManager.disconnect(); } catch (Throwable ignored) { }
         }
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
