@@ -432,8 +432,10 @@ public class MainActivity extends Activity {
                 "var DW=function(id,ride,fit){try{" +
                 "if(id==='rideLiveMap'&&window.L){" +
                 "var m=null;try{m=(typeof maps!=='undefined'&&maps[id])?maps[id]:null;}catch(e){}" +
-                "if(!m||m.__neshan){try{if(m&&m.remove)m.remove();}catch(e){}try{if(typeof maps!=='undefined')delete maps[id];}catch(e){}" +
-                "try{m=(typeof initMap==='function')?initMap(id):null;}catch(e){m=null;}}" +
+                // Preserve the website's Neshan map instance. Recreating/removing it inside
+                // Android changed the provider/style compared with pedalpro.ir in Chrome.
+                // Only fall back to initMap when no map exists at all.
+                "if(!m){try{m=(typeof initMap==='function')?initMap(id):null;}catch(e){m=null;}}" +
                 "if(m&&m.addLayer){" +
                 "try{if(m.__ppRideLayer)m.removeLayer(m.__ppRideLayer);}catch(e){}" +
                 "var g=L.featureGroup().addTo(m);m.__ppRideLayer=g;" +
