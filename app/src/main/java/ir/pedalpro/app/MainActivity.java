@@ -10,6 +10,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import android.content.IntentFilter;
@@ -469,6 +470,36 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public String devicePowerInfo() {
+            try {
+                JSONObject o = new JSONObject();
+                o.put("manufacturer", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER);
+                o.put("brand", Build.BRAND == null ? "" : Build.BRAND);
+                o.put("model", Build.MODEL == null ? "" : Build.MODEL);
+                o.put("android", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
+                o.put("sdk", Build.VERSION.SDK_INT);
+                return o.toString();
+            } catch (Throwable e) { return "{}"; }
+        }
+
+        @JavascriptInterface public void openBatterySettings() {
+            runOnUiThread(() -> openBatterySettingsForDevice());
+        }
+
+        @JavascriptInterface public void openAppSettings() {
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName()));
+                    startActivity(i);
+                } catch (Throwable ignored) { }
+            });
+        }
+
+        @JavascriptInterface public void openAutostartSettings() {
+            runOnUiThread(() -> openAutostartSettingsForDevice());
+        }
+
         @JavascriptInterface public void setNeshanServiceKey(String key) {
             if (!NeshanRoadMatcher.validKey(key)) return;
             getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE)
@@ -576,6 +607,75 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private boolean launchComponent(String pkg, String cls) {
+        try {
+            Intent i = new Intent();
+            i.setComponent(new ComponentName(pkg, cls));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            return true;
+        } catch (Throwable ignored) { return false; }
+    }
+
+    private void openAutostartSettingsForDevice() {
+        String m = (Build.MANUFACTURER == null ? "" : Build.MANUFACTURER).toLowerCase(Locale.ROOT);
+        boolean opened = false;
+        if (m.contains("xiaomi") || m.contains("redmi") || m.contains("poco")) {
+            opened = launchComponent("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity");
+        } else if (m.contains("huawei") || m.contains("honor")) {
+            opened = launchComponent("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity");
+        } else if (m.contains("vivo") || m.contains("iqoo")) {
+            opened = launchComponent("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity");
+        } else if (m.contains("oppo") || m.contains("realme") || m.contains("oneplus")) {
+            opened = launchComponent("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity");
+            if (!opened) opened = launchComponent("com.oplus.battery", "com.oplus.powermanager.fuelgaue.PowerConsumptionActivity");
+        } else if (m.contains("asus")) {
+            opened = launchComponent("com.asus.mobilemanager", "com.asus.mobilemanager.entry.FunctionActivity");
+        }
+        if (!opened) {
+            try {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    private void openBatterySettingsForDevice() {
+        String m = (Build.MANUFACTURER == null ? "" : Build.MANUFACTURER).toLowerCase(Locale.ROOT);
+        boolean opened = false;
+
+        // Prefer the vendor's own battery-management screen when it is available.
+        if (m.contains("samsung")) {
+            opened = launchComponent("com.samsung.android.lool", "com.samsung.android.sm.battery.ui.BatteryActivity");
+            if (!opened) opened = launchComponent("com.samsung.android.sm", "com.samsung.android.sm.battery.ui.BatteryActivity");
+        } else if (m.contains("xiaomi") || m.contains("redmi") || m.contains("poco")) {
+            opened = launchComponent("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsContainerManagementActivity");
+        } else if (m.contains("huawei") || m.contains("honor")) {
+            opened = launchComponent("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity");
+        } else if (m.contains("oppo") || m.contains("realme") || m.contains("oneplus")) {
+            opened = launchComponent("com.oplus.battery", "com.oplus.powermanager.fuelgaue.PowerConsumptionActivity");
+        } else if (m.contains("vivo") || m.contains("iqoo")) {
+            opened = launchComponent("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager");
+        }
+
+        if (!opened) {
+            try {
+                Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                startActivity(i);
+                opened = true;
+            } catch (Throwable ignored) { }
+        }
+
+        if (!opened) {
+            try {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (Throwable ignored) { }
+        }
+    }
 
     private boolean isPedalProOrigin(String origin) {
         try {
