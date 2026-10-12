@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     private String rideHudCssCache;
     private String rideHudJsCache;
     private HeartRateBleManager heartRateManager;
+    private HuaweiHealthManager huaweiHealthManager;
 
     // Back-pressure for native -> WebView GPS events. A busy live map must never build
     // an unbounded evaluateJavascript queue; only the newest point is retained.
@@ -173,6 +174,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
         heartRateManager = new HeartRateBleManager(this, webView);
+        huaweiHealthManager = new HuaweiHealthManager(this);
         setupWebView();
         registerPredictiveBackHandler();
         registerTrackingReceiver();
@@ -516,6 +518,22 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::requestHealthConnectHeartRate);
         }
 
+        @JavascriptInterface public void connectHuaweiHealth() {
+            runOnUiThread(() -> { if (huaweiHealthManager != null) huaweiHealthManager.connectAndStart(); });
+        }
+        @JavascriptInterface public void disconnectHuaweiHealth() {
+            runOnUiThread(() -> { if (huaweiHealthManager != null) huaweiHealthManager.stop(); });
+        }
+        @JavascriptInterface public void openHuaweiHealth() {
+            runOnUiThread(() -> { if (huaweiHealthManager != null) huaweiHealthManager.openHuaweiHealth(); });
+        }
+        @JavascriptInterface public void syncHuaweiHealth() {
+            runOnUiThread(() -> { if (huaweiHealthManager != null) huaweiHealthManager.openHuaweiHealthSync(); });
+        }
+        @JavascriptInterface public String huaweiHealthStatus() {
+            return huaweiHealthManager == null ? "{\"configured\":false}" : huaweiHealthManager.statusJson();
+        }
+
         @JavascriptInterface public String devicePowerInfo() {
             try {
                 JSONObject o = new JSONObject();
@@ -733,6 +751,33 @@ public class MainActivity extends Activity {
         }
     }
 
+    public void onHuaweiHeartRate(int bpm, long timestampMs, int confidence) {
+        if (heartRateManager != null) heartRateManager.acceptExternalHeartRate(bpm, "huawei_health", "Huawei Health", timestampMs);
+        JSONObject o = new JSONObject();
+        try {
+            o.put("bpm", bpm); o.put("timestamp", timestampMs); o.put("confidence", confidence);
+            o.put("source", "huawei_health"); o.put("deviceName", "Huawei Health");
+        } catch (Throwable ignored) { }
+        final String payload = o.toString();
+        if (webView != null) webView.post(() -> {
+            try { webView.evaluateJavascript("window.PedalProHeartRateNative&&window.PedalProHeartRateNative(" + JSONObject.quote(payload) + ");", null); }
+            catch (Throwable ignored) { }
+        });
+    }
+
+    public void emitHuaweiHealthStatus(String state, String message, boolean running) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("state", state); o.put("message", message); o.put("running", running);
+            o.put("configured", huaweiHealthManager != null && huaweiHealthManager.isConfigured());
+        } catch (Throwable ignored) { }
+        final String payload = o.toString();
+        if (webView != null) webView.post(() -> {
+            try { webView.evaluateJavascript("window.PedalProHuaweiHealthStatus&&window.PedalProHuaweiHealthStatus(" + JSONObject.quote(payload) + ");", null); }
+            catch (Throwable ignored) { }
+        });
+    }
+
     private boolean launchComponent(String pkg, String cls) {
         try {
             Intent i = new Intent();
@@ -941,6 +986,10 @@ public class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (huaweiHealthManager != null && requestCode == HuaweiHealthManager.REQ_HUAWEI_SIGN_IN) {
+            huaweiHealthManager.handleActivityResult(requestCode, data);
+            return;
+        }
         if (requestCode == REQ_FILE && fileCallback != null) {
             Uri[] result = null;
             if (resultCode == RESULT_OK) {
@@ -1001,6 +1050,9 @@ public class MainActivity extends Activity {
         if (heartRateManager != null) {
             try { heartRateManager.stopScan(); } catch (Throwable ignored) { }
             try { heartRateManager.disconnect(); } catch (Throwable ignored) { }
+        }
+        if (huaweiHealthManager != null) {
+            try { huaweiHealthManager.stop(); } catch (Throwable ignored) { }
         }
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
