@@ -409,13 +409,8 @@ public class MainActivity extends Activity {
                 "var rr=ride;if(ride&&Array.isArray(ride.points)&&ride.points.length>600)rr=Object.assign({},ride,{points:thinTo(ride.points,600)});" +
                 "return DR.call(this,id,rr,fit);" +
                 "}catch(e){return DR.apply(this,arguments);}};DW.__ppLite=1;window.drawRide=DW;}" +
-                "if(window.openRide&&!window.openRide.__ppLite){var OR=window.openRide;" +
-                "var OW=function(id,fromPoll){var self=this,args=arguments;" +
-                "if(window.__PP_RIDE_DETAIL_BUSY__){return window.__PP_RIDE_DETAIL_BUSY__;}" +
-                "var task=new Promise(function(resolve){requestAnimationFrame(function(){resolve();});})" +
-                ".then(function(){return OR.apply(self,args);})" +
-                ".finally(function(){setTimeout(function(){if(window.__PP_RIDE_DETAIL_BUSY__===task)window.__PP_RIDE_DETAIL_BUSY__=null;},80);});" +
-                "window.__PP_RIDE_DETAIL_BUSY__=task;return task;};OW.__ppLite=1;window.openRide=OW;}" +
+                // Do not wrap openRide in a global busy lock: a stalled detail fetch made all taps inert.
+                // The web app now renders an immediate modal with bounded wait and retry.\n
                 "}catch(e){}}" +
                 "patchLeaflet();patchRideDetails();OSI(patchLeaflet,2000);OSI(patchRideDetails,1200);" +
                 "}catch(e){}})();";
