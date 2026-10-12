@@ -114,3 +114,19 @@ jobs:
           name: PedalPro-myket-signed-release
           path: app/build/outputs/signed/*myket*-signed.apk
           if-no-files-found: error
+
+      - name: Publish signed Bazaar APK to CafeBazaar Pishkhan
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          BAZAAR_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${BAZAAR_API_SECRET}" ]; then
+            echo "BAZAAR_PISHKHAN_API_SECRET is not configured; release artifact built, Bazaar publish skipped."
+            exit 0
+          fi
+          python3 -m pip install --quiet requests==2.32.3
+          APK="$(find app/build/outputs/signed -maxdepth 1 -name '*bazaar*-signed.apk' -type f | head -n1)"
+          test -n "$APK"
+          python3 scripts/publish_bazaar.py --apk "$APK" --auto-publish

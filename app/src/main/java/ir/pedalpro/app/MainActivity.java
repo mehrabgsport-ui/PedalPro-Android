@@ -9,6 +9,9 @@ import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.provider.MediaStore;
+import androidx.core.content.FileProvider;
+import java.io.File;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -48,10 +51,12 @@ public class MainActivity extends Activity {
     private static final int REQ_CAMERA = 1102;
     private static final int REQ_FILE = 1103;
     private static final int REQ_NOTIFICATIONS = 1104;
+    private static final int REQ_CAMERA_FILE = 1105;
 
 
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
+    private Uri cameraCaptureUri;
     private GeolocationPermissions.Callback geoCallback;
     private String geoOrigin;
     private PermissionRequest pendingWebPermission;
@@ -283,6 +288,7 @@ public class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = filePathCallback;
+                cameraCaptureUri = null;
                 try {
                     boolean ppup = false;
                     String[] accepts = fileChooserParams.getAcceptTypes();
@@ -290,6 +296,22 @@ public class MainActivity extends Activity {
                         for (String a : accepts) {
                             if (a != null && a.toLowerCase(Locale.ROOT).contains("ppup")) { ppup = true; break; }
                         }
+                    }
+                    boolean imageInput = false;
+                    if (accepts != null) {
+                        for (String type : accepts) {
+                            if (type != null && type.toLowerCase(Locale.ROOT).startsWith("image/")) {
+                                imageInput = true; break;
+                            }
+                        }
+                    }
+                    if (!ppup && imageInput && fileChooserParams.isCaptureEnabled()) {
+                        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA_FILE);
+                        } else {
+                            launchCameraCapture();
+                        }
+                        return true;
                     }
                     Intent intent;
                     if (ppup) {
@@ -306,9 +328,10 @@ public class MainActivity extends Activity {
                     startActivityForResult(intent, REQ_FILE);
                     return true;
                 } catch (Exception e) {
+                    if (fileCallback != null) fileCallback.onReceiveValue(null);
                     fileCallback = null;
                     Toast.makeText(MainActivity.this, "انتخاب فایل در دسترس نیست", Toast.LENGTH_SHORT).show();
-                    return false;
+                    return true;
                 }
             }
         });
@@ -318,13 +341,32 @@ public class MainActivity extends Activity {
             String path = Uri.parse(url).getPath();
             boolean apk = (path != null && path.toLowerCase(Locale.ROOT).endsWith(".apk")) ||
                     "application/vnd.android.package-archive".equalsIgnoreCase(mimetype);
-            if ("myket".equals(BuildConfig.STORE_CHANNEL) && apk) {
+            if (("myket".equals(BuildConfig.STORE_CHANNEL) || "bazaar".equals(BuildConfig.STORE_CHANNEL)) && apk) {
                 StoreUpdateManager.openUpdate(MainActivity.this);
                 return;
             }
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
             catch (Exception e) { Toast.makeText(this, "باز کردن فایل ممکن نیست", Toast.LENGTH_SHORT).show(); }
         });
+    }
+
+    private void launchCameraCapture() {
+        try {
+            File directory = new File(getCacheDir(), "camera");
+            if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("camera cache unavailable");
+            File photo = File.createTempFile("pedalpro_photo_", ".jpg", directory);
+            cameraCaptureUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", photo);
+            Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, cameraCaptureUri);
+            intent.setClipData(android.content.ClipData.newRawUri("photo", cameraCaptureUri));
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(intent, REQ_FILE);
+        } catch (Exception e) {
+            cameraCaptureUri = null;
+            if (fileCallback != null) fileCallback.onReceiveValue(null);
+            fileCallback = null;
+            Toast.makeText(this, "دوربین گوشی در دسترس نیست", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void installRideHud(WebView view) {
@@ -494,7 +536,8 @@ public class MainActivity extends Activity {
                 // The website's APK release may precede store approval.
                 // Never block Myket users for an unpublished web-only release.
                 boolean mandatory = rel.optBoolean("is_mandatory", false) &&
-                        !"myket".equals(BuildConfig.STORE_CHANNEL);
+                        !"myket".equals(BuildConfig.STORE_CHANNEL) &&
+                        !"bazaar".equals(BuildConfig.STORE_CHANNEL);
                 runOnUiThread(() -> {
                     if (latest > BuildConfig.VERSION_CODE) showReleaseDialog(version, notes, apkUrl, mandatory);
                     else {
@@ -576,14 +619,14 @@ public class MainActivity extends Activity {
     private boolean handleUri(Uri uri) {
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
-        if ("myket".equals(BuildConfig.STORE_CHANNEL)) {
+        if ("myket".equals(BuildConfig.STORE_CHANNEL) || "bazaar".equals(BuildConfig.STORE_CHANNEL)) {
+            boolean isMyket = "myket".equals(scheme) || "myket.ir".equals(host) || host.endsWith(".myket.ir");
+            boolean isBazaar = "bazaar".equals(scheme) || "cafebazaar.ir".equals(host) || host.endsWith(".cafebazaar.ir");
+            boolean wrongMarket = ("myket".equals(BuildConfig.STORE_CHANNEL) && isBazaar) ||
+                    ("bazaar".equals(BuildConfig.STORE_CHANNEL) && isMyket);
             String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
-            boolean isOtherMarket = "bazaar".equals(scheme) ||
-                    ("market".equals(scheme) && "ir.pedalpro.app".equals(uri.getQueryParameter("id"))) ||
-                    "cafebazaar.ir".equals(host) || host.endsWith(".cafebazaar.ir");
-            boolean isExternalApk = ("http".equals(scheme) || "https".equals(scheme)) &&
-                    path.endsWith(".apk");
-            if (isOtherMarket || isExternalApk) {
+            boolean isExternalApk = ("http".equals(scheme) || "https".equals(scheme)) && path.endsWith(".apk");
+            if (wrongMarket || isExternalApk) {
                 StoreUpdateManager.openUpdate(this);
                 return true;
             }
@@ -678,6 +721,14 @@ public class MainActivity extends Activity {
                 showLocationSettingsHelp();
                 Toast.makeText(this, "برای ثبت مسیر دقیق، Location را روی Precise قرار دهید.", Toast.LENGTH_LONG).show();
             }
+        } else if (requestCode == REQ_CAMERA_FILE) {
+            if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                launchCameraCapture();
+            else {
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = null;
+                Toast.makeText(this, "برای عکس گرفتن، دسترسی دوربین لازم است", Toast.LENGTH_LONG).show();
+            }
         } else if (requestCode == REQ_CAMERA && pendingWebPermission != null) {
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
                 pendingWebPermission.grant(pendingWebPermission.getResources());
@@ -689,8 +740,14 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_FILE && fileCallback != null) {
-            Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
-            fileCallback.onReceiveValue(result); fileCallback = null;
+            Uri[] result = null;
+            if (resultCode == RESULT_OK) {
+                result = cameraCaptureUri != null ? new Uri[]{cameraCaptureUri} :
+                        WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+            }
+            fileCallback.onReceiveValue(result);
+            fileCallback = null;
+            cameraCaptureUri = null;
         }
     }
 
