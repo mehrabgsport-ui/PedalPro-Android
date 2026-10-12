@@ -26,6 +26,9 @@
         android:icon="@drawable/pedalpro_app_icon"
         android:label="PedalPro"
         android:theme="@style/Theme.PedalPro">
+        <meta-data
+            android:name="com.huawei.hms.client.appid"
+            android:value="${HUAWEI_APP_ID}" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -76,4 +79,8 @@
             </intent-filter>
         </service>
     </application>
+    <queries>
+        <package android:name="com.huawei.health" />
+        <package android:name="com.huawei.hwid" />
+    </queries>
 </manifest>
