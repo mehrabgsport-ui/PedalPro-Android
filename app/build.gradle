@@ -2,6 +2,8 @@ plugins {
     id 'com.android.application'
 }
 
+def huaweiAppId = (project.findProperty("HUAWEI_APP_ID") ?: System.getenv("HUAWEI_APP_ID") ?: "0").toString()
+
 android {
     namespace 'ir.pedalpro.app'
     compileSdk 36
@@ -11,8 +13,8 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 36
-        versionName '1.4.31'
+        versionCode 37
+        versionName '1.4.32'
     }
 
     flavorDimensions 'distribution'
@@ -44,4 +46,7 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'com.google.firebase:firebase-messaging:24.1.2'
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation 'com.huawei.hms:hwid:6.7.0.300'
+    implementation 'com.huawei.hms:hihealth-base:6.7.0.300'
+    implementation 'com.huawei.hihealth:hihealthkit:6.7.0.300'
 }
