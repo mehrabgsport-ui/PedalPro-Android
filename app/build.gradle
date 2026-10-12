@@ -11,8 +11,8 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 36
-        versionName '1.4.31'
+        versionCode 37
+        versionName '1.4.32'
     }
 
     flavorDimensions 'distribution'
