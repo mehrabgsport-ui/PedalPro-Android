@@ -20,6 +20,14 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.OutcomeReceiver;
+import android.health.connect.HealthConnectException;
+import android.health.connect.HealthConnectManager;
+import android.health.connect.HealthPermissions;
+import android.health.connect.ReadRecordsRequestUsingFilters;
+import android.health.connect.ReadRecordsResponse;
+import android.health.connect.TimeInstantRangeFilter;
+import android.health.connect.datatypes.HeartRateRecord;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -45,6 +53,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.time.Instant;
 
 public class MainActivity extends Activity {
     private static final String HOME = "https://pedalpro.ir/";
@@ -53,6 +62,8 @@ public class MainActivity extends Activity {
     private static final int REQ_FILE = 1103;
     private static final int REQ_NOTIFICATIONS = 1104;
     private static final int REQ_CAMERA_FILE = 1105;
+    private static final int REQ_BLE_HR = 1106;
+    private static final int REQ_HEALTH_HEART_RATE = 1107;
 
 
     private WebView webView;
@@ -68,6 +79,7 @@ public class MainActivity extends Activity {
     private boolean backDispatching = false;
     private String rideHudCssCache;
     private String rideHudJsCache;
+    private HeartRateBleManager heartRateManager;
 
     // Back-pressure for native -> WebView GPS events. A busy live map must never build
     // an unbounded evaluateJavascript queue; only the newest point is retained.
@@ -160,6 +172,7 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
+        heartRateManager = new HeartRateBleManager(this, webView);
         setupWebView();
         registerPredictiveBackHandler();
         registerTrackingReceiver();
@@ -470,6 +483,39 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::showNotificationPermissionDialog);
         }
         @JavascriptInterface public String storeChannel() { return BuildConfig.STORE_CHANNEL; }
+        @JavascriptInterface public void startHeartRateScan() {
+            runOnUiThread(() -> {
+                if (heartRateManager == null) return;
+                if (heartRateManager.hasBlePermissions()) {
+                    heartRateManager.startScan();
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= 31) {
+                    requestPermissions(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}, REQ_BLE_HR);
+                } else {
+                    requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_BLE_HR);
+                }
+            });
+        }
+        @JavascriptInterface public String heartRateDevices() {
+            return heartRateManager == null ? "[]" : heartRateManager.devicesJson();
+        }
+        @JavascriptInterface public String heartRateStatus() {
+            return heartRateManager == null ? "{\"supported\":false}" : heartRateManager.statusJson();
+        }
+        @JavascriptInterface public void connectHeartRateDevice(String address) {
+            runOnUiThread(() -> { if (heartRateManager != null) heartRateManager.connect(address); });
+        }
+        @JavascriptInterface public void disconnectHeartRateDevice() {
+            runOnUiThread(() -> { if (heartRateManager != null) heartRateManager.disconnect(); });
+        }
+        @JavascriptInterface public void openHealthConnectSettings() {
+            runOnUiThread(MainActivity.this::openHealthConnectSettingsNative);
+        }
+        @JavascriptInterface public void readHealthConnectHeartRate() {
+            runOnUiThread(MainActivity.this::requestHealthConnectHeartRate);
+        }
+
         @JavascriptInterface public String devicePowerInfo() {
             try {
                 JSONObject o = new JSONObject();
@@ -607,6 +653,85 @@ public class MainActivity extends Activity {
         }
     }
 
+
+    private void openHealthConnectSettingsNative() {
+        if (Build.VERSION.SDK_INT < 34) {
+            Toast.makeText(this, "Health Connect روی Android 14 به بالا به‌صورت سیستمی پشتیبانی می‌شود.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            Intent i = new Intent(HealthConnectManager.ACTION_MANAGE_HEALTH_PERMISSIONS);
+            i.putExtra(Intent.EXTRA_PACKAGE_NAME, getPackageName());
+            startActivity(i);
+        } catch (Throwable e) {
+            try {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            } catch (Throwable ignored) { }
+        }
+    }
+
+    private void requestHealthConnectHeartRate() {
+        if (Build.VERSION.SDK_INT < 34) {
+            Toast.makeText(this, "برای Health Connect سیستمی، Android 14 یا جدیدتر لازم است. اتصال BLE همچنان قابل استفاده است.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (checkSelfPermission(HealthPermissions.READ_HEART_RATE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{HealthPermissions.READ_HEART_RATE}, REQ_HEALTH_HEART_RATE);
+            return;
+        }
+        readLatestHealthConnectHeartRate();
+    }
+
+    @SuppressLint("NewApi")
+    private void readLatestHealthConnectHeartRate() {
+        if (Build.VERSION.SDK_INT < 34) return;
+        try {
+            HealthConnectManager manager = getSystemService(HealthConnectManager.class);
+            if (manager == null) {
+                Toast.makeText(this, "Health Connect در این گوشی در دسترس نیست.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            Instant end = Instant.now();
+            Instant start = end.minusSeconds(6L * 60L * 60L);
+            TimeInstantRangeFilter range = new TimeInstantRangeFilter.Builder()
+                    .setStartTime(start)
+                    .setEndTime(end)
+                    .build();
+            ReadRecordsRequestUsingFilters<HeartRateRecord> request =
+                    new ReadRecordsRequestUsingFilters.Builder<>(HeartRateRecord.class)
+                            .setTimeRangeFilter(range)
+                            .setAscending(false)
+                            .setPageSize(50)
+                            .build();
+            manager.readRecords(request, getMainExecutor(),
+                    new OutcomeReceiver<ReadRecordsResponse<HeartRateRecord>, HealthConnectException>() {
+                        @Override public void onResult(ReadRecordsResponse<HeartRateRecord> response) {
+                            HeartRateRecord.HeartRateSample newest = null;
+                            for (HeartRateRecord record : response.getRecords()) {
+                                for (HeartRateRecord.HeartRateSample sample : record.getSamples()) {
+                                    if (newest == null || sample.getTime().isAfter(newest.getTime())) newest = sample;
+                                }
+                            }
+                            if (newest == null) {
+                                Toast.makeText(MainActivity.this, "داده ضربان جدیدی در Health Connect پیدا نشد.", Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                            int value = (int)newest.getBeatsPerMinute();
+                            long ts = newest.getTime().toEpochMilli();
+                            if (heartRateManager != null) heartRateManager.acceptExternalHeartRate(value, "health_connect", "Health Connect", ts);
+                            Toast.makeText(MainActivity.this, "ضربان از Health Connect خوانده شد: " + value, Toast.LENGTH_SHORT).show();
+                        }
+                        @Override public void onError(HealthConnectException error) {
+                            Toast.makeText(MainActivity.this, "خواندن Health Connect انجام نشد.", Toast.LENGTH_LONG).show();
+                        }
+                    });
+        } catch (SecurityException e) {
+            openHealthConnectSettingsNative();
+        } catch (Throwable e) {
+            Toast.makeText(this, "Health Connect روی این دستگاه آماده نیست.", Toast.LENGTH_LONG).show();
+        }
+    }
 
     private boolean launchComponent(String pkg, String cls) {
         try {
@@ -804,6 +929,13 @@ public class MainActivity extends Activity {
                 pendingWebPermission.grant(pendingWebPermission.getResources());
             else pendingWebPermission.deny();
             pendingWebPermission = null;
+        } else if (requestCode == REQ_BLE_HR) {
+            if (heartRateManager != null && heartRateManager.hasBlePermissions()) heartRateManager.startScan();
+            else Toast.makeText(this, "برای اتصال ساعت/سنسور، اجازه Bluetooth لازم است.", Toast.LENGTH_LONG).show();
+        } else if (requestCode == REQ_HEALTH_HEART_RATE) {
+            if (Build.VERSION.SDK_INT >= 34 && checkSelfPermission(HealthPermissions.READ_HEART_RATE) == PackageManager.PERMISSION_GRANTED)
+                readLatestHealthConnectHeartRate();
+            else Toast.makeText(this, "اجازه خواندن ضربان Health Connect داده نشد.", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -866,6 +998,10 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         resetNativeLocationBridge();
+        if (heartRateManager != null) {
+            try { heartRateManager.stopScan(); } catch (Throwable ignored) { }
+            try { heartRateManager.disconnect(); } catch (Throwable ignored) { }
+        }
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         if (webView != null) {
             webView.stopLoading(); webView.setWebChromeClient(null); webView.setWebViewClient(null); webView.destroy();
