@@ -330,7 +330,7 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout metrics = new LinearLayout(this);
         metrics.setOrientation(LinearLayout.HORIZONTAL);
-        metrics.addView(metric("فعالیت‌ها", countArray("my_completed_rides")), weightHeightLp(dp(86)));
+        metrics.addView(metric("فعالیت‌ها", countMyCompletedRides()), weightHeightLp(dp(86)));
         metrics.addView(metric("اعضا", countArray("members")), weightHeightLp(dp(86)));
         metrics.addView(metric("Live", liveCount()), weightHeightLp(dp(86)));
         content.addView(metrics, cardLp());
@@ -420,6 +420,21 @@ public final class NativeMainActivity extends Activity {
         stop.setOnClickListener(v -> finishRide(stop));
 
         content.addView(resume);
+
+        Button groupNav = normalButton("مسیریابی تا گروه در حال حرکت");
+        groupNav.setOnClickListener(v -> {
+            Intent i = new Intent(this, NativeLiveNavigationActivity.class);
+            i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE, "group");
+            i.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
+            i.putExtra(NativeLiveNavigationActivity.EXTRA_TITLE, "گروه");
+            startActivity(i);
+        });
+        content.addView(groupNav);
+
+        Button sensorsNow = normalButton("سنسورها و داده زنده");
+        sensorsNow.setOnClickListener(v -> showSensors());
+        content.addView(sensorsNow);
+
         content.addView(stop);
 
         rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
@@ -433,15 +448,21 @@ public final class NativeMainActivity extends Activity {
         addHero("فعالیت‌ها", "آخرین رکاب‌زنی‌های ثبت‌شده");
 
         JSONArray rides = bootstrap.optJSONArray("my_completed_rides");
-        if (rides == null || rides.length() == 0) {
-            addEmpty("هنوز فعالیت ثبت‌شده‌ای وجود ندارد.");
-            return;
+        if (rides == null) rides = bootstrap.optJSONArray("rides");
+        JSONObject me = bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        int shown = 0;
+        if (rides != null) {
+            for (int i = 0; i < rides.length() && shown < 40; i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r == null || !"completed".equals(r.optString("status", "completed"))) continue;
+                int owner = r.optInt("owner_user_id", uid);
+                if (uid > 0 && owner > 0 && owner != uid) continue;
+                addRideSummaryCard(r, false);
+                shown++;
+            }
         }
-        for (int i = 0; i < Math.min(40, rides.length()); i++) {
-            JSONObject r = rides.optJSONObject(i);
-            if (r == null) continue;
-            addRideSummaryCard(r, false);
-        }
+        if (shown == 0) addEmpty("هنوز فعالیت ثبت‌شده‌ای وجود ندارد.");
     }
 
     private void showRoutes() {
@@ -1274,23 +1295,34 @@ public final class NativeMainActivity extends Activity {
     private void addRideSummaryCard(JSONObject r, boolean navigation) {
         LinearLayout box = card();
         boolean live = "active".equals(r.optString("status"));
+        int rideId = r.optInt("id", 0);
         TextView title = text((live ? "● " : "") + r.optString("owner_name", "PedalPro") + " · " + r.optString("title", "رکاب‌زنی"),
                 15, true, live ? ORANGE : TEXT);
         String meta = String.format(Locale.US, "%.2f km · %s · %.1f km/h",
-                r.optDouble("distance_km", 0),
+                r.optDouble("distance_km", r.optDouble("distance_m", 0) / 1000.0),
                 formatDuration(r.optLong("duration_seconds", 0)),
                 r.optDouble("avg_speed_kmh", 0));
         box.addView(title);
         box.addView(text(meta, 11, false, MUTED));
 
-        if (navigation && live && Double.isFinite(r.optDouble("last_lat", Double.NaN)) && Double.isFinite(r.optDouble("last_lng", Double.NaN))) {
-            Button nav = primaryButton("مسیریابی تا موقعیت فعلی");
-            double lat = r.optDouble("last_lat");
-            double lng = r.optDouble("last_lng");
+        if (rideId > 0) {
+            Button details = normalButton("جزئیات و مسیر Native");
+            details.setOnClickListener(v -> {
+                Intent i = new Intent(this, NativeRideDetailActivity.class);
+                i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, rideId);
+                startActivity(i);
+            });
+            box.addView(details);
+        }
+
+        if (navigation && live) {
+            Button nav = primaryButton("مسیریابی زنده تا این رکاب‌زن");
             nav.setOnClickListener(v -> {
-                Uri uri = Uri.parse("geo:" + lat + "," + lng + "?q=" + lat + "," + lng);
-                try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
-                catch (Exception e) { toast("برنامه مسیریابی روی گوشی پیدا نشد."); }
+                Intent i = new Intent(this, NativeLiveNavigationActivity.class);
+                i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE, "live");
+                i.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID, rideId);
+                i.putExtra(NativeLiveNavigationActivity.EXTRA_TITLE, r.optString("owner_name", "رکاب‌زن"));
+                startActivity(i);
             });
             box.addView(nav);
         }
@@ -1472,6 +1504,25 @@ public final class NativeMainActivity extends Activity {
         return a == null ? 0 : a.length();
     }
 
+    private int countMyCompletedRides() {
+        if (bootstrap == null) return 0;
+        JSONArray direct = bootstrap.optJSONArray("my_completed_rides");
+        if (direct != null) return direct.length();
+        JSONArray rides = bootstrap.optJSONArray("rides");
+        JSONObject me = bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        int count = 0;
+        if (rides != null) {
+            for (int i = 0; i < rides.length(); i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r == null || !"completed".equals(r.optString("status"))) continue;
+                int owner = r.optInt("owner_user_id", uid);
+                if (uid == 0 || owner == 0 || owner == uid) count++;
+            }
+        }
+        return count;
+    }
+
     private void refreshVisibleScreen() {
         if (navRide != null && !navRide.isEnabled()) showRide();
         else showHome();
@@ -1616,6 +1667,13 @@ public final class NativeMainActivity extends Activity {
         Button b = primaryButton(label);
         b.setTextColor(Color.WHITE);
         b.setBackgroundColor(Color.rgb(157, 48, 61));
+        return b;
+    }
+
+    private Button normalButton(String label) {
+        Button b = primaryButton(label);
+        b.setTextColor(TEXT);
+        b.setBackgroundColor(Color.rgb(23, 58, 77));
         return b;
     }
 
