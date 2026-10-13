@@ -921,6 +921,104 @@ public final class NativeMainActivity extends Activity {
     }
 
 
+    private void renderPerformanceReport(JSONObject report, JSONObject training) {
+        content.removeAllViews();
+        addHero("عملکرد من", "هفته از شنبه تا جمعه");
+
+        JSONObject root = report == null ? new JSONObject() : report;
+        JSONObject summary = root.optJSONObject("summary");
+        if (summary == null) summary = root.optJSONObject("totals");
+        if (summary == null) summary = root;
+
+        double distance = summary.optDouble("distance_km",
+                summary.optDouble("total_distance_km", summary.optDouble("distance", 0)));
+        long duration = summary.optLong("duration_seconds",
+                summary.optLong("total_duration_seconds", summary.optLong("duration", 0)));
+        double ascent = summary.optDouble("ascent_m",
+                summary.optDouble("total_ascent_m", summary.optDouble("ascent", 0)));
+        int rides = summary.optInt("rides_count",
+                summary.optInt("ride_count", summary.optInt("activities_count", 0)));
+
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.HORIZONTAL);
+        metrics.addView(wrapMetric(metricValue("رکاب", JalaliDate.fa(rides)), "رکاب"), weightHeightLp(dp(96)));
+        metrics.addView(wrapMetric(metricValue("مسافت", JalaliDate.fa(String.format(Locale.US, "%.1f", distance))), "km"), weightHeightLp(dp(96)));
+        metrics.addView(wrapMetric(metricValue("زمان", formatDuration(duration)), "زمان"), weightHeightLp(dp(96)));
+        content.addView(metrics, cardLp());
+
+        LinearLayout metrics2 = new LinearLayout(this);
+        metrics2.setOrientation(LinearLayout.HORIZONTAL);
+        double avg = summary.optDouble("avg_speed_kmh", summary.optDouble("average_speed_kmh", 0));
+        double max = summary.optDouble("max_speed_kmh", summary.optDouble("best_speed_kmh", 0));
+        metrics2.addView(wrapMetric(metricValue("صعود", JalaliDate.fa(String.format(Locale.US, "%.0f", ascent))), "m"), weightHeightLp(dp(96)));
+        metrics2.addView(wrapMetric(metricValue("میانگین", JalaliDate.fa(String.format(Locale.US, "%.1f", avg))), "km/h"), weightHeightLp(dp(96)));
+        metrics2.addView(wrapMetric(metricValue("بیشینه", JalaliDate.fa(String.format(Locale.US, "%.1f", max))), "km/h"), weightHeightLp(dp(96)));
+        content.addView(metrics2, cardLp());
+
+        JSONObject week = root.optJSONObject("week");
+        if (week == null) week = root.optJSONObject("weekly");
+        JSONObject month = root.optJSONObject("month");
+        if (month == null) month = root.optJSONObject("monthly");
+        if (week != null) addPerformancePeriod("این هفته", week);
+        if (month != null) addPerformancePeriod("این ماه", month);
+
+        if (training != null && training.length() > 0) {
+            LinearLayout t = glassCard(24);
+            t.addView(text("بار تمرینی", 17, true, TEXT));
+            double load = training.optDouble("training_load", training.optDouble("load", 0));
+            double fitness = training.optDouble("fitness", training.optDouble("ctl", 0));
+            double fatigue = training.optDouble("fatigue", training.optDouble("atl", 0));
+            double form = training.optDouble("form", training.optDouble("tsb", fitness - fatigue));
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.addView(wrapMetric(metricValue("Load", JalaliDate.fa(String.format(Locale.US, "%.0f", load))), "Load"), weightHeightLp(dp(90)));
+            row.addView(wrapMetric(metricValue("Fitness", JalaliDate.fa(String.format(Locale.US, "%.0f", fitness))), "Fitness"), weightHeightLp(dp(90)));
+            row.addView(wrapMetric(metricValue("Form", JalaliDate.fa(String.format(Locale.US, "%.0f", form))), "Form"), weightHeightLp(dp(90)));
+            t.addView(row);
+            TextView fatigueText = text("Fatigue: " + JalaliDate.fa(String.format(Locale.US, "%.0f", fatigue)), 11, false, MUTED);
+            fatigueText.setPadding(0, dp(6), 0, 0);
+            t.addView(fatigueText);
+            content.addView(t, cardLp());
+        }
+
+        JSONArray best = root.optJSONArray("best_efforts");
+        if (best == null) best = root.optJSONArray("prs");
+        if (best != null && best.length() > 0) {
+            LinearLayout b = glassCard(24);
+            b.addView(text("بهترین رکوردها", 17, true, TEXT));
+            for (int i = 0; i < Math.min(8, best.length()); i++) {
+                JSONObject x = best.optJSONObject(i);
+                if (x == null) continue;
+                String name = x.optString("name", x.optString("label", "PR"));
+                String value = x.optString("value", "");
+                if (value.isBlank()) value = x.optString("display_value", x.optString("result", ""));
+                b.addView(text(name + (value.isBlank() ? "" : " · " + value), 12, false, i == 0 ? ORANGE : TEXT));
+            }
+            content.addView(b, cardLp());
+        }
+
+        PedalActionView advanced = action(PedalIconView.Icon.CHART, "تحلیل حرفه‌ای، Segments و Heatmap", PedalActionView.Style.OUTLINE);
+        advanced.setOnClickListener(v -> startActivity(new Intent(this, NativeAdvancedActivity.class)));
+        content.addView(advanced, fullActionLp(54));
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void addPerformancePeriod(String title, JSONObject period) {
+        LinearLayout box = glassCard(22);
+        box.addView(text(title, 16, true, TEXT));
+        double km = period.optDouble("distance_km", period.optDouble("total_distance_km", 0));
+        long sec = period.optLong("duration_seconds", period.optLong("total_duration_seconds", 0));
+        double climb = period.optDouble("ascent_m", period.optDouble("total_ascent_m", 0));
+        int count = period.optInt("rides_count", period.optInt("ride_count", period.optInt("activities_count", 0)));
+        box.addView(text(JalaliDate.fa(count) + " رکاب · " +
+                JalaliDate.fa(String.format(Locale.US, "%.1f", km)) + " km · " +
+                formatDuration(sec) + " · " +
+                JalaliDate.fa(String.format(Locale.US, "%.0f", climb)) + " m صعود", 12, false, MUTED));
+        content.addView(box, cardLp());
+    }
+
     private void showSensors() {
         currentPage = "sensors";
         if (!signedIn()) { showLogin(); return; }
