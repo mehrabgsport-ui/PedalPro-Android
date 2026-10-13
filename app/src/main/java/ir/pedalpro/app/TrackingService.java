@@ -1135,8 +1135,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             c.setRequestProperty("Accept", "application/json");
             c.setRequestProperty("X-CSRF-Token", prefs.getString("csrf", ""));
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+            String cookie = effectiveSessionCookie();
+            if (!cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
 
             byte[] data = payload.toString().getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(data.length);
