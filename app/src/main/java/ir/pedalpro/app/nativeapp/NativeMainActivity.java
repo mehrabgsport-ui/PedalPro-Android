@@ -307,11 +307,72 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showLogin() {
-        selectNav(null);
-        content.removeAllViews();
-        addHero("ورود به PedalPro", "ورود به حساب کاربری");
+        showAuthDialog("login");
+    }
 
-        LinearLayout box = card();
+    private void showAuthDialog(String initialTab) {
+        if (signedIn()) {
+            showMe();
+            return;
+        }
+
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        FrameLayout stage = new FrameLayout(this);
+        stage.setPadding(dp(8), dp(8), dp(8), dp(8));
+        stage.setBackgroundColor(Color.TRANSPARENT);
+
+        ScrollView scroller = new ScrollView(this);
+        scroller.setFillViewport(true);
+        scroller.setClipToPadding(false);
+
+        LinearLayout center = new LinearLayout(this);
+        center.setOrientation(LinearLayout.VERTICAL);
+        center.setGravity(Gravity.CENTER);
+        center.setPadding(0, dp(10), 0, dp(10));
+        scroller.addView(center, new ScrollView.LayoutParams(-1, -1));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        box.setPadding(dp(15), dp(15), dp(15), dp(15));
+        GradientDrawable boxBg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(247, 16, 35, 56), Color.argb(247, 10, 27, 43)});
+        boxBg.setCornerRadius(dp(17));
+        boxBg.setStroke(dp(1), Color.rgb(36, 60, 85));
+        box.setBackground(boxBg);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView title = text("حساب کاربری", 20, true, TEXT);
+        Button close = plainButton("×", 26, TEXT);
+        close.setBackgroundColor(Color.TRANSPARENT);
+        close.setOnClickListener(v -> dialog.dismiss());
+        head.addView(title, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        head.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        box.addView(head);
+
+        LinearLayout tabs = new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        tabs.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams tabLp = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        tabLp.setMargins(dp(3), dp(4), dp(3), dp(14));
+
+        Button loginTab = authTabButton("ورود");
+        Button signupTab = authTabButton("ثبت‌نام");
+        Button forgotTab = authTabButton("فراموشی رمز");
+        tabs.addView(loginTab, new LinearLayout.LayoutParams(tabLp));
+        tabs.addView(signupTab, new LinearLayout.LayoutParams(tabLp));
+        tabs.addView(forgotTab, new LinearLayout.LayoutParams(tabLp));
+        box.addView(tabs);
+
+        LinearLayout loginPane = new LinearLayout(this);
+        loginPane.setOrientation(LinearLayout.VERTICAL);
         EditText username = input("نام کاربری");
         EditText password = input("رمز عبور");
         password.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -319,19 +380,118 @@ public final class NativeMainActivity extends Activity {
         remember.setText("ورود من روی این دستگاه حفظ شود");
         remember.setTextColor(TEXT);
         remember.setChecked(true);
+        TextView rememberNote = text("تا ۱۸۰ روز؛ خروج دستی این دسترسی را لغو می‌کند.", 11, false, MUTED);
+        Button doLogin = primaryButton("ورود");
+        ProgressBar loginProgress = new ProgressBar(this);
+        loginProgress.setVisibility(View.GONE);
+        loginPane.addView(username);
+        loginPane.addView(password);
+        loginPane.addView(remember);
+        loginPane.addView(rememberNote);
+        loginPane.addView(doLogin);
+        loginPane.addView(loginProgress);
 
-        Button login = primaryButton("ورود");
-        ProgressBar progress = new ProgressBar(this);
-        progress.setVisibility(View.GONE);
+        LinearLayout signupPane = new LinearLayout(this);
+        signupPane.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout signupStep1 = new LinearLayout(this);
+        signupStep1.setOrientation(LinearLayout.VERTICAL);
+        TextView signupNote = text("برای ثبت‌نام، شماره موبایل فقط یک‌بار با پیامک تأیید می‌شود.", 12, false, MUTED);
+        EditText signupPhone = input("شماره موبایل");
+        signupPhone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        Button signupSend = primaryButton("ارسال کد تأیید");
+        signupStep1.addView(signupNote);
+        signupStep1.addView(signupPhone);
+        signupStep1.addView(signupSend);
 
-        box.addView(username);
-        box.addView(password);
-        box.addView(remember);
-        box.addView(login);
-        box.addView(progress);
-        content.addView(box, cardLp());
+        LinearLayout signupStep2 = new LinearLayout(this);
+        signupStep2.setOrientation(LinearLayout.VERTICAL);
+        signupStep2.setVisibility(View.GONE);
+        EditText signupCode = input("کد ۶ رقمی");
+        signupCode.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        Button signupVerify = primaryButton("تأیید کد");
+        signupStep2.addView(signupCode);
+        signupStep2.addView(signupVerify);
 
-        login.setOnClickListener(v -> {
+        LinearLayout signupStep3 = new LinearLayout(this);
+        signupStep3.setOrientation(LinearLayout.VERTICAL);
+        signupStep3.setVisibility(View.GONE);
+        EditText signupName = input("نام نمایشی");
+        EditText signupUsername = input("نام کاربری");
+        EditText signupPassword = input("رمز عبور");
+        signupPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        Button signupFinish = primaryButton("ساخت حساب");
+        signupStep3.addView(signupName);
+        signupStep3.addView(signupUsername);
+        signupStep3.addView(signupPassword);
+        signupStep3.addView(signupFinish);
+        signupPane.addView(signupStep1);
+        signupPane.addView(signupStep2);
+        signupPane.addView(signupStep3);
+
+        LinearLayout forgotPane = new LinearLayout(this);
+        forgotPane.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout forgotStep1 = new LinearLayout(this);
+        forgotStep1.setOrientation(LinearLayout.VERTICAL);
+        EditText forgotPhone = input("شماره موبایل تأییدشده");
+        forgotPhone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        Button forgotSend = primaryButton("ارسال کد بازیابی");
+        forgotStep1.addView(forgotPhone);
+        forgotStep1.addView(forgotSend);
+
+        LinearLayout forgotStep2 = new LinearLayout(this);
+        forgotStep2.setOrientation(LinearLayout.VERTICAL);
+        forgotStep2.setVisibility(View.GONE);
+        EditText forgotCode = input("کد پیامکی");
+        forgotCode.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        Button forgotVerify = primaryButton("تأیید کد");
+        forgotStep2.addView(forgotCode);
+        forgotStep2.addView(forgotVerify);
+
+        LinearLayout forgotStep3 = new LinearLayout(this);
+        forgotStep3.setOrientation(LinearLayout.VERTICAL);
+        forgotStep3.setVisibility(View.GONE);
+        EditText forgotPassword = input("رمز جدید");
+        forgotPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        Button forgotFinish = primaryButton("ثبت رمز جدید");
+        forgotStep3.addView(forgotPassword);
+        forgotStep3.addView(forgotFinish);
+        forgotPane.addView(forgotStep1);
+        forgotPane.addView(forgotStep2);
+        forgotPane.addView(forgotStep3);
+
+        box.addView(loginPane);
+        box.addView(signupPane);
+        box.addView(forgotPane);
+
+        Runnable showLoginPane = () -> {
+            loginPane.setVisibility(View.VISIBLE);
+            signupPane.setVisibility(View.GONE);
+            forgotPane.setVisibility(View.GONE);
+            styleAuthTab(loginTab, true);
+            styleAuthTab(signupTab, false);
+            styleAuthTab(forgotTab, false);
+        };
+        Runnable showSignupPane = () -> {
+            loginPane.setVisibility(View.GONE);
+            signupPane.setVisibility(View.VISIBLE);
+            forgotPane.setVisibility(View.GONE);
+            styleAuthTab(loginTab, false);
+            styleAuthTab(signupTab, true);
+            styleAuthTab(forgotTab, false);
+        };
+        Runnable showForgotPane = () -> {
+            loginPane.setVisibility(View.GONE);
+            signupPane.setVisibility(View.GONE);
+            forgotPane.setVisibility(View.VISIBLE);
+            styleAuthTab(loginTab, false);
+            styleAuthTab(signupTab, false);
+            styleAuthTab(forgotTab, true);
+        };
+        loginTab.setOnClickListener(v -> showLoginPane.run());
+        signupTab.setOnClickListener(v -> showSignupPane.run());
+        forgotTab.setOnClickListener(v -> showForgotPane.run());
+
+        doLogin.setOnClickListener(v -> {
             String u = username.getText().toString().trim();
             String p = password.getText().toString();
             if (u.isBlank() || p.isBlank()) {
@@ -339,35 +499,229 @@ public final class NativeMainActivity extends Activity {
                 return;
             }
             hideKeyboard();
-            login.setEnabled(false);
-            progress.setVisibility(View.VISIBLE);
+            doLogin.setEnabled(false);
+            loginProgress.setVisibility(View.VISIBLE);
             io.execute(() -> {
                 try {
                     api.login(u, p, remember.isChecked());
-                    JSONObject d = api.bootstrap();
-                    bootstrap = d;
-                    activeRide = d.optJSONObject("my_active_ride");
+                    JSONObject data = api.bootstrap();
+                    bootstrap = data;
+                    activeRide = data.optJSONObject("my_active_ride");
                     main.post(() -> {
-                        login.setEnabled(true);
-                        progress.setVisibility(View.GONE);
-                        JSONObject user = d.optJSONObject("user");
-                        if (user == null) {
+                        doLogin.setEnabled(true);
+                        loginProgress.setVisibility(View.GONE);
+                        if (data.optJSONObject("user") == null) {
                             toast("ورود تأیید نشد.");
                             return;
                         }
-                        setTopStatus("متصل · " + user.optString("display_name", u), GREEN);
+                        updateHeaderAccess(data);
+                        applyUiSettings(data);
+                        dialog.dismiss();
                         showHome();
                     });
                 } catch (Exception e) {
                     main.post(() -> {
-                        login.setEnabled(true);
-                        progress.setVisibility(View.GONE);
+                        doLogin.setEnabled(true);
+                        loginProgress.setVisibility(View.GONE);
                         toast(e.getMessage());
                     });
                 }
             });
         });
+
+        signupSend.setOnClickListener(v -> {
+            String phone = signupPhone.getText().toString().trim();
+            signupSend.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("auth_signup_send", new JSONObject().put("phone", phone));
+                    main.post(() -> {
+                        signupSend.setEnabled(true);
+                        signupStep1.setVisibility(View.GONE);
+                        signupStep2.setVisibility(View.VISIBLE);
+                        signupCode.requestFocus();
+                        toast("کد تأیید ارسال شد؛ در مرورگرهای پشتیبانی‌شده کد خودکار پیشنهاد/وارد می‌شود");
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        signupSend.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        signupVerify.setOnClickListener(v -> {
+            String phone = signupPhone.getText().toString().trim();
+            String code = signupCode.getText().toString().trim();
+            signupVerify.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("auth_signup_verify", new JSONObject().put("phone", phone).put("code", code));
+                    main.post(() -> {
+                        signupVerify.setEnabled(true);
+                        signupStep2.setVisibility(View.GONE);
+                        signupStep3.setVisibility(View.VISIBLE);
+                        toast("شماره تأیید شد");
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        signupVerify.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        signupFinish.setOnClickListener(v -> {
+            signupFinish.setEnabled(false);
+            JSONObject body = new JSONObject();
+            try {
+                body.put("display_name", signupName.getText().toString());
+                body.put("username", signupUsername.getText().toString());
+                body.put("password", signupPassword.getText().toString());
+            } catch (Exception ignored) {}
+            io.execute(() -> {
+                try {
+                    JSONObject result = api.post("auth_signup_finish", body);
+                    JSONObject data = api.bootstrap();
+                    bootstrap = data;
+                    activeRide = data.optJSONObject("my_active_ride");
+                    main.post(() -> {
+                        signupFinish.setEnabled(true);
+                        updateHeaderAccess(data);
+                        applyUiSettings(data);
+                        dialog.dismiss();
+                        JSONObject invite = result.optJSONObject("bale_invite");
+                        String url = invite == null ? "" : invite.optString("url", "");
+                        if (!url.isBlank() && invite.optBoolean("enabled", false) && !invite.optBoolean("connected", false)) {
+                            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))); } catch (Exception ignored) {}
+                        }
+                        showHome();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        signupFinish.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        forgotSend.setOnClickListener(v -> {
+            forgotSend.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("auth_reset_send", new JSONObject().put("phone", forgotPhone.getText().toString().trim()));
+                    main.post(() -> {
+                        forgotSend.setEnabled(true);
+                        forgotStep1.setVisibility(View.GONE);
+                        forgotStep2.setVisibility(View.VISIBLE);
+                        forgotCode.requestFocus();
+                        toast("اگر شماره عضو باشد، کد ارسال می‌شود؛ AutoFill فعال است");
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        forgotSend.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        forgotVerify.setOnClickListener(v -> {
+            forgotVerify.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("auth_reset_verify", new JSONObject()
+                            .put("phone", forgotPhone.getText().toString().trim())
+                            .put("code", forgotCode.getText().toString().trim()));
+                    main.post(() -> {
+                        forgotVerify.setEnabled(true);
+                        forgotStep2.setVisibility(View.GONE);
+                        forgotStep3.setVisibility(View.VISIBLE);
+                        toast("کد تأیید شد");
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        forgotVerify.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        forgotFinish.setOnClickListener(v -> {
+            forgotFinish.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("auth_reset_finish", new JSONObject().put("password", forgotPassword.getText().toString()));
+                    main.post(() -> {
+                        forgotFinish.setEnabled(true);
+                        toast("رمز جدید ثبت شد");
+                        forgotStep1.setVisibility(View.VISIBLE);
+                        forgotStep2.setVisibility(View.GONE);
+                        forgotStep3.setVisibility(View.GONE);
+                        showLoginPane.run();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        forgotFinish.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        if ("signup".equals(initialTab)) showSignupPane.run();
+        else if ("forgot".equals(initialTab)) showForgotPane.run();
+        else showLoginPane.run();
+
+        LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(
+                Math.min(dp(760), getResources().getDisplayMetrics().widthPixels - dp(16)),
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        center.addView(box, boxLp);
+        stage.addView(scroller, new FrameLayout.LayoutParams(-1, -1));
+        dialog.setContentView(stage);
+        dialog.show();
+
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.dimAmount = .91f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+        VazirmatnLoader.apply(this, box);
     }
+
+    private Button authTabButton(String label) {
+        Button b = plainButton(label, 12, TEXT);
+        b.setAllCaps(false);
+        return b;
+    }
+
+    private void styleAuthTab(Button b, boolean active) {
+        b.setTextColor(active ? Color.rgb(5, 40, 55) : TEXT);
+        GradientDrawable g;
+        if (active) {
+            g = new GradientDrawable(
+                    GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(19, 220, 232), Color.rgb(37, 200, 244)});
+        } else {
+            g = new GradientDrawable();
+            g.setColor(Color.argb(18, 255, 255, 255));
+            g.setStroke(dp(1), Color.argb(46, 255, 255, 255));
+        }
+        g.setCornerRadius(dp(17));
+        b.setBackground(g);
+    }
+
 
     private void showHome() {
         currentPage = "dashboard";
@@ -1896,7 +2250,7 @@ public final class NativeMainActivity extends Activity {
             return;
         }
         if (!signedIn()) {
-            showLogin();
+            showAuthDialog("signup");
             return;
         }
         int eventId = event.optInt("id", 0);
