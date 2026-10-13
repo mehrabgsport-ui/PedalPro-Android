@@ -77,6 +77,17 @@ public final class NativeMainActivity extends Activity {
     private TextView powerValue;
     private TextView heartRateValue;
     private LinearLayout sensorDeviceList;
+    private LinearLayout chatMessagesHost;
+    private int chatRoomId = 0;
+    private int chatLastId = 0;
+    private boolean chatLoading = false;
+    private final Runnable chatPoll = new Runnable() {
+        @Override public void run() {
+            if (chatMessagesHost == null || !chatMessagesHost.isAttachedToWindow() || chatRoomId <= 0) return;
+            loadGroupChatMessages(false);
+            main.postDelayed(this, 4500L);
+        }
+    };
 
     private LinearLayout content;
     private TextView topStatus;
@@ -351,7 +362,9 @@ public final class NativeMainActivity extends Activity {
         perf.setOnClickListener(v -> showPerformance());
         Button ai = primaryButton("مشاور هوش مصنوعی");
         ai.setOnClickListener(v -> showAiAdvisor());
-        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf); tools.addView(ai);
+        Button chat = primaryButton("چت گروهی");
+        chat.setOnClickListener(v -> showGroupChat());
+        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf); tools.addView(ai); tools.addView(chat);
         content.addView(tools, cardLp());
     }
 
@@ -527,6 +540,124 @@ public final class NativeMainActivity extends Activity {
                 });
             }
         });
+    }
+
+
+    private void showGroupChat() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("چت گروهی PedalPro", "پیام‌رسان Native مستقیم به سرور");
+
+        chatMessagesHost = new LinearLayout(this);
+        chatMessagesHost.setOrientation(LinearLayout.VERTICAL);
+        content.addView(chatMessagesHost);
+
+        LinearLayout composer = card();
+        EditText input = input("پیام…");
+        input.setSingleLine(false);
+        input.setMinLines(2);
+        Button send = primaryButton("ارسال");
+        composer.addView(input);
+        composer.addView(send);
+        content.addView(composer, cardLp());
+
+        send.setOnClickListener(v -> {
+            String body = input.getText().toString().trim();
+            if (body.isBlank() || chatRoomId <= 0) return;
+            hideKeyboard();
+            send.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    JSONObject d = api.post("chat_send", new JSONObject()
+                            .put("room_id", chatRoomId)
+                            .put("body", body)
+                            .put("reply_to_id", 0)
+                            .put("client_token", java.util.UUID.randomUUID().toString()));
+                    main.post(() -> {
+                        input.setText("");
+                        send.setEnabled(true);
+                        loadGroupChatMessages(true);
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        send.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        io.execute(() -> {
+            try {
+                JSONObject boot = api.get("chat_bootstrap");
+                JSONObject group = boot.optJSONObject("group");
+                if (group == null || group.optInt("id", 0) <= 0) throw new IllegalStateException("چت گروهی در دسترس نیست.");
+                chatRoomId = group.optInt("id");
+                main.post(() -> {
+                    loadGroupChatMessages(true);
+                    main.removeCallbacks(chatPoll);
+                    main.postDelayed(chatPoll, 4500L);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    LinearLayout box = card();
+                    box.addView(text("چت دریافت نشد: " + e.getMessage(), 12, false, MUTED));
+                    chatMessagesHost.addView(box, cardLp());
+                });
+            }
+        });
+    }
+
+    private void loadGroupChatMessages(boolean full) {
+        if (chatLoading || chatRoomId <= 0 || chatMessagesHost == null) return;
+        chatLoading = true;
+        final int after = full ? 0 : chatLastId;
+        io.execute(() -> {
+            try {
+                java.util.LinkedHashMap<String, String> q = new java.util.LinkedHashMap<>();
+                q.put("room_id", String.valueOf(chatRoomId));
+                q.put("after", String.valueOf(after));
+                q.put("limit", full ? "120" : "60");
+                JSONObject d = api.get("chat_messages", q);
+                JSONArray items = d.optJSONArray("items");
+                chatLastId = Math.max(chatLastId, d.optInt("last_id", 0));
+                main.post(() -> {
+                    if (chatMessagesHost == null) return;
+                    if (full) chatMessagesHost.removeAllViews();
+                    if (items != null) {
+                        for (int i = 0; i < items.length(); i++) {
+                            JSONObject m = items.optJSONObject(i);
+                            if (m == null) continue;
+                            chatLastId = Math.max(chatLastId, m.optInt("id", 0));
+                            addChatMessage(chatMessagesHost, m);
+                        }
+                    }
+                    if (full && (items == null || items.length() == 0)) {
+                        LinearLayout e = card();
+                        e.addView(text("هنوز پیامی ارسال نشده است.", 12, false, MUTED));
+                        chatMessagesHost.addView(e, cardLp());
+                    }
+                });
+            } catch (Exception e) {
+                if (full) main.post(() -> toast(e.getMessage()));
+            } finally {
+                chatLoading = false;
+            }
+        });
+    }
+
+    private void addChatMessage(LinearLayout host, JSONObject m) {
+        JSONObject user = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        int uid = user == null ? 0 : user.optInt("id", 0);
+        boolean mine = m.optInt("sender_user_id", 0) == uid;
+        LinearLayout box = card();
+        box.setBackgroundColor(mine ? Color.rgb(17, 67, 75) : Color.rgb(20, 40, 58));
+        box.addView(text(mine ? "شما" : m.optString("sender_name", "عضو"), 11, true, mine ? ACCENT : ORANGE));
+        box.addView(text(m.optString("body", ""), 13, false, TEXT));
+        String created = m.optString("created_at", "");
+        if (!created.isBlank()) box.addView(text(created, 9, false, MUTED));
+        host.addView(box, cardLp());
     }
 
     private void showAiAdvisor() {
@@ -1281,6 +1412,7 @@ public final class NativeMainActivity extends Activity {
     @Override
     protected void onDestroy() {
         main.removeCallbacks(clockTick);
+        main.removeCallbacks(chatPoll);
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         try { if (cyclingSensors != null) { cyclingSensors.stopScan(); cyclingSensors.disconnect(); } } catch (Throwable ignored) { }
         try { if (heartRateSensors != null) { heartRateSensors.stopScan(); heartRateSensors.disconnect(); } } catch (Throwable ignored) { }
