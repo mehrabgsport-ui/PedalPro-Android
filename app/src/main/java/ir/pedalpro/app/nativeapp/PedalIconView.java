@@ -103,10 +103,22 @@ public final class PedalIconView extends View {
             case SUN:
                 c.drawCircle(cx,cy,r*.42f,p);for(int i=0;i<8;i++){double a=i*Math.PI/4;c.drawLine(cx+(float)Math.cos(a)*r*.62f,cy+(float)Math.sin(a)*r*.62f,cx+(float)Math.cos(a)*r,cy+(float)Math.sin(a)*r,p);}break;
             case CLOUD:
-                path.moveTo(cx-r*.78f,cy+r*.4f);path.cubicTo(cx-r,cy-r*.12f,cx-r*.42f,cy-r*.35f,cx-r*.14f,cy-r*.2f);path.cubicTo(cx+r*.05f,cy-r*.88f,cx+r*.72f,cy-r*.72f,cx+r*.72f,cy-r*.22f);path.cubicTo(cx+r*1.1f,cy-r*.1f,cx+r,cy+r*.45f,cx+r*.58f,cy+r*.45f);path.lineTo(cx-r*.78f,cy+r*.4f);c.drawPath(path,p);break;
+                drawCloud(c,cx,cy,r);break;
             case RAIN:
-                icon=Icon.CLOUD; onDraw(c); icon=Icon.RAIN; c.drawLine(cx-r*.55f,cy+r*.65f,cx-r*.7f,cy+r,p);c.drawLine(cx,cy+r*.65f,cx-r*.15f,cy+r,p);c.drawLine(cx+r*.55f,cy+r*.65f,cx+r*.4f,cy+r,p);break;
+                drawCloud(c,cx,cy-r*.12f,r*.9f);
+                c.drawLine(cx-r*.55f,cy+r*.55f,cx-r*.7f,cy+r*.95f,p);
+                c.drawLine(cx,cy+r*.55f,cx-r*.15f,cy+r*.95f,p);
+                c.drawLine(cx+r*.55f,cy+r*.55f,cx+r*.4f,cy+r*.95f,p);break;
         }
+    }
+    private void drawCloud(Canvas c,float cx,float cy,float r){
+        path.reset();
+        path.moveTo(cx-r*.78f,cy+r*.4f);
+        path.cubicTo(cx-r,cy-r*.12f,cx-r*.42f,cy-r*.35f,cx-r*.14f,cy-r*.2f);
+        path.cubicTo(cx+r*.05f,cy-r*.88f,cx+r*.72f,cy-r*.72f,cx+r*.72f,cy-r*.22f);
+        path.cubicTo(cx+r*1.1f,cy-r*.1f,cx+r,cy+r*.45f,cx+r*.58f,cy+r*.45f);
+        path.lineTo(cx-r*.78f,cy+r*.4f);
+        c.drawPath(path,p);
     }
     private void dot(Canvas c,float x,float y,float r){Paint.Style old=p.getStyle();p.setStyle(Paint.Style.FILL);c.drawCircle(x,y,r,p);p.setStyle(old);}
 }
