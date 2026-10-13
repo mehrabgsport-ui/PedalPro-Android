@@ -31,6 +31,22 @@ public final class PedalProApiClient {
         return request("GET", action, null, true);
     }
 
+    public JSONObject get(String action, java.util.Map<String, ?> params) throws Exception {
+        StringBuilder q = new StringBuilder(action);
+        if (params != null && !params.isEmpty()) {
+            boolean first = true;
+            for (java.util.Map.Entry<String, ?> e : params.entrySet()) {
+                if (e.getValue() == null) continue;
+                q.append(first ? "&" : "&")
+                 .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+                 .append("=")
+                 .append(java.net.URLEncoder.encode(String.valueOf(e.getValue()), StandardCharsets.UTF_8));
+                first = false;
+            }
+        }
+        return request("GET", q.toString(), null, true, true);
+    }
+
     public JSONObject post(String action, JSONObject body) throws Exception {
         return request("POST", action, body == null ? new JSONObject() : body, true);
     }
@@ -62,9 +78,22 @@ public final class PedalProApiClient {
     }
 
     private JSONObject request(String method, String action, JSONObject body, boolean retry419) throws Exception {
+        return request(method, action, body, retry419, false);
+    }
+
+    private JSONObject request(String method, String action, JSONObject body, boolean retry419, boolean actionContainsQuery) throws Exception {
         HttpURLConnection c = null;
         try {
-            URL url = new URL(BASE_URL + "?action=" + java.net.URLEncoder.encode(action, StandardCharsets.UTF_8));
+            String query;
+            if (actionContainsQuery) {
+                int amp = action.indexOf('&');
+                String name = amp >= 0 ? action.substring(0, amp) : action;
+                String rest = amp >= 0 ? action.substring(amp) : "";
+                query = "action=" + java.net.URLEncoder.encode(name, StandardCharsets.UTF_8) + rest;
+            } else {
+                query = "action=" + java.net.URLEncoder.encode(action, StandardCharsets.UTF_8);
+            }
+            URL url = new URL(BASE_URL + "?" + query);
             c = (HttpURLConnection) url.openConnection();
             c.setConnectTimeout(12000);
             c.setReadTimeout(18000);
@@ -95,7 +124,7 @@ public final class PedalProApiClient {
 
             if (status == 419 && retry419) {
                 bootstrap();
-                return request(method, action, body, false);
+                return request(method, action, body, false, actionContainsQuery);
             }
             if (status < 200 || status >= 300 || json.optBoolean("ok", true) == false) {
                 throw new IllegalStateException(json.optString("error", "HTTP " + status));
