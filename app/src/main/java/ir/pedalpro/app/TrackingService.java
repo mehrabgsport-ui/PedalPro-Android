@@ -437,6 +437,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private boolean startFusedLocationUpdates() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای ثبت مسیر فعال نیست.", false);
+            return false;
+        }
         try {
             int availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this);
             if (availability != ConnectionResult.SUCCESS) {
@@ -482,6 +487,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
     private synchronized void startLegacyLocationFallback() {
         if (legacyFallbackStarted || !prefs.getBoolean("active", false)) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای GPS مستقیم فعال نیست.", false);
+            return;
+        }
         legacyFallbackStarted = true;
         if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         long interval = Math.max(1000L, prefs.getLong("interval_ms", 1000L));
@@ -1135,8 +1145,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             c.setRequestProperty("Accept", "application/json");
             c.setRequestProperty("X-CSRF-Token", prefs.getString("csrf", ""));
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+            String cookie = effectiveSessionCookie();
+            if (!cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
 
             byte[] data = payload.toString().getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(data.length);
@@ -1204,6 +1214,24 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
         }
         return "";
+    }
+
+    private String nativeSessionCookie() {
+        try {
+            String cookie = getSharedPreferences("pedalpro_native_session", MODE_PRIVATE)
+                    .getString("cookie", "");
+            return cookie == null ? "" : cookie;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String effectiveSessionCookie() {
+        try {
+            String web = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
+            if (web != null && !web.isEmpty()) return web;
+        } catch (Throwable ignored) { }
+        return nativeSessionCookie();
     }
 
     private static String readBody(InputStream in) throws Exception {

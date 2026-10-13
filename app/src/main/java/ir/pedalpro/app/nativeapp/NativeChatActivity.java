@@ -1,0 +1,271 @@
+package ir.pedalpro.app.nativeapp;
+
+import android.app.Dialog;
+import android.content.Intent;
+import android.graphics.drawable.ColorDrawable;
+import android.view.Gravity;
+import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+public final class NativeChatActivity extends NativeScreenBase {
+    private int roomId;
+    private long lastId;
+    private int myUserId;
+    private JSONObject boot;
+    private JSONArray messages=new JSONArray();
+    private LinearLayout messagesHost;
+    private EditText input;
+    private TextView composeContext;
+    private int replyTo;
+    private int editId;
+    private boolean loading;
+    private String mode="group";
+
+    private final Runnable poll=new Runnable(){
+        @Override public void run(){
+            if(!isFinishing()&&roomId>0)livePoll();
+            main.postDelayed(this,3000);
+        }
+    };
+
+    @Override protected String screenTitle(){return "ارتباطات";}
+
+    @Override protected void onScreenReady(){
+        setSubtitle("چت گروهی و خصوصی · Native",MUTED);
+        content.addView(text("در حال دریافت گفتگوها…",13,false,MUTED),cardLp());
+        io.execute(()->{
+            try{
+                JSONObject b=api.get("chat_bootstrap");
+                JSONObject me=api.bootstrap().optJSONObject("user");
+                myUserId=me==null?0:me.optInt("id",0);
+                boot=b;
+                JSONObject group=b.optJSONObject("group");
+                roomId=group==null?0:group.optInt("id",0);
+                main.post(this::renderShell);
+            }catch(Exception e){main.post(()->{content.removeAllViews();addCard("خطا",e.getMessage());});}
+        });
+    }
+
+    private void renderShell(){
+        content.removeAllViews();
+
+        HorizontalScrollView tabsScroll=new HorizontalScrollView(this);
+        tabsScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout tabs=new LinearLayout(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        Button group=normal("گروه PedalPro");
+        group.setOnClickListener(v->openGroup());
+        tabs.addView(group,new LinearLayout.LayoutParams(dp(150),dp(48)));
+
+        JSONArray threads=boot==null?null:boot.optJSONArray("private_threads");
+        if(threads!=null)for(int i=0;i<threads.length();i++){
+            JSONObject t=threads.optJSONObject(i);if(t==null)continue;
+            String name=t.optString("other_name",t.optString("display_name","گفتگوی خصوصی"));
+            int other=t.optInt("other_id",0);
+            Button b=normal(name);
+            b.setOnClickListener(v->openPrivate(other));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(150),dp(48));lp.setMargins(dp(5),0,0,0);tabs.addView(b,lp);
+        }
+        Button newPrivate=normal("گفتگوی جدید");
+        newPrivate.setOnClickListener(v->showMemberPicker());
+        LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(dp(130),dp(48));np.setMargins(dp(5),0,0,0);tabs.addView(newPrivate,np);
+        tabsScroll.addView(tabs);content.addView(tabsScroll,cardLp());
+
+        LinearLayout messagesCard=card();
+        messagesHost=new LinearLayout(this);messagesHost.setOrientation(LinearLayout.VERTICAL);
+        messagesCard.addView(messagesHost);
+        content.addView(messagesCard,cardLp());
+
+        LinearLayout composer=card();
+        composeContext=text("",11,false,ACCENT);composeContext.setVisibility(View.GONE);
+        input=input("پیام…");input.setMinLines(2);
+        Button send=primary("ارسال");
+        Button cancel=normal("لغو پاسخ / ویرایش");cancel.setVisibility(View.GONE);
+        composer.addView(composeContext);composer.addView(input);composer.addView(send);composer.addView(cancel);
+        content.addView(composer,cardLp());
+
+        cancel.setOnClickListener(v->{replyTo=0;editId=0;composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);input.setText("");send.setText("ارسال");});
+        send.setOnClickListener(v->sendMessage(send,cancel));
+
+        loadMessages(true);
+        main.removeCallbacks(poll);main.postDelayed(poll,3000);
+        VazirmatnLoader.apply(this,content);
+    }
+
+    private void openGroup(){
+        JSONObject group=boot==null?null:boot.optJSONObject("group");
+        roomId=group==null?0:group.optInt("id",0);mode="group";lastId=0;messages=new JSONArray();
+        setSubtitle(group==null?"چت گروهی":group.optString("title","چت گروهی"),GREEN);
+        loadMessages(true);
+    }
+
+    private void openPrivate(int userId){
+        if(userId<=0)return;
+        setSubtitle("در حال بازکردن گفتگوی خصوصی…",MUTED);
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();q.put("user_id",userId);
+                JSONObject d=api.get("chat_open_private",q);
+                JSONObject room=d.optJSONObject("room"),other=d.optJSONObject("other");
+                int rid=room==null?0:room.optInt("id",0);
+                main.post(()->{
+                    if(rid<=0){toast("گفتگو ایجاد نشد.");return;}
+                    roomId=rid;mode="private";lastId=0;messages=new JSONArray();
+                    setSubtitle(other==null?"گفتگوی خصوصی":other.optString("display_name","گفتگوی خصوصی"),GREEN);
+                    loadMessages(true);
+                });
+            }catch(Exception e){main.post(()->toast(e.getMessage()));}
+        });
+    }
+
+    private void showMemberPicker(){
+        JSONArray members=boot==null?null:boot.optJSONArray("members");
+        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout box=card();box.addView(text("شروع گفتگوی خصوصی",18,true,TEXT));
+        ScrollView scroll=new ScrollView(this);LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
+        if(members!=null)for(int i=0;i<members.length();i++){
+            JSONObject m=members.optJSONObject(i);if(m==null||m.optInt("id",0)==myUserId)continue;
+            int id=m.optInt("id",0);Button b=normal(m.optString("display_name",m.optString("username","عضو")));
+            b.setOnClickListener(v->{d.dismiss();openPrivate(id);});list.addView(b);
+        }
+        scroll.addView(list);box.addView(scroll,new LinearLayout.LayoutParams(-1,dp(420)));d.setContentView(box);d.show();
+        Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=-1;lp.height=-2;lp.gravity=Gravity.BOTTOM;w.setAttributes(lp);}
+        VazirmatnLoader.apply(this,box);
+    }
+
+    private void loadMessages(boolean full){
+        if(roomId<=0||loading||messagesHost==null)return;
+        loading=true;
+        long after=full?0:lastId;
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();q.put("room_id",roomId);q.put("after",after);q.put("limit",full?160:80);
+                JSONObject d=api.get("chat_messages",q);
+                JSONArray items=d.optJSONArray("items");
+                if(full)messages=new JSONArray();
+                if(items!=null)for(int i=0;i<items.length();i++){JSONObject m=items.optJSONObject(i);if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}}
+                JSONArray receipts=d.optJSONArray("receipts");mergeReceipts(receipts);
+                main.post(this::renderMessages);
+            }catch(Exception e){main.post(()->{if(full){messagesHost.removeAllViews();messagesHost.addView(text("دریافت پیام‌ها انجام نشد: "+e.getMessage(),11,false,RED));}});}
+            finally{loading=false;}
+        });
+    }
+
+    private void livePoll(){
+        if(roomId<=0||loading)return;
+        io.execute(()->{
+            try{
+                JSONObject d=api.post("chat_live",new JSONObject().put("room_id",roomId).put("after",lastId).put("typing",false));
+                JSONArray items=d.optJSONArray("items");
+                if(items!=null)for(int i=0;i<items.length();i++){JSONObject m=items.optJSONObject(i);if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}}
+                JSONObject live=d.optJSONObject("live");if(live!=null)mergeReceipts(live.optJSONArray("receipts"));
+                main.post(this::renderMessages);
+            }catch(Exception ignored){}
+        });
+    }
+
+    private void mergeReceipts(JSONArray receipts){
+        if(receipts==null)return;
+        for(int i=0;i<receipts.length();i++){
+            JSONObject r=receipts.optJSONObject(i);if(r==null)continue;long id=r.optLong("id",0);
+            for(int j=0;j<messages.length();j++){JSONObject m=messages.optJSONObject(j);if(m!=null&&m.optLong("id",0)==id){try{if(r.has("delivered_at"))m.put("delivered_at",r.opt("delivered_at"));if(r.has("read_at"))m.put("read_at",r.opt("read_at"));}catch(Exception ignored){}break;}}
+        }
+    }
+
+    private void renderMessages(){
+        if(messagesHost==null)return;
+        messagesHost.removeAllViews();
+        if(messages.length()==0){messagesHost.addView(text("هنوز پیامی در این گفتگو نیست.",12,false,MUTED));return;}
+        for(int i=0;i<messages.length();i++){
+            JSONObject m=messages.optJSONObject(i);if(m==null)continue;
+            addMessageBubble(m);
+        }
+        VazirmatnLoader.apply(this,messagesHost);
+        content.postDelayed(()->{if(content.getParent() instanceof ScrollView)((ScrollView)content.getParent()).fullScroll(View.FOCUS_DOWN);},80);
+    }
+
+    private void addMessageBubble(JSONObject m){
+        boolean mine=m.optInt("sender_user_id",0)==myUserId;
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(mine?Gravity.END:Gravity.START);
+        LinearLayout bubble=accentCard(mine?ACCENT:STROKE);
+        LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-2,.86f);
+
+        String avatar=m.optString("sender_avatar","");
+        if(!avatar.isBlank()){
+            ImageView av=new ImageView(this);av.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,av,avatar,ir.pedalpro.app.R.drawable.pedalpro_app_icon);
+            bubble.addView(av,new LinearLayout.LayoutParams(dp(34),dp(34)));
+        }
+        if(m.optLong("reply_to_id",0)>0){
+            LinearLayout reply=card();reply.setPadding(dp(9),dp(7),dp(9),dp(7));
+            reply.addView(text("پاسخ به "+m.optString("reply_sender_name","پیام قبلی"),10,true,MUTED));
+            reply.addView(text(m.optString("reply_body","پیام در دسترس نیست"),10,false,MUTED));
+            bubble.addView(reply);
+        }
+        bubble.addView(text(mine?"شما":m.optString("sender_name","عضو"),11,true,mine?ACCENT:ORANGE));
+        bubble.addView(text(m.optBoolean("deleted_at",false)?"پیام حذف شده است.":m.optString("body",""),13,false,TEXT));
+        String meta=JalaliDate.format(m.optString("created_at",""),true);
+        if(m.opt("edited_at")!=null&&!String.valueOf(m.opt("edited_at")).isBlank())meta+=" · ویرایش‌شده";
+        if("private".equals(mode)&&mine){
+            if(!m.optString("read_at","").isBlank())meta+=" · خوانده شد";
+            else if(!m.optString("delivered_at","").isBlank())meta+=" · تحویل شد";
+            else meta+=" · ارسال شد";
+        }
+        bubble.addView(text(meta,9,false,MUTED));
+
+        if(!m.optString("body","").isBlank()){
+            LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);
+            Button reply=normal("پاسخ");reply.setOnClickListener(v->beginReply(m));
+            actions.addView(reply,new LinearLayout.LayoutParams(0,dp(42),1f));
+            if(mine){
+                Button edit=normal("ویرایش");edit.setOnClickListener(v->beginEdit(m));
+                Button del=normal("حذف");del.setOnClickListener(v->deleteMessage(m.optInt("id",0)));
+                actions.addView(edit,new LinearLayout.LayoutParams(0,dp(42),1f));actions.addView(del,new LinearLayout.LayoutParams(0,dp(42),1f));
+            }
+            bubble.addView(actions);
+        }
+        row.addView(bubble,bp);messagesHost.addView(row,cardLp());
+    }
+
+    private void beginReply(JSONObject m){replyTo=m.optInt("id",0);editId=0;composeContext.setVisibility(View.VISIBLE);composeContext.setText("پاسخ به "+m.optString("sender_name","پیام"));input.requestFocus();}
+    private void beginEdit(JSONObject m){editId=m.optInt("id",0);replyTo=0;composeContext.setVisibility(View.VISIBLE);composeContext.setText("ویرایش پیام");input.setText(m.optString("body",""));input.requestFocus();}
+
+    private void sendMessage(Button send,Button cancel){
+        String body=input.getText().toString().trim();if(body.isBlank()||roomId<=0)return;
+        send.setEnabled(false);
+        int rid=replyTo,eid=editId;
+        io.execute(()->{
+            try{
+                if(eid>0)api.post("chat_edit_message",new JSONObject().put("id",eid).put("body",body));
+                else api.post("chat_send",new JSONObject().put("room_id",roomId).put("body",body).put("reply_to_id",rid).put("client_token",UUID.randomUUID().toString()));
+                main.post(()->{input.setText("");replyTo=0;editId=0;composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);send.setEnabled(true);lastId=0;loadMessages(true);});
+            }catch(Exception e){main.post(()->{send.setEnabled(true);toast(e.getMessage());});}
+        });
+    }
+
+    private void deleteMessage(int id){
+        if(id<=0)return;
+        io.execute(()->{
+            try{api.post("chat_delete_message",new JSONObject().put("id",id));main.post(()->{lastId=0;loadMessages(true);});}
+            catch(Exception e){main.post(()->toast(e.getMessage()));}
+        });
+    }
+
+    @Override protected void onDestroy(){main.removeCallbacks(poll);super.onDestroy();}
+}

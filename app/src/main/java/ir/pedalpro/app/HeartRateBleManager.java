@@ -35,12 +35,17 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class HeartRateBleManager {
+    public interface Listener {
+        void onStatus(String json);
+        void onHeartRate(String json);
+    }
     private static final UUID HR_SERVICE = UUID.fromString("0000180d-0000-1000-8000-00805f9b34fb");
     private static final UUID HR_MEASUREMENT = UUID.fromString("00002a37-0000-1000-8000-00805f9b34fb");
     private static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
     private final Activity activity;
     private final WebView webView;
+    private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<String, DeviceItem> devices = new LinkedHashMap<>();
     private BluetoothLeScanner scanner;
@@ -54,8 +59,17 @@ public final class HeartRateBleManager {
     private String lastSource = "ble";
 
     public HeartRateBleManager(Activity activity, WebView webView) {
+        this(activity, webView, null);
+    }
+
+    public HeartRateBleManager(Activity activity, Listener listener) {
+        this(activity, null, listener);
+    }
+
+    private HeartRateBleManager(Activity activity, WebView webView, Listener listener) {
         this.activity = activity;
         this.webView = webView;
+        this.listener = listener;
     }
 
     public boolean hasBlePermissions() {
@@ -222,7 +236,10 @@ public final class HeartRateBleManager {
             if (message != null) o.put("message", message);
         } catch (Throwable ignored) { }
         String payload = o.toString();
-        main.post(() -> { if (webView != null) try { webView.evaluateJavascript("window.PedalProHeartRateStatus&&window.PedalProHeartRateStatus(" + JSONObject.quote(payload) + ");", null); } catch (Throwable ignored) { } });
+        main.post(() -> {
+            if (listener != null) try { listener.onStatus(payload); } catch (Throwable ignored) { }
+            if (webView != null) try { webView.evaluateJavascript("window.PedalProHeartRateStatus&&window.PedalProHeartRateStatus(" + JSONObject.quote(payload) + ");", null); } catch (Throwable ignored) { }
+        });
     }
 
     private void emitHeartRate() {
@@ -231,7 +248,10 @@ public final class HeartRateBleManager {
             o.put("bpm", bpm); o.put("deviceName", deviceName); o.put("deviceAddress", deviceAddress); o.put("source", lastSource); o.put("timestamp", lastSampleAt);
         } catch (Throwable ignored) { }
         String payload = o.toString();
-        main.post(() -> { if (webView != null) try { webView.evaluateJavascript("window.PedalProHeartRateNative&&window.PedalProHeartRateNative(" + JSONObject.quote(payload) + ");", null); } catch (Throwable ignored) { } });
+        main.post(() -> {
+            if (listener != null) try { listener.onHeartRate(payload); } catch (Throwable ignored) { }
+            if (webView != null) try { webView.evaluateJavascript("window.PedalProHeartRateNative&&window.PedalProHeartRateNative(" + JSONObject.quote(payload) + ");", null); } catch (Throwable ignored) { }
+        });
     }
 
     private static final class DeviceItem {
