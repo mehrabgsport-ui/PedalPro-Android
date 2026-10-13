@@ -128,6 +128,7 @@ public final class NativeMainActivity extends Activity {
     private ScrollView mainScroll;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
+    private boolean serverOnline = false;
     private NativeRouteView activeRideRouteView;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
@@ -280,6 +281,7 @@ public final class NativeMainActivity extends Activity {
             try {
                 JSONObject d = api.bootstrap();
                 bootstrap = d;
+                serverOnline = true;
                 activeRide = d.optJSONObject("my_active_ride");
                 if (activeRide != null) {
                     rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
@@ -302,6 +304,7 @@ public final class NativeMainActivity extends Activity {
                 });
             } catch (Exception e) {
                 main.post(() -> {
+                    serverOnline = false;
                     setTopStatus("خطا در اتصال به سرور", RED);
                     if (firstLaunch) showError("ارتباط با PedalPro برقرار نشد.", e.getMessage(), () -> refreshBootstrap(true));
                 });
@@ -2823,99 +2826,143 @@ public final class NativeMainActivity extends Activity {
         panel.setPadding(dp(12), dp(18), dp(12), dp(12));
         GradientDrawable drawerBg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
-        drawerBg.setStroke(dp(1), Color.argb(54, 255, 255, 255));
+                new int[]{Color.argb(240, 11, 41, 64), Color.argb(247, 4, 22, 37)});
+        drawerBg.setCornerRadii(new float[]{dp(28),dp(28),0,0,0,0,dp(28),dp(28)});
+        drawerBg.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         panel.setBackground(drawerBg);
-
-        ScrollView sc = new ScrollView(this);
-        sc.setFillViewport(true);
-        sc.setVerticalScrollBarEnabled(false);
-
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        panel.setElevation(dp(20));
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        body.addView(logo, new LinearLayout.LayoutParams(-1, dp(116)));
+        logo.setContentDescription("PedalPro");
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(-1, dp(92));
+        logoLp.setMargins(0, 0, 0, dp(10));
+        panel.addView(logo, logoLp);
 
-        body.addView(drawerItem(PedalIconView.Icon.HOME, "صفحه اصلی", () -> { d.dismiss(); showHome(); }, "dashboard".equals(currentPage)));
-        body.addView(drawerItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها و برنامه‌ها", () -> { d.dismiss(); showActivities(); }, "activities".equals(currentPage)));
-        body.addView(drawerItem(PedalIconView.Icon.LOCATION, "مسیرهای GPS", () -> { d.dismiss(); showRoutes(); }, "routes".equals(currentPage)));
+        ScrollView sc = new ScrollView(this);
+        sc.setFillViewport(true);
+        sc.setVerticalScrollBarEnabled(false);
+        sc.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
 
-        body.addView(drawerSection("رکاب‌زنی", PedalIconView.Icon.RIDE,
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        body.setPadding(dp(6), 0, dp(6), dp(18));
+
+        body.addView(drawerItem("⌂", "صفحه اصلی", () -> { d.dismiss(); showHome(); }, "dashboard".equals(currentPage)));
+        body.addView(drawerItem("🗓️", "فعالیت‌ها و برنامه‌ها", () -> { d.dismiss(); showActivities(); }, "activities".equals(currentPage)));
+        body.addView(drawerItem("📍", "مسیرهای GPS", () -> { d.dismiss(); showRoutes(); }, "routes".equals(currentPage)));
+
+        body.addView(drawerSection("رکاب‌زنی", "🚴",
+                new String[]{"▶", "⌁", "◎", "◉"},
                 new String[]{"شروع / ادامه رکاب‌زنی", "سنسورهای Cadence / Power", "رسیدن به گروه در حال حرکت", "اشتراک زنده Beacon"},
                 new Runnable[]{
                         () -> { d.dismiss(); showRide(); },
-                        () -> { d.dismiss(); showSensors(); },
-                        () -> { d.dismiss(); openGroupNavigation(); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSafetyActivity.class)); }
+                        () -> { d.dismiss(); openAdvancedSection("sensors"); },
+                        () -> { d.dismiss(); openAdvancedSection("group"); },
+                        () -> { d.dismiss(); openAdvancedSection("beacon"); }
                 }, true));
 
-        body.addView(drawerSection("مسیرها و اکتشاف", PedalIconView.Icon.ROUTE,
+        body.addView(drawerSection("مسیرها و اکتشاف", "🧭",
+                new String[]{"⌖", "✦", "▰", "◫", "◩", "⬇", "◈"},
                 new String[]{"مسیرهای من", "مسیرهای پیشنهادی", "Segments", "Heatmap شخصی / باشگاه", "Heatmap عمومی PedalPro", "مسیرهای آفلاین", "Flyover"},
                 new Runnable[]{
                         () -> { d.dismiss(); showRoutes(); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSocialActivity.class)); },
+                        () -> { d.dismiss(); openAdvancedSection("recommend"); },
                         () -> { d.dismiss(); openAdvancedSection("segments"); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeHeatmapActivity.class)); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeHeatmapActivity.class)); },
+                        () -> { d.dismiss(); openAdvancedSection("heatmap"); },
+                        () -> { d.dismiss(); openAdvancedSection("globalheat"); },
                         () -> { d.dismiss(); openAdvancedSection("offline"); },
                         () -> { d.dismiss(); openAdvancedSection("flyover"); }
                 }, false));
 
-        body.addView(drawerSection("باشگاه", PedalIconView.Icon.GROUP,
+        body.addView(drawerSection("باشگاه", "👥",
+                new String[]{"👤", "🏆", "🥇", "⌕", "▧"},
                 new String[]{"اعضا", "چالش‌ها", "رتبه‌بندی هفتگی", "کشف برنامه‌ها", "گالری"},
                 new Runnable[]{
                         () -> { d.dismiss(); showClub(); },
                         () -> { d.dismiss(); showChallenges(); },
                         () -> { d.dismiss(); openAdvancedSection("club"); },
-                        () -> { d.dismiss(); showActivities(); },
+                        () -> { d.dismiss(); openAdvancedSection("discover"); },
                         () -> { d.dismiss(); showGalleryPage(); }
                 }, false));
 
-        body.addView(drawerSection("ارتباطات", PedalIconView.Icon.CHAT,
-                new String[]{"چت‌روم", "فید اجتماعی / Follow / Kudos", "مشاور هوشمند"},
-                new Runnable[]{
-                        () -> { d.dismiss(); showGroupChat(); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSocialActivity.class)); },
-                        () -> { d.dismiss(); showAiAdvisor(); }
-                }, false));
+        if (signedIn()) {
+            body.addView(drawerSection("ارتباطات", "💬",
+                    new String[]{"💬", "♥", "✦"},
+                    new String[]{"چت‌روم", "فید اجتماعی / Follow / Kudos", "مشاور هوشمند"},
+                    new Runnable[]{
+                            () -> { d.dismiss(); showGroupChat(); },
+                            () -> { d.dismiss(); openAdvancedSection("social"); },
+                            () -> { d.dismiss(); showAiAdvisor(); }
+                    }, false));
+        } else {
+            body.addView(drawerSection("ارتباطات", "💬",
+                    new String[]{"♥"},
+                    new String[]{"فید اجتماعی / Follow / Kudos"},
+                    new Runnable[]{() -> { d.dismiss(); openAdvancedSection("social"); }}, false));
+        }
 
-        body.addView(drawerSection("عملکرد من", PedalIconView.Icon.CHART,
-                new String[]{"آمار و تحلیل", "Training Load / Fitness", "Replay فعالیت", "ارتفاع و آب‌وهوا", "وضعیت جسمانی", "دوچرخه‌های من", "سرویس و نگهداری"},
-                new Runnable[]{
-                        () -> { d.dismiss(); showPerformance(); },
-                        () -> { d.dismiss(); openAdvancedSection("training"); },
-                        () -> { d.dismiss(); openAdvancedSection("replay"); },
-                        () -> { d.dismiss(); openAdvancedSection("analysis"); },
-                        () -> { d.dismiss(); showFitness(); },
-                        () -> { d.dismiss(); showBikes(); },
-                        () -> { d.dismiss(); openAdvancedSection("maintenance"); }
-                }, false));
+        if (signedIn()) {
+            body.addView(drawerSection("عملکرد من", "📈",
+                    new String[]{"▥", "↗", "▶", "⌁", "♥", "🚲", "⚒"},
+                    new String[]{"آمار و تحلیل", "Training Load / Fitness", "Replay فعالیت", "ارتفاع و آب‌وهوا", "وضعیت جسمانی", "دوچرخه‌های من", "سرویس و نگهداری"},
+                    new Runnable[]{
+                            () -> { d.dismiss(); showPerformance(); },
+                            () -> { d.dismiss(); openAdvancedSection("training"); },
+                            () -> { d.dismiss(); openAdvancedSection("replay"); },
+                            () -> { d.dismiss(); openAdvancedSection("analysis"); },
+                            () -> { d.dismiss(); showFitness(); },
+                            () -> { d.dismiss(); showBikes(); },
+                            () -> { d.dismiss(); openAdvancedSection("maintenance"); }
+                    }, false));
+        } else {
+            body.addView(drawerSection("عملکرد من", "📈",
+                    new String[]{"↗", "▶", "⌁", "⚒"},
+                    new String[]{"Training Load / Fitness", "Replay فعالیت", "ارتفاع و آب‌وهوا", "سرویس و نگهداری"},
+                    new Runnable[]{
+                            () -> { d.dismiss(); openAdvancedSection("training"); },
+                            () -> { d.dismiss(); openAdvancedSection("replay"); },
+                            () -> { d.dismiss(); openAdvancedSection("analysis"); },
+                            () -> { d.dismiss(); openAdvancedSection("maintenance"); }
+                    }, false));
+        }
 
-        body.addView(drawerSection("ایمنی و حریم خصوصی", PedalIconView.Icon.SHIELD,
+        body.addView(drawerSection("ایمنی و حریم خصوصی", "🛡️",
+                new String[]{"SOS", "◉", "◌"},
                 new String[]{"SOS و مخاطبین اضطراری", "Beacon", "Privacy Zones"},
                 new Runnable[]{
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSafetyActivity.class)); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSafetyActivity.class)); },
-                        () -> { d.dismiss(); startActivity(new Intent(this, NativeSafetyActivity.class)); }
+                        () -> { d.dismiss(); openAdvancedSection("safety"); },
+                        () -> { d.dismiss(); openAdvancedSection("beacon"); },
+                        () -> { d.dismiss(); openAdvancedSection("privacy"); }
                 }, false));
 
-        body.addView(drawerSection("حساب من", PedalIconView.Icon.USER,
-                new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
-                new Runnable[]{
-                        () -> { d.dismiss(); showProfileEditor(); },
-                        () -> { d.dismiss(); showPhoneSettingsPage(); },
-                        () -> { d.dismiss(); showAppVersionPage(); },
-                        () -> { d.dismiss(); showAboutGroupPage(); },
-                        () -> { d.dismiss(); showGuidePage(); }
-                }, false));
+        if (signedIn()) {
+            body.addView(drawerSection("حساب من", "👤",
+                    new String[]{"👤", "⚙", "⬆", "ⓘ", "📘"},
+                    new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
+                    new Runnable[]{
+                            () -> { d.dismiss(); showProfileEditor(); },
+                            () -> { d.dismiss(); showPhoneSettingsPage(); },
+                            () -> { d.dismiss(); showAppVersionPage(); },
+                            () -> { d.dismiss(); showAboutGroupPage(); },
+                            () -> { d.dismiss(); showGuidePage(); }
+                    }, false));
+        } else {
+            body.addView(drawerSection("حساب من", "👤",
+                    new String[]{"ⓘ", "📘"},
+                    new String[]{"درباره ما", "راهنمای استفاده"},
+                    new Runnable[]{
+                            () -> { d.dismiss(); showAboutGroupPage(); },
+                            () -> { d.dismiss(); showGuidePage(); }
+                    }, false));
+        }
 
         boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
         if (admin) {
-            body.addView(drawerSection("مدیریت", PedalIconView.Icon.SETTINGS,
+            body.addView(drawerSection("مدیریت", "⚙",
+                    new String[]{"⚙", "✉"},
                     new String[]{"تنظیمات سایت", "پیامک"},
                     new Runnable[]{
                             () -> { d.dismiss(); showSiteSettingsPage(); },
@@ -2923,10 +2970,9 @@ public final class NativeMainActivity extends Activity {
                     }, false));
         }
 
-
-
         sc.addView(body);
         panel.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        panel.addView(drawerConnectionPill(), drawerConnectionPillLp());
 
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
                 Math.min(dp(350), (int) (getResources().getDisplayMetrics().widthPixels * .86f)),
@@ -2963,7 +3009,41 @@ public final class NativeMainActivity extends Activity {
         VazirmatnLoader.apply(this, panel);
     }
 
-    private View drawerItem(PedalIconView.Icon icon, String label, Runnable run, boolean active) {
+    private View drawerConnectionPill() {
+        LinearLayout pill = new LinearLayout(this);
+        pill.setOrientation(LinearLayout.HORIZONTAL);
+        pill.setGravity(Gravity.CENTER);
+        pill.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        pill.setPadding(dp(12), dp(9), dp(12), dp(9));
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(245, 7, 31, 48), Color.argb(245, 5, 23, 36)});
+        bg.setCornerRadius(dp(999));
+        bg.setStroke(dp(1), Color.argb(77, 108, 179, 209));
+        pill.setBackground(bg);
+        pill.setElevation(dp(8));
+
+        TextView dot = new TextView(this);
+        GradientDrawable dotBg = new GradientDrawable();
+        dotBg.setShape(GradientDrawable.OVAL);
+        dotBg.setColor(serverOnline ? GREEN : RED);
+        dot.setBackground(dotBg);
+
+        TextView status = text(serverOnline ? "متصل به سرور" : "اتصال سرور قطع — ذخیره محلی", 12, false, Color.rgb(213, 226, 238));
+        pill.addView(status);
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(9), dp(9));
+        dotLp.setMargins(dp(8), 0, 0, 0);
+        pill.addView(dot, dotLp);
+        return pill;
+    }
+
+    private LinearLayout.LayoutParams drawerConnectionPillLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(40));
+        lp.setMargins(dp(4), dp(8), dp(4), dp(2));
+        return lp;
+    }
+
+    private View drawerItem(String glyph, String label, Runnable run, boolean active) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
@@ -2978,13 +3058,14 @@ public final class NativeMainActivity extends Activity {
         row.setContentDescription(label);
 
         int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
-        TextView tv = text(label, 13, true, fg);
-        row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView icon = text(glyph, 16, false, fg);
+        icon.setGravity(Gravity.CENTER);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
-        PedalIconView iv = new PedalIconView(this, icon, fg);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(24), dp(24));
-        ip.setMargins(dp(10), 0, 0, 0);
-        row.addView(iv, ip);
+        TextView tv = text(label, 13, true, fg);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.setMargins(dp(10), 0, 0, 0);
+        row.addView(tv, tlp);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(46));
         lp.setMargins(0, dp(3), 0, 0);
@@ -2993,7 +3074,7 @@ public final class NativeMainActivity extends Activity {
         return row;
     }
 
-    private View drawerSection(String title, PedalIconView.Icon icon, String[] labels, Runnable[] actions, boolean startOpen) {
+    private View drawerSection(String title, String groupGlyph, String[] itemGlyphs, String[] labels, Runnable[] actions, boolean startOpen) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setBackground(roundRect(Color.argb(6, 255, 255, 255), 15, Color.argb(18, 255, 255, 255)));
@@ -3003,29 +3084,49 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        head.setGravity(Gravity.CENTER_VERTICAL);
         head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         head.setPadding(dp(12), 0, dp(12), 0);
-        PedalIconView sectionIcon = new PedalIconView(this, icon, Color.rgb(220, 234, 243));
+
+        TextView sectionIcon = text(groupGlyph, 16, false, Color.rgb(220, 234, 243));
+        sectionIcon.setGravity(Gravity.CENTER);
         TextView titleView = text(title, 13, true, Color.rgb(220, 234, 243));
-        PedalIconView chevron = new PedalIconView(this, PedalIconView.Icon.CHEVRON, Color.rgb(128, 164, 187));
-        head.addView(chevron, new LinearLayout.LayoutParams(dp(18), dp(18)));
-        head.addView(titleView, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView chevron = text(startOpen ? "⌃" : "⌄", 15, false, Color.rgb(128, 164, 187));
+        chevron.setGravity(Gravity.CENTER);
+
         head.addView(sectionIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        titleLp.setMargins(dp(9), 0, 0, 0);
+        head.addView(titleView, titleLp);
+        head.addView(chevron, new LinearLayout.LayoutParams(dp(22), dp(22)));
         host.addView(head, new LinearLayout.LayoutParams(-1, dp(50)));
 
         LinearLayout subs = new LinearLayout(this);
         subs.setOrientation(LinearLayout.VERTICAL);
         subs.setPadding(dp(7), 0, dp(7), dp(8));
         subs.setVisibility(startOpen ? View.VISIBLE : View.GONE);
-        chevron.setRotation(startOpen ? 90 : 0);
 
         for (int i = 0; i < labels.length; i++) {
             final Runnable action = actions[i];
-            TextView sub = text(labels[i], 12, false, Color.rgb(220, 234, 243));
-            sub.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            LinearLayout sub = new LinearLayout(this);
+            sub.setOrientation(LinearLayout.HORIZONTAL);
+            sub.setGravity(Gravity.CENTER_VERTICAL);
+            sub.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
             sub.setPadding(dp(10), 0, dp(10), 0);
             sub.setBackground(roundRect(Color.TRANSPARENT, 11, 0));
+            sub.setClickable(true);
+            sub.setFocusable(true);
+
+            String glyph = itemGlyphs != null && i < itemGlyphs.length ? itemGlyphs[i] : "";
+            TextView gi = text(glyph, 16, false, Color.rgb(220, 234, 243));
+            gi.setGravity(Gravity.CENTER);
+            sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+            TextView label = text(labels[i], 12, false, Color.rgb(220, 234, 243));
+            LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(0, -2, 1f);
+            labelLp.setMargins(dp(9), 0, 0, 0);
+            sub.addView(label, labelLp);
+
             LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(42));
             sp.setMargins(0, dp(3), 0, 0);
             subs.addView(sub, sp);
@@ -3041,7 +3142,7 @@ public final class NativeMainActivity extends Activity {
             } else {
                 subs.setVisibility(View.GONE);
             }
-            chevron.animate().rotation(open ? 90 : 0).setDuration(120).start();
+            chevron.setText(open ? "⌃" : "⌄");
         });
 
         host.addView(subs);
@@ -3056,6 +3157,10 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void openAdvancedSection(String section) {
+        if (!signedIn()) {
+            showAuthDialog("login");
+            return;
+        }
         Intent i = new Intent(this, NativeAdvancedActivity.class);
         i.putExtra("section", section == null ? "" : section);
         startActivity(i);
