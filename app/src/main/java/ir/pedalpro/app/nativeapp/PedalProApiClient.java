@@ -31,23 +31,6 @@ public final class PedalProApiClient {
         return request("GET", action, null, true);
     }
 
-    public JSONObject get(String action, java.util.Map<String, String> query) throws Exception {
-        return request("GET", actionWithQuery(action, query), null, true);
-    }
-
-    private String actionWithQuery(String action, java.util.Map<String, String> query) {
-        StringBuilder out = new StringBuilder(action == null ? "" : action);
-        if (query != null) {
-            for (java.util.Map.Entry<String, String> e : query.entrySet()) {
-                out.append("&")
-                        .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8.name()))
-                        .append("=")
-                        .append(java.net.URLEncoder.encode(e.getValue() == null ? "" : e.getValue(), StandardCharsets.UTF_8.name()));
-            }
-        }
-        return out.toString();
-    }
-
     public JSONObject get(String action, java.util.Map<String, ?> params) throws Exception {
         StringBuilder q = new StringBuilder(action);
         if (params != null && !params.isEmpty()) {
