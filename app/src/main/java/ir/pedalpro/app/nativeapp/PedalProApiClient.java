@@ -40,9 +40,9 @@ public final class PedalProApiClient {
         if (query != null) {
             for (java.util.Map.Entry<String, String> e : query.entrySet()) {
                 out.append("&")
-                        .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+                        .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8.name()))
                         .append("=")
-                        .append(java.net.URLEncoder.encode(e.getValue() == null ? "" : e.getValue(), StandardCharsets.UTF_8));
+                        .append(java.net.URLEncoder.encode(e.getValue() == null ? "" : e.getValue(), StandardCharsets.UTF_8.name()));
             }
         }
         return out.toString();
@@ -55,9 +55,9 @@ public final class PedalProApiClient {
             for (java.util.Map.Entry<String, ?> e : params.entrySet()) {
                 if (e.getValue() == null) continue;
                 q.append(first ? "&" : "&")
-                 .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+                 .append(java.net.URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8.name()))
                  .append("=")
-                 .append(java.net.URLEncoder.encode(String.valueOf(e.getValue()), StandardCharsets.UTF_8));
+                 .append(java.net.URLEncoder.encode(String.valueOf(e.getValue()), StandardCharsets.UTF_8.name()));
                 first = false;
             }
         }
@@ -106,9 +106,9 @@ public final class PedalProApiClient {
                 int amp = action.indexOf('&');
                 String name = amp >= 0 ? action.substring(0, amp) : action;
                 String rest = amp >= 0 ? action.substring(amp) : "";
-                query = "action=" + java.net.URLEncoder.encode(name, StandardCharsets.UTF_8) + rest;
+                query = "action=" + java.net.URLEncoder.encode(name, StandardCharsets.UTF_8.name()) + rest;
             } else {
-                query = "action=" + java.net.URLEncoder.encode(action, StandardCharsets.UTF_8);
+                query = "action=" + java.net.URLEncoder.encode(action, StandardCharsets.UTF_8.name());
             }
             URL url = new URL(BASE_URL + "?" + query);
             c = (HttpURLConnection) url.openConnection();
