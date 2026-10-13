@@ -34,6 +34,10 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class CyclingSensorManager {
+    public interface Listener {
+        void onStatus(String json);
+        void onMeasurement(String json);
+    }
     private static final UUID CSC_SERVICE = UUID.fromString("00001816-0000-1000-8000-00805f9b34fb");
     private static final UUID CSC_MEASUREMENT = UUID.fromString("00002a5b-0000-1000-8000-00805f9b34fb");
     private static final UUID POWER_SERVICE = UUID.fromString("00001818-0000-1000-8000-00805f9b34fb");
@@ -42,6 +46,7 @@ public final class CyclingSensorManager {
 
     private final Activity activity;
     private final WebView webView;
+    private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Map<String, DeviceItem> devices = new LinkedHashMap<>();
     private BluetoothLeScanner scanner;
@@ -57,8 +62,17 @@ public final class CyclingSensorManager {
     private int prevCrankEvent = -1;
 
     public CyclingSensorManager(Activity activity, WebView webView) {
+        this(activity, webView, null);
+    }
+
+    public CyclingSensorManager(Activity activity, Listener listener) {
+        this(activity, null, listener);
+    }
+
+    private CyclingSensorManager(Activity activity, WebView webView, Listener listener) {
         this.activity = activity;
         this.webView = webView;
+        this.listener = listener;
     }
 
     public boolean hasPermissions() {
@@ -311,10 +325,14 @@ public final class CyclingSensorManager {
         } catch (Throwable ignored) { }
         final String payload = o.toString();
         main.post(() -> {
-            if (webView == null) return;
-            try {
-                webView.evaluateJavascript("window.PedalProCyclingSensorNative&&window.PedalProCyclingSensorNative(" + JSONObject.quote(payload) + ");", null);
-            } catch (Throwable ignored) { }
+            if (listener != null) {
+                try { listener.onMeasurement(payload); } catch (Throwable ignored) { }
+            }
+            if (webView != null) {
+                try {
+                    webView.evaluateJavascript("window.PedalProCyclingSensorNative&&window.PedalProCyclingSensorNative(" + JSONObject.quote(payload) + ");", null);
+                } catch (Throwable ignored) { }
+            }
         });
     }
 
@@ -332,10 +350,14 @@ public final class CyclingSensorManager {
         } catch (Throwable ignored) { }
         final String payload = o.toString();
         main.post(() -> {
-            if (webView == null) return;
-            try {
-                webView.evaluateJavascript("window.PedalProCyclingSensorStatus&&window.PedalProCyclingSensorStatus(" + JSONObject.quote(payload) + ");", null);
-            } catch (Throwable ignored) { }
+            if (listener != null) {
+                try { listener.onStatus(payload); } catch (Throwable ignored) { }
+            }
+            if (webView != null) {
+                try {
+                    webView.evaluateJavascript("window.PedalProCyclingSensorStatus&&window.PedalProCyclingSensorStatus(" + JSONObject.quote(payload) + ");", null);
+                } catch (Throwable ignored) { }
+            }
         });
     }
 
