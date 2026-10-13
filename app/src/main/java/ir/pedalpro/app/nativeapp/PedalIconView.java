@@ -14,7 +14,8 @@ public final class PedalIconView extends View {
     public enum Icon {
         HOME, CALENDAR, RIDE, ROUTE, USER, MENU, SETTINGS, GROUP, CHAT, CHART,
         SHIELD, SENSOR, BEACON, PLUS, REFRESH, BACK, PLAY, PAUSE, CLOCK,
-        LOCATION, DISTANCE, CLOSE, EDIT, SHARE, DETAILS, SUN, CLOUD, RAIN, CHEVRON
+        LOCATION, DISTANCE, CLOSE, EDIT, SHARE, DETAILS, SUN, CLOUD, RAIN, CHEVRON,
+        GALLERY, HOME_MEMBERS, REPORT_PROGRAMS, REPORT_MEMBERS, REPORT_DISTANCE
     }
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -109,6 +110,42 @@ public final class PedalIconView extends View {
                 c.drawLine(cx-r*.55f,cy+r*.55f,cx-r*.7f,cy+r*.95f,p);
                 c.drawLine(cx,cy+r*.55f,cx-r*.15f,cy+r*.95f,p);
                 c.drawLine(cx+r*.55f,cy+r*.55f,cx+r*.4f,cy+r*.95f,p);break;
+            case GALLERY: {
+                float k=s/64f, ox=cx-s/2f, oy=cy-s/2f;
+                c.drawRoundRect(ox+10*k,oy+14*k,ox+54*k,oy+48*k,5*k,5*k,p);
+                path.moveTo(ox+16*k,oy+42*k); path.lineTo(ox+28*k,oy+30*k); path.lineTo(ox+37*k,oy+39*k); path.lineTo(ox+44*k,oy+32*k); path.lineTo(ox+48*k,oy+36*k); c.drawPath(path,p);
+                p.setStyle(Paint.Style.FILL); c.drawCircle(ox+22*k,oy+23*k,3.2f*k,p); p.setStyle(Paint.Style.STROKE);
+                break;
+            }
+            case HOME_MEMBERS: {
+                float k=s/64f, ox=cx-s/2f, oy=cy-s/2f;
+                c.drawCircle(ox+32*k,oy+20*k,8*k,p);
+                path.moveTo(ox+18*k,oy+46*k); path.cubicTo(ox+18*k,oy+38*k,ox+24*k,oy+33*k,ox+32*k,oy+33*k); path.cubicTo(ox+40*k,oy+33*k,ox+46*k,oy+38*k,ox+46*k,oy+46*k); c.drawPath(path,p);
+                c.drawCircle(ox+18*k,oy+25*k,5.5f*k,p); c.drawCircle(ox+46*k,oy+25*k,5.5f*k,p);
+                path.reset(); path.moveTo(ox+8*k,oy+46*k); path.cubicTo(ox+8*k,oy+40.5f*k,ox+12.5f*k,oy+36.5f*k,ox+18.5f*k,oy+36.5f*k);
+                path.moveTo(ox+56*k,oy+46*k); path.cubicTo(ox+56*k,oy+40.5f*k,ox+51.5f*k,oy+36.5f*k,ox+45.5f*k,oy+36.5f*k); c.drawPath(path,p);
+                break;
+            }
+            case REPORT_PROGRAMS: {
+                float k=s/64f, ox=cx-s/2f, oy=cy-s/2f;
+                c.drawCircle(ox+17*k,oy+42*k,6*k,p); c.drawCircle(ox+31*k,oy+21*k,6*k,p); c.drawCircle(ox+48*k,oy+39*k,6*k,p);
+                c.drawLine(ox+21*k,oy+37*k,ox+28*k,oy+26*k,p); c.drawLine(ox+36*k,oy+24*k,ox+44*k,oy+34*k,p); c.drawLine(ox+23*k,oy+43*k,ox+42*k,oy+43*k,p);
+                break;
+            }
+            case REPORT_MEMBERS: {
+                float k=s/64f, ox=cx-s/2f, oy=cy-s/2f;
+                c.drawCircle(ox+32*k,oy+21*k,8*k,p); c.drawCircle(ox+18*k,oy+26*k,6*k,p); c.drawCircle(ox+46*k,oy+26*k,6*k,p);
+                path.moveTo(ox+20*k,oy+50*k); path.cubicTo(ox+20*k,oy+41*k,ox+25*k,oy+35*k,ox+32*k,oy+35*k); path.cubicTo(ox+39*k,oy+35*k,ox+44*k,oy+41*k,ox+44*k,oy+50*k);
+                path.moveTo(ox+7*k,oy+49*k); path.cubicTo(ox+7*k,oy+42*k,ox+11*k,oy+37*k,ox+18*k,oy+37*k);
+                path.moveTo(ox+57*k,oy+49*k); path.cubicTo(ox+57*k,oy+42*k,ox+53*k,oy+37*k,ox+46*k,oy+37*k); c.drawPath(path,p);
+                break;
+            }
+            case REPORT_DISTANCE: {
+                float k=s/64f, ox=cx-s/2f, oy=cy-s/2f;
+                path.moveTo(ox+8*k,oy+49*k); path.lineTo(ox+25*k,oy+20*k); path.lineTo(ox+36*k,oy+38*k); path.lineTo(ox+44*k,oy+26*k); path.lineTo(ox+56*k,oy+49*k); path.close(); c.drawPath(path,p);
+                c.drawCircle(ox+31*k,oy+40*k,3*k,p);
+                break;
+            }
         }
     }
     private void drawCloud(Canvas c,float cx,float cy,float r){
