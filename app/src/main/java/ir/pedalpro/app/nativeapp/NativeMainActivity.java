@@ -1663,7 +1663,7 @@ public final class NativeMainActivity extends Activity {
 
     private void startGpsPreflight(TextView state, TextView accuracy, Button start, Button check) {
         if (gpsChecking) return;
-        if (!hasFineLocation()) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_LOCATION);
             state.setText("برای ادامه دسترسی دقیق Location را فعال کنید.");
             state.setTextColor(ORANGE);
@@ -2291,7 +2291,8 @@ public final class NativeMainActivity extends Activity {
         JSONObject event=nextUpcomingEvent();
         double elat=event==null?Double.NaN:event.optDouble("meeting_lat",Double.NaN),elng=event==null?Double.NaN:event.optDouble("meeting_lng",Double.NaN);
         if(Double.isFinite(elat)&&Double.isFinite(elng)){callback.ready(elat,elng);return;}
-        if(hasFineLocation()){
+        if(ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED){
             CancellationTokenSource token=new CancellationTokenSource();
             LocationServices.getFusedLocationProviderClient(this).getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY,token.getToken())
                     .addOnSuccessListener(this,loc->{if(loc!=null)callback.ready(loc.getLatitude(),loc.getLongitude());else callback.ready(36.2605,59.6168);})
@@ -2597,8 +2598,7 @@ public final class NativeMainActivity extends Activity {
         IntentFilter filter = new IntentFilter();
         filter.addAction(TrackingService.ACTION_UPDATE);
         filter.addAction(TrackingService.ACTION_STATUS);
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(trackingReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        else registerReceiver(trackingReceiver, filter);
+        ContextCompat.registerReceiver(this, trackingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
