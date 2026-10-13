@@ -1519,7 +1519,7 @@ public final class NativeMainActivity extends Activity {
 
     private void toggleEventRegistration(int eventId, boolean join, Button button) {
         if (eventId <= 0) return;
-        button.setEnabled(false);
+        setProxyEnabled(button,false);
         io.execute(() -> {
             try {
                 if (join) api.post("register_event", new JSONObject().put("event_id", eventId));
@@ -1532,7 +1532,7 @@ public final class NativeMainActivity extends Activity {
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    button.setEnabled(true);
+                    setProxyEnabled(button,true);
                     toast(e.getMessage());
                 });
             }
@@ -1566,8 +1566,8 @@ public final class NativeMainActivity extends Activity {
 
         gpsChecking = true;
         pendingFreshFix = null;
-        start.setEnabled(false);
-        check.setEnabled(false);
+        setProxyEnabled(start,false);
+        setProxyEnabled(check,false);
         state.setText("در حال دریافت موقعیت تازه و دقیق…");
         state.setTextColor(ACCENT);
         accuracy.setText("دقت: در حال بررسی");
@@ -1577,7 +1577,7 @@ public final class NativeMainActivity extends Activity {
                 .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.getToken())
                 .addOnSuccessListener(this, loc -> {
                     gpsChecking = false;
-                    check.setEnabled(true);
+                    setProxyEnabled(check,true);
                     if (loc == null) {
                         state.setText("موقعیت دریافت نشد. دوباره بررسی کنید.");
                         state.setTextColor(RED);
@@ -1590,7 +1590,7 @@ public final class NativeMainActivity extends Activity {
                         pendingFreshFix = loc;
                         state.setText("GPS آماده است. ثبت مسیر از همین موقعیت شروع می‌شود.");
                         state.setTextColor(GREEN);
-                        start.setEnabled(true);
+                        setProxyEnabled(start,true);
                     } else {
                         state.setText("GPS هنوز به دقت مناسب نرسیده است. چند لحظه در فضای باز بمانید.");
                         state.setTextColor(ORANGE);
@@ -1598,7 +1598,7 @@ public final class NativeMainActivity extends Activity {
                 })
                 .addOnFailureListener(this, e -> {
                     gpsChecking = false;
-                    check.setEnabled(true);
+                    setProxyEnabled(check,true);
                     state.setText("خطای GPS: " + e.getMessage());
                     state.setTextColor(RED);
                 });
@@ -1606,7 +1606,7 @@ public final class NativeMainActivity extends Activity {
 
     private void createRideAndStartTracking(Button start, TextView state) {
         if (pendingFreshFix == null) return;
-        start.setEnabled(false);
+        setProxyEnabled(start,false);
         state.setText("در حال شروع رکاب‌زنی…");
         Location fix = pendingFreshFix;
 
@@ -1651,7 +1651,7 @@ public final class NativeMainActivity extends Activity {
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    start.setEnabled(true);
+                    setProxyEnabled(start,true);
                     state.setText("شروع انجام نشد: " + e.getMessage());
                     state.setTextColor(RED);
                 });
@@ -1713,7 +1713,7 @@ public final class NativeMainActivity extends Activity {
         if (activeRide == null) return;
         int rideId = activeRide.optInt("id", 0);
         if (rideId <= 0) return;
-        button.setEnabled(false);
+        setProxyEnabled(button,false);
         button.setText("در حال پایان…");
 
         io.execute(() -> {
@@ -1733,7 +1733,7 @@ public final class NativeMainActivity extends Activity {
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    button.setEnabled(true);
+                    setProxyEnabled(button,true);
                     button.setText("پایان رکاب‌زنی");
                     toast(e.getMessage());
                 });
@@ -2424,7 +2424,9 @@ public final class NativeMainActivity extends Activity {
     }
 
     private int eventRegistrationCount(int eventId){JSONArray a=bootstrap==null?null:bootstrap.optJSONArray("registrations");int n=0;if(a!=null)for(int i=0;i<a.length();i++){JSONObject r=a.optJSONObject(i);if(r!=null&&r.optInt("event_id",0)==eventId)n++;}return n;}
-    private Button hiddenButtonProxy(View source){Button b=new Button(this);b.setVisibility(View.GONE);source.setTag(b);return b;}
+    private Button hiddenButtonProxy(View source){Button b=new Button(this);b.setVisibility(View.GONE);b.setTag(source);source.setTag(b);return b;}
+    private void setProxyEnabled(Button proxy,boolean enabled){if(proxy==null)return;proxy.setEnabled(enabled);Object src=proxy.getTag();if(src instanceof View){((View)src).setEnabled(enabled);((View)src).setAlpha(enabled?1f:.5f);}}
+
     private String eventDateForUi(JSONObject e){return JalaliDate.format(e.optString("event_date",""),true);}
     private long parseServerDate(String value){if(value==null||value.isBlank())return 0;try{return java.time.LocalDateTime.parse(value.trim().replace('T',' ').substring(0,19),java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();}catch(Exception e){return 0;}}
     private void openGroupNavigation(){Intent i=new Intent(this,NativeLiveNavigationActivity.class);i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");i.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID,activeRide==null?0:activeRide.optInt("id",0));startActivity(i);}
