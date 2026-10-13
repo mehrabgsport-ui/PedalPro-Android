@@ -969,7 +969,6 @@ public final class NativeMainActivity extends Activity {
 
     private void showClub() {
         currentPage = "club";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
         addHero("اعضای باشگاه", "");
@@ -3063,7 +3062,6 @@ public final class NativeMainActivity extends Activity {
 
     private void showAboutGroupPage() {
         currentPage = "about";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
         JSONObject site = bootstrap == null ? null : bootstrap.optJSONObject("site");
@@ -3088,7 +3086,6 @@ public final class NativeMainActivity extends Activity {
 
     private void showGalleryPage() {
         currentPage = "gallery";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
         addHero("گالری", "");
@@ -3116,24 +3113,198 @@ public final class NativeMainActivity extends Activity {
         animatePageIn();
     }
 
+    private String[][] phonePowerGuide(String manufacturer, String model) {
+        String key = ((manufacturer == null ? "" : manufacturer) + " " + (model == null ? "" : model)).toLowerCase(Locale.ROOT);
+        if (key.matches(".*(xiaomi|redmi|poco).*")) {
+            return new String[][]{
+                    {"باتری", "Settings → Apps → Manage apps → PedalPro → Battery saver → No restrictions"},
+                    {"اجرای خودکار", "Autostart را برای PedalPro روشن کنید."},
+                    {"برنامه‌های اخیر", "در صورت وجود گزینه Lock، PedalPro را در Recent apps قفل کنید تا MIUI آن را نبندد."}
+            };
+        }
+        if (key.contains("samsung")) {
+            return new String[][]{
+                    {"باتری برنامه", "Settings → Apps → PedalPro → Battery → Unrestricted"},
+                    {"Sleeping apps", "Battery and device care → Battery → Background usage limits؛ PedalPro را از Sleeping و Deep sleeping apps خارج کنید."},
+                    {"Location", "Location permission را روی Precise و Allow while using the app نگه دارید."}
+            };
+        }
+        if (key.matches(".*(huawei|honor).*")) {
+            return new String[][]{
+                    {"App launch", "Settings → Battery → App launch → PedalPro → Manage manually"},
+                    {"سه مجوز اجرا", "Auto-launch، Secondary launch و Run in background را فعال کنید."},
+                    {"Battery optimization", "PedalPro را از Battery optimization محدود نکنید."}
+            };
+        }
+        if (key.matches(".*(oppo|realme|oneplus).*")) {
+            return new String[][]{
+                    {"مصرف باتری", "App management → PedalPro → Battery usage → Allow background activity / No restrictions"},
+                    {"Auto launch", "Auto launch یا Startup manager را برای PedalPro فعال کنید."},
+                    {"قفل برنامه", "در صورت وجود App lock/Keep alive در Recent apps، PedalPro را نگه دارید."}
+            };
+        }
+        if (key.matches(".*(vivo|iqoo).*")) {
+            return new String[][]{
+                    {"Background power", "Battery → Background power consumption management → PedalPro → Don’t restrict"},
+                    {"Auto start", "Permission management / iManager → Autostart → PedalPro را فعال کنید."},
+                    {"Location", "دسترسی مکان دقیق را فعال نگه دارید."}
+            };
+        }
+        if (key.contains("asus")) {
+            return new String[][]{
+                    {"PowerMaster", "Mobile Manager / PowerMaster → Auto-start manager → PedalPro را مجاز کنید."},
+                    {"باتری", "Battery optimization را برای PedalPro محدود نکنید."}
+            };
+        }
+        if (key.matches(".*(pixel|google).*")) {
+            return new String[][]{
+                    {"App battery usage", "Settings → Apps → PedalPro → App battery usage → Unrestricted"},
+                    {"Location", "Location را روی Precise نگه دارید."}
+            };
+        }
+        return new String[][]{
+                {"باتری برنامه", "Settings → Apps → PedalPro → Battery → Unrestricted / No restrictions"},
+                {"پس‌زمینه", "Background activity را فعال و Battery optimization را برای PedalPro غیرفعال کنید."},
+                {"اجرای خودکار", "اگر گوشی بخش Auto-start دارد، PedalPro را در آن فعال کنید."}
+        };
+    }
+
+    private void openAppSettingsNative() {
+        try {
+            startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            toast("تنظیمات PedalPro قابل باز شدن نیست.");
+        }
+    }
+
+    private void openBatterySettingsNative() {
+        try {
+            Intent specific = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(specific);
+        } catch (Exception ignored) {
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (Exception e) {
+                openAppSettingsNative();
+            }
+        }
+    }
+
+    private void openAutostartSettingsNative() {
+        String m = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(Locale.ROOT);
+        Intent intent = new Intent();
+        if (m.contains("xiaomi") || m.contains("redmi") || m.contains("poco")) {
+            intent.setComponent(new android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+        } else if (m.contains("huawei") || m.contains("honor")) {
+            intent.setComponent(new android.content.ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"));
+        } else if (m.contains("oppo") || m.contains("realme") || m.contains("oneplus")) {
+            intent.setComponent(new android.content.ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"));
+        } else if (m.contains("vivo") || m.contains("iqoo")) {
+            intent.setComponent(new android.content.ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"));
+        } else {
+            openAppSettingsNative();
+            return;
+        }
+        try {
+            startActivity(intent);
+        } catch (Exception e) {
+            openAppSettingsNative();
+        }
+    }
+
     private void showPhoneSettingsPage() {
         currentPage = "phone-settings";
-        if (!signedIn()) { showLogin(); return; }
+        if (!signedIn()) { showAuthDialog("login"); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("تنظیمات تلفن همراه", "");
-        LinearLayout box = glassCard(24);
-        box.addView(text("برای جلوگیری از متوقف‌شدن GPS، رکاب‌زنی زنده و موقعیت گروه در پس‌زمینه، محدودیت باتری PedalPro را بردارید.", 12, false, MUTED));
+
+        LinearLayout shell = glassCard(26);
+        shell.setPadding(dp(14), dp(14), dp(14), dp(14));
+
+        shell.addView(text("تنظیمات تلفن همراه", 22, true, TEXT));
+        TextView subtitle = text("برای جلوگیری از متوقف‌شدن GPS، رکاب‌زنی زنده و موقعیت گروه در پس‌زمینه، محدودیت باتری PedalPro را بردارید.", 12, false, MUTED);
+        subtitle.setLineSpacing(0, 1.55f);
+        subtitle.setPadding(0, dp(5), 0, 0);
+        shell.addView(subtitle);
+
+        LinearLayout device = new LinearLayout(this);
+        device.setOrientation(LinearLayout.HORIZONTAL);
+        device.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        device.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        device.setPadding(dp(16), dp(16), dp(16), dp(16));
+        device.setBackground(roundRect(Color.argb(184, 9, 27, 42), 18, Color.argb(56, 46, 230, 166)));
+        LinearLayout.LayoutParams deviceLp = new LinearLayout.LayoutParams(-1, -2);
+        deviceLp.setMargins(0, dp(14), 0, dp(14));
+
+        TextView phoneIcon = text("📱", 25, false, TEXT);
+        phoneIcon.setGravity(Gravity.CENTER);
+        GradientDrawable phoneIconBg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(46, 46, 230, 166), Color.argb(36, 32, 187, 232)});
+        phoneIconBg.setCornerRadius(dp(16));
+        phoneIcon.setBackground(phoneIconBg);
+
+        LinearLayout deviceText = new LinearLayout(this);
+        deviceText.setOrientation(LinearLayout.VERTICAL);
+        deviceText.setGravity(Gravity.END);
+        String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.trim();
+        String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+        String deviceName = (manufacturer + " " + model).trim();
+        if (deviceName.isBlank()) deviceName = "گوشی Android";
+        deviceText.addView(text(deviceName, 14, true, TEXT));
+        TextView androidVersion = text("Android " + Build.VERSION.RELEASE, 11, false, MUTED);
+        androidVersion.setPadding(0, dp(3), 0, 0);
+        deviceText.addView(androidVersion);
+
+        device.addView(phoneIcon, new LinearLayout.LayoutParams(dp(50), dp(50)));
+        LinearLayout.LayoutParams dtLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        dtLp.setMargins(dp(14), 0, 0, 0);
+        device.addView(deviceText, dtLp);
+        shell.addView(device, deviceLp);
+
+        String[][] guide = phonePowerGuide(manufacturer, model);
+        for (int i = 0; i < guide.length; i++) {
+            LinearLayout step = new LinearLayout(this);
+            step.setOrientation(LinearLayout.VERTICAL);
+            step.setPadding(dp(14), dp(13), dp(14), dp(13));
+            step.setBackground(roundRect(Color.argb(9, 255, 255, 255), 15, Color.argb(26, 255, 255, 255)));
+            TextView stepTitle = text(JalaliDate.fa(i + 1) + ". " + guide[i][0], 13, true, Color.rgb(233, 251, 255));
+            TextView stepBody = text(guide[i][1], 11, false, Color.rgb(159, 181, 200));
+            stepBody.setLineSpacing(0, 1.75f);
+            stepBody.setPadding(0, dp(4), 0, 0);
+            step.addView(stepTitle);
+            step.addView(stepBody);
+            LinearLayout.LayoutParams stepLp = new LinearLayout.LayoutParams(-1, -2);
+            stepLp.setMargins(0, 0, 0, dp(10));
+            shell.addView(step, stepLp);
+        }
+
         PedalActionView battery = action(PedalIconView.Icon.SETTINGS, "باز کردن تنظیمات باتری", PedalActionView.Style.PRIMARY);
-        battery.setOnClickListener(v -> {
-            try { startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); }
-            catch (Exception e) { startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); }
-        });
+        battery.setOnClickListener(v -> openBatterySettingsNative());
+        shell.addView(battery, fullActionLp(52));
+
+        PedalActionView autostart = action(PedalIconView.Icon.SETTINGS, "تنظیمات اجرای خودکار", PedalActionView.Style.OUTLINE);
+        autostart.setOnClickListener(v -> openAutostartSettingsNative());
+        shell.addView(autostart, fullActionLp(50));
+
         PedalActionView app = action(PedalIconView.Icon.SETTINGS, "تنظیمات PedalPro", PedalActionView.Style.OUTLINE);
-        app.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))));
-        box.addView(battery, fullActionLp(54));
-        box.addView(app, fullActionLp(52));
-        content.addView(box, cardLp());
+        app.setOnClickListener(v -> openAppSettingsNative());
+        shell.addView(app, fullActionLp(50));
+
+        LinearLayout notice = new LinearLayout(this);
+        notice.setOrientation(LinearLayout.VERTICAL);
+        notice.setPadding(dp(13), dp(12), dp(13), dp(12));
+        notice.setBackground(roundRect(Color.argb(32, 255, 217, 74), 15, Color.argb(76, 255, 217, 74)));
+        TextView note = text("بعد از انجام تنظیمات، PedalPro را در فهرست برنامه‌های Sleeping / Deep Sleeping / Battery Saver / Background Restriction قرار ندهید. برای رکاب‌زنی طولانی، Location را روی حالت دقیق (Precise) نگه دارید.", 11, false, TEXT);
+        note.setLineSpacing(0, 1.65f);
+        notice.addView(note);
+        LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
+        noticeLp.setMargins(0, dp(14), 0, 0);
+        shell.addView(notice, noticeLp);
+
+        content.addView(shell, cardLp());
         VazirmatnLoader.apply(this, content);
         animatePageIn();
     }
