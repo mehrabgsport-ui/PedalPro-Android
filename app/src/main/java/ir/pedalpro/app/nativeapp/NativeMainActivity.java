@@ -364,7 +364,11 @@ public final class NativeMainActivity extends Activity {
         ai.setOnClickListener(v -> showAiAdvisor());
         Button chat = primaryButton("چت گروهی");
         chat.setOnClickListener(v -> showGroupChat());
-        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf); tools.addView(ai); tools.addView(chat);
+        Button social = primaryButton("فید اجتماعی و مسیرهای پیشنهادی");
+        social.setOnClickListener(v -> startActivity(new Intent(this, NativeSocialActivity.class)));
+        Button safety = primaryButton("ایمنی، SOS و حریم خصوصی");
+        safety.setOnClickListener(v -> startActivity(new Intent(this, NativeSafetyActivity.class)));
+        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf); tools.addView(ai); tools.addView(chat); tools.addView(social); tools.addView(safety);
         content.addView(tools, cardLp());
     }
 
