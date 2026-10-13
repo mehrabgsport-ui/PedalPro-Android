@@ -245,7 +245,7 @@ public final class NativeMainActivity extends Activity {
         });
 
         appRoot.addView(buildWebHeader(), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(88)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -590,7 +590,7 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(navRoutes);
         content.removeAllViews();
-        addHero("مسیرها و Live", "مسیرهای قابل مشاهده و رکاب‌زنی‌های زنده اعضا");
+        addHero("مسیرها و رکاب‌زنی‌ها", "");
         addLiveRidesSection(20);
 
         JSONArray rides = bootstrap.optJSONArray("rides");
@@ -612,7 +612,7 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("باشگاه", "اعضا و وضعیت کلی گروه");
+        addHero("اعضای باشگاه", "");
 
         JSONArray members = bootstrap.optJSONArray("members");
         if (members == null || members.length() == 0) {
@@ -637,7 +637,7 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("چالش‌ها", "چالش‌های فعال و برنامه‌ریزی‌شده");
+        addHero("چالش‌ها", "");
 
         JSONArray challenges = bootstrap.optJSONArray("challenges");
         if (challenges == null || challenges.length() == 0) {
@@ -692,7 +692,7 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("چت گروهی PedalPro", "پیام‌رسان Native مستقیم به سرور");
+        addHero("گفتگوی گروهی", "");
 
         chatMessagesHost = new LinearLayout(this);
         chatMessagesHost.setOrientation(LinearLayout.VERTICAL);
@@ -2078,29 +2078,22 @@ public final class NativeMainActivity extends Activity {
         h.setOrientation(LinearLayout.HORIZONTAL);
         h.setGravity(Gravity.CENTER_VERTICAL);
         h.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        h.setPadding(dp(18), dp(8), dp(14), dp(8));
+        h.setPadding(dp(14), dp(7), dp(14), dp(7));
         h.setBackground(headerGradient());
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
-        h.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(66)));
+        h.addView(logo, new LinearLayout.LayoutParams(dp(112), dp(58)));
+
         h.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
-        PedalActionView account = action(PedalIconView.Icon.USER, "حساب کاربری", PedalActionView.Style.OUTLINE);
-        account.setOnClickListener(v -> showMe());
-        h.addView(account, new LinearLayout.LayoutParams(dp(128), dp(52)));
-
-        FrameLayout settings = iconSquare(PedalIconView.Icon.SETTINGS, () -> showMe(), "تنظیمات");
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(54),dp(52)); sp.setMargins(dp(7),0,0,0);
-        h.addView(settings, sp);
-
         FrameLayout menu = iconSquare(PedalIconView.Icon.MENU, this::showDrawer, "منو");
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(54),dp(52)); mp.setMargins(dp(7),0,0,0);
-        h.addView(menu, mp);
+        h.addView(menu, new LinearLayout.LayoutParams(dp(52), dp(48)));
 
-        topStatus = new TextView(this); topStatus.setVisibility(View.GONE);
+        topStatus = new TextView(this);
+        topStatus.setVisibility(View.GONE);
         return h;
     }
 
@@ -2183,10 +2176,11 @@ public final class NativeMainActivity extends Activity {
         if(stroke!=0) g.setStroke(dp(1),stroke); return g;
     }
     private GradientDrawable headerGradient() {
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.argb(205,51,108,142),Color.argb(214,16,53,75)});
-        g.setCornerRadii(new float[]{0,0,0,0,dp(32),dp(32),dp(32),dp(32)});
-        g.setStroke(dp(1),Color.argb(105,245,249,252)); return g;
+        GradientDrawable g = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.argb(220, 5, 25, 38), Color.argb(220, 5, 25, 38)});
+        g.setStroke(dp(1), Color.argb(55, 225, 242, 248));
+        return g;
     }
     private GradientDrawable bottomGradient() {
         GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -2320,34 +2314,172 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showDrawer() {
-        final Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        FrameLayout stage=new FrameLayout(this);stage.setBackgroundColor(Color.TRANSPARENT);
-        LinearLayout panel=glassCard(30);panel.setPadding(dp(14),dp(10),dp(14),dp(10));
-        ScrollView sc=new ScrollView(this);sc.setFillViewport(true);
-        LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(2),0,dp(2),dp(8));
-        ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.pedalpro_app_icon);logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);body.addView(logo,new LinearLayout.LayoutParams(-1,dp(140)));
-        body.addView(drawerItem(PedalIconView.Icon.HOME,"صفحه اصلی",()->{d.dismiss();showHome();},"dashboard".equals(currentPage)));
-        body.addView(drawerItem(PedalIconView.Icon.CALENDAR,"فعالیت‌ها و برنامه‌ها",()->{d.dismiss();showActivities();},"activities".equals(currentPage)));
-        body.addView(drawerItem(PedalIconView.Icon.LOCATION,"مسیرهای GPS",()->{d.dismiss();showRoutes();},"routes".equals(currentPage)));
-        body.addView(drawerSection("رکاب‌زنی",PedalIconView.Icon.RIDE,new String[]{"شروع / ادامه رکاب‌زنی","سنسورهای Cadence / Power","رسیدن به گروه در حال حرکت","اشتراک زنده Beacon"},new Runnable[]{()->{d.dismiss();showRide();},()->{d.dismiss();showSensors();},()->{d.dismiss();openGroupNavigation();},()->{d.dismiss();startActivity(new Intent(this,NativeSafetyActivity.class));}},true));
-        body.addView(drawerSection("مسیرها و اکتشاف",PedalIconView.Icon.ROUTE,new String[]{"Heatmap و Segments","مسیرهای پیشنهادی"},new Runnable[]{()->{d.dismiss();startActivity(new Intent(this,NativeAdvancedActivity.class));},()->{d.dismiss();startActivity(new Intent(this,NativeSocialActivity.class));}},false));
-        body.addView(drawerSection("باشگاه",PedalIconView.Icon.GROUP,new String[]{"باشگاه و اعضا","چالش‌ها"},new Runnable[]{()->{d.dismiss();showClub();},()->{d.dismiss();showChallenges();}},false));
-        body.addView(drawerSection("ارتباطات",PedalIconView.Icon.CHAT,new String[]{"چت گروهی","مشاور هوش مصنوعی"},new Runnable[]{()->{d.dismiss();showGroupChat();},()->{d.dismiss();showAiAdvisor();}},false));
-        body.addView(drawerSection("عملکرد من",PedalIconView.Icon.CHART,new String[]{"عملکرد و تمرین","تحلیل حرفه‌ای","سنسورها"},new Runnable[]{()->{d.dismiss();showPerformance();},()->{d.dismiss();startActivity(new Intent(this,NativeAdvancedActivity.class));},()->{d.dismiss();showSensors();}},false));
-        body.addView(drawerSection("ایمنی و حریم خصوصی",PedalIconView.Icon.SHIELD,new String[]{"SOS / Beacon / Privacy"},new Runnable[]{()->{d.dismiss();startActivity(new Intent(this,NativeSafetyActivity.class));}},false));
-        body.addView(drawerSection("حساب من",PedalIconView.Icon.USER,new String[]{"پروفایل","دوچرخه‌های من","وضعیت بدن"},new Runnable[]{()->{d.dismiss();showProfileEditor();},()->{d.dismiss();showBikes();},()->{d.dismiss();showFitness();}},false));
-        if(bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1)body.addView(drawerItem(PedalIconView.Icon.SETTINGS,"مدیریت",()->{d.dismiss();showActivities();},false));
-        TextView server=text("●  متصل به سرور",11,true,GREEN);server.setGravity(Gravity.CENTER);server.setBackground(roundRect(Color.argb(110,5,40,52),18,Color.argb(95,245,249,252)));LinearLayout serverWrap=new LinearLayout(this);serverWrap.setGravity(Gravity.CENTER);serverWrap.setPadding(0,dp(12),0,dp(4));serverWrap.addView(server,new LinearLayout.LayoutParams(dp(150),dp(40)));body.addView(serverWrap);
-        sc.addView(body);panel.addView(sc,new LinearLayout.LayoutParams(-1,0,1f));FrameLayout.LayoutParams pp=new FrameLayout.LayoutParams(Math.min(dp(380),(int)(getResources().getDisplayMetrics().widthPixels*.88f)),-1,Gravity.END);pp.setMargins(dp(8),dp(8),dp(8),dp(8));stage.addView(panel,pp);d.setContentView(stage);
-        if(Build.VERSION.SDK_INT>=31&&siteBackground!=null)siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(12),dp(12),Shader.TileMode.CLAMP));
-        d.setOnDismissListener(x->{if(Build.VERSION.SDK_INT>=31&&siteBackground!=null)siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(2),dp(2),Shader.TileMode.CLAMP));});
-        d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=-1;lp.height=-1;lp.gravity=Gravity.END;lp.dimAmount=.68f;w.setAttributes(lp);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);}
-        panel.setTranslationX(dp(360));panel.setAlpha(.2f);panel.animate().translationX(0).alpha(1f).setDuration(220).start();VazirmatnLoader.apply(this,panel);
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        FrameLayout stage = new FrameLayout(this);
+        stage.setBackgroundColor(Color.TRANSPARENT);
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(14), dp(14), dp(14), dp(14));
+        panel.setBackground(roundRect(Color.rgb(7, 47, 66), 30, Color.argb(110, 240, 250, 255)));
+
+        ScrollView sc = new ScrollView(this);
+        sc.setFillViewport(true);
+        sc.setVerticalScrollBarEnabled(false);
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        JSONObject user = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        String displayName = user == null ? "PedalPro" : user.optString("display_name", user.optString("username", "PedalPro"));
+        String username = user == null ? "" : user.optString("username", "");
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+
+        LinearLayout profile = new LinearLayout(this);
+        profile.setOrientation(LinearLayout.VERTICAL);
+        profile.setGravity(Gravity.CENTER);
+        profile.setPadding(dp(14), dp(16), dp(14), dp(14));
+        profile.setBackground(roundRect(Color.argb(215, 5, 39, 56), 24, Color.argb(90, 240, 250, 255)));
+
+        ImageView avatar = new ImageView(this);
+        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        avatar.setClipToOutline(true);
+        avatar.setBackground(roundRect(Color.rgb(230, 239, 244), 46, 0));
+        RemoteImageLoader.load(this, avatar, user == null ? "" : user.optString("avatar_path", ""), R.drawable.pedalpro_app_icon);
+        profile.addView(avatar, new LinearLayout.LayoutParams(dp(78), dp(78)));
+
+        TextView name = text(displayName, 18, true, TEXT);
+        name.setGravity(Gravity.CENTER);
+        name.setPadding(0, dp(7), 0, 0);
+        profile.addView(name);
+
+        TextView role = text(admin ? "مدیر" : "عضو", 11, true, Color.rgb(46, 231, 242));
+        role.setGravity(Gravity.CENTER);
+        profile.addView(role);
+
+        if (!username.isBlank()) {
+            TextView un = text(username, 10, false, MUTED);
+            un.setGravity(Gravity.CENTER);
+            profile.addView(un);
+        }
+
+        LinearLayout stats = new LinearLayout(this);
+        stats.setOrientation(LinearLayout.HORIZONTAL);
+        stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        stats.setGravity(Gravity.CENTER);
+        stats.setPadding(0, dp(12), 0, 0);
+
+        double totalKm = user == null ? 0 : user.optDouble("total_distance_km", user.optDouble("distance_km", 0));
+        int clubDays = user == null ? 0 : user.optInt("club_days", user.optInt("attendance_days", 0));
+        int programs = 0;
+        JSONArray regs = bootstrap == null ? null : bootstrap.optJSONArray("registrations");
+        int uid = user == null ? 0 : user.optInt("id", 0);
+        if (regs != null && uid > 0) {
+            for (int i = 0; i < regs.length(); i++) {
+                JSONObject r = regs.optJSONObject(i);
+                if (r != null && r.optInt("user_id", 0) == uid) programs++;
+            }
+        }
+        stats.addView(drawerStat(String.format(Locale.US, "%.1f km", totalKm), "فاصله رکاب‌زنی"), new LinearLayout.LayoutParams(0, dp(56), 1f));
+        stats.addView(drawerStat(JalaliDate.fa(clubDays), "روزهای باشگاه"), new LinearLayout.LayoutParams(0, dp(56), 1f));
+        stats.addView(drawerStat(JalaliDate.fa(programs), "برنامه‌ها"), new LinearLayout.LayoutParams(0, dp(56), 1f));
+        profile.addView(stats);
+
+        body.addView(profile, cardLp());
+
+        body.addView(drawerItem(PedalIconView.Icon.HOME, "داشبورد", () -> { d.dismiss(); showHome(); }, "dashboard".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.CALENDAR, "برنامه‌های باشگاه", () -> { d.dismiss(); showActivities(); }, "activities".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.GROUP, "اعضای باشگاه", () -> { d.dismiss(); showClub(); }, "club".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.CLOUD, "آب و هوا", () -> { d.dismiss(); showWeatherPage(); }, "weather".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.CHAT, "گفتگوی گروهی", () -> { d.dismiss(); showGroupChat(); }, "chat".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.CHAT, "مشاور هوش مصنوعی", () -> { d.dismiss(); showAiAdvisor(); }, "ai".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.CHART, "پایش عملکرد", () -> { d.dismiss(); showPerformance(); }, "performance".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.DETAILS, "چالش‌ها", () -> { d.dismiss(); showChallenges(); }, "challenges".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.SHARE, "خرید و فروش", () -> { d.dismiss(); showMarketplacePage(); }, "marketplace".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.ROUTE, "مسیرها و رکاب‌زنی‌ها", () -> { d.dismiss(); showRoutes(); }, "routes".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.BEACON, "اشتراک زنده رکاب‌زنی", () -> { d.dismiss(); showLiveRidesPage(); }, "live_share".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.DISTANCE, "تاریخچه مسیرها", () -> { d.dismiss(); showRouteHistoryPage(); }, "route_history".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.GROUP, "درباره گروه", () -> { d.dismiss(); showAboutGroupPage(); }, "about_group".equals(currentPage)));
+        body.addView(drawerItem(PedalIconView.Icon.USER, "حساب کاربری", () -> { d.dismiss(); showMe(); }, "me".equals(currentPage)));
+        if (admin) {
+            body.addView(drawerItem(PedalIconView.Icon.SETTINGS, "تنظیمات سایت", () -> { d.dismiss(); showSiteSettingsPage(); }, "site_settings".equals(currentPage)));
+        }
+
+        TextView server = text("●  متصل به سرور", 11, true, GREEN);
+        server.setGravity(Gravity.CENTER);
+        server.setPadding(0, dp(14), 0, dp(7));
+        body.addView(server);
+
+        sc.addView(body);
+        panel.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
+                Math.min(dp(356), (int) (getResources().getDisplayMetrics().widthPixels * .88f)),
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.END);
+        pp.setMargins(dp(8), dp(8), dp(8), dp(8));
+        stage.addView(panel, pp);
+        d.setContentView(stage);
+
+        if (Build.VERSION.SDK_INT >= 31 && siteBackground != null) {
+            siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(12), dp(12), Shader.TileMode.CLAMP));
+        }
+        d.setOnDismissListener(x -> {
+            if (Build.VERSION.SDK_INT >= 31 && siteBackground != null) {
+                siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(2), dp(2), Shader.TileMode.CLAMP));
+            }
+        });
+
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.gravity = Gravity.END;
+            lp.dimAmount = .68f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+
+        panel.setTranslationX(dp(340));
+        panel.setAlpha(.15f);
+        panel.animate().translationX(0).alpha(1f).setDuration(190).start();
+        VazirmatnLoader.apply(this, panel);
     }
 
-    private View drawerItem(PedalIconView.Icon icon,String label,Runnable run,boolean active) {
-        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setPadding(dp(14),0,dp(14),0);row.setBackground(roundRect(active?Color.argb(150,4,92,106):Color.argb(130,8,42,57),17,active?Color.rgb(31,231,242):Color.argb(80,245,249,252)));row.setClickable(true);row.setContentDescription(label);
-        TextView tv=text(label,15,true,active?Color.rgb(31,231,242):TEXT);row.addView(tv,new LinearLayout.LayoutParams(0,-2,1f));PedalIconView iv=new PedalIconView(this,icon,active?Color.rgb(31,231,242):TEXT);row.addView(iv,new LinearLayout.LayoutParams(dp(27),dp(27)));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(56));lp.setMargins(0,dp(4),0,0);row.setLayoutParams(lp);row.setOnClickListener(v->run.run());return row;
+    private View drawerItem(PedalIconView.Icon icon, String label, Runnable run, boolean active) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setPadding(dp(14), 0, dp(14), 0);
+        row.setBackground(roundRect(
+                active ? Color.rgb(15, 174, 202) : Color.argb(185, 8, 54, 72),
+                16,
+                active ? Color.rgb(63, 228, 244) : Color.argb(90, 213, 240, 249)));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription(label);
+
+        TextView tv = text(label, 14, true, TEXT);
+        row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        PedalIconView iv = new PedalIconView(this, icon, TEXT);
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(25), dp(25));
+        ip.setMargins(dp(8), 0, 0, 0);
+        row.addView(iv, ip);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(52));
+        lp.setMargins(0, dp(4), 0, 0);
+        row.setLayoutParams(lp);
+        row.setOnClickListener(v -> run.run());
+        return row;
     }
 
     private View drawerSection(String title,PedalIconView.Icon icon,String[] labels,Runnable[] actions,boolean startOpen) {
@@ -2357,6 +2489,151 @@ public final class NativeMainActivity extends Activity {
         for(int i=0;i<labels.length;i++){final Runnable r=actions[i];TextView sub=text(labels[i],13,false,TEXT);sub.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);sub.setPadding(dp(18),0,dp(18),0);sub.setBackground(roundRect(Color.argb(105,8,42,57),14,Color.argb(70,245,249,252)));LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,dp(48));sp.setMargins(dp(10),dp(3),dp(10),0);subs.addView(sub,sp);sub.setOnClickListener(v->r.run());}
         head.setOnClickListener(v->{boolean open=subs.getVisibility()!=View.VISIBLE;if(open){subs.setVisibility(View.VISIBLE);subs.setAlpha(0);subs.setTranslationY(-dp(6));subs.animate().alpha(1).translationY(0).setDuration(160).start();}else{subs.animate().alpha(0).translationY(-dp(6)).setDuration(120).withEndAction(()->subs.setVisibility(View.GONE)).start();}chevron.animate().rotation(open?90:0).setDuration(160).start();});
         host.addView(head);host.addView(subs);return host;
+    }
+
+    private View drawerStat(String value, String label) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        TextView v = text(value, 11, true, TEXT);
+        v.setGravity(Gravity.CENTER);
+        TextView l = text(label, 8, false, MUTED);
+        l.setGravity(Gravity.CENTER);
+        box.addView(v);
+        box.addView(l);
+        return box;
+    }
+
+    private void showWeatherPage() {
+        currentPage = "weather";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("آب و هوا", "");
+        content.addView(buildWeatherCard(), cardLp());
+        loadWeather(true);
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showMarketplacePage() {
+        currentPage = "marketplace";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("خرید و فروش", "");
+        JSONArray items = bootstrap == null ? null : bootstrap.optJSONArray("marketplace");
+        if (items == null) items = bootstrap == null ? null : bootstrap.optJSONArray("market_items");
+        if (items == null || items.length() == 0) {
+            addEmpty("فعلاً موردی برای خرید و فروش نمایش داده نمی‌شود.");
+        } else {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                LinearLayout box = glassCard(22);
+                box.addView(text(item.optString("title", "آگهی"), 16, true, TEXT));
+                String price = item.optString("price", "");
+                String desc = item.optString("description", "");
+                if (!price.isBlank()) box.addView(text(price, 12, true, Color.rgb(46, 231, 242)));
+                if (!desc.isBlank()) box.addView(text(desc, 12, false, MUTED));
+                content.addView(box, cardLp());
+            }
+        }
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showLiveRidesPage() {
+        currentPage = "live_share";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("اشتراک زنده رکاب‌زنی", "");
+        addLiveRidesSection(50);
+        if (activeRide != null) {
+            PedalActionView safety = action(PedalIconView.Icon.BEACON, "اشتراک زنده Beacon و SOS", PedalActionView.Style.PRIMARY);
+            safety.setOnClickListener(v -> startActivity(new Intent(this, NativeSafetyActivity.class)));
+            content.addView(safety, fullActionLp(56));
+        }
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showRouteHistoryPage() {
+        currentPage = "route_history";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("تاریخچه مسیرها", "");
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("my_completed_rides");
+        if (rides == null) rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
+        int shown = 0;
+        if (rides != null) {
+            for (int i = 0; i < rides.length(); i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r == null || !"completed".equals(r.optString("status", "completed"))) continue;
+                addRideSummaryCard(r, false);
+                shown++;
+            }
+        }
+        if (shown == 0) addEmpty("هنوز مسیری در تاریخچه ثبت نشده است.");
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showAboutGroupPage() {
+        currentPage = "about_group";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("درباره گروه", "");
+        JSONObject group = bootstrap == null ? null : bootstrap.optJSONObject("group");
+        if (group == null) group = bootstrap == null ? null : bootstrap.optJSONObject("club");
+        LinearLayout box = glassCard(24);
+        String title = group == null ? "گروه دوچرخه سواری پدال پرو" : group.optString("title", group.optString("name", "گروه دوچرخه سواری پدال پرو"));
+        String desc = group == null ? "رکاب بزن، طبیعت، مسیرهای جدید" : group.optString("description", "رکاب بزن، طبیعت، مسیرهای جدید");
+        box.addView(text(title, 20, true, TEXT));
+        box.addView(text(desc, 13, false, MUTED));
+        content.addView(box, cardLp());
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showSiteSettingsPage() {
+        currentPage = "site_settings";
+        if (!signedIn()) { showLogin(); return; }
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (!admin) { showHome(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("تنظیمات سایت", "");
+
+        JSONObject settings = bootstrap == null ? null : bootstrap.optJSONObject("settings");
+        if (settings == null) settings = bootstrap == null ? null : bootstrap.optJSONObject("site_settings");
+
+        LinearLayout box = glassCard(24);
+        box.addView(text("تنظیمات مدیر", 18, true, TEXT));
+        if (settings == null || settings.length() == 0) {
+            box.addView(text("تنظیمات سایت از سرور در دسترس این Bootstrap نیست.", 12, false, MUTED));
+        } else {
+            java.util.Iterator<String> it = settings.keys();
+            while (it.hasNext()) {
+                String key = it.next();
+                Object value = settings.opt(key);
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                row.setPadding(0, dp(7), 0, dp(7));
+                TextView k = text(key, 12, true, TEXT);
+                TextView v = text(value == null ? "" : String.valueOf(value), 11, false, MUTED);
+                row.addView(k, new LinearLayout.LayoutParams(0, -2, 1f));
+                row.addView(v, new LinearLayout.LayoutParams(0, -2, 1f));
+                box.addView(row);
+            }
+        }
+        content.addView(box, cardLp());
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
     private void showLiveRidesSheet() {
