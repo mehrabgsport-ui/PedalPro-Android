@@ -437,6 +437,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private boolean startFusedLocationUpdates() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای ثبت مسیر فعال نیست.", false);
+            return false;
+        }
         try {
             int availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this);
             if (availability != ConnectionResult.SUCCESS) {
@@ -482,6 +487,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
     private synchronized void startLegacyLocationFallback() {
         if (legacyFallbackStarted || !prefs.getBoolean("active", false)) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای GPS مستقیم فعال نیست.", false);
+            return;
+        }
         legacyFallbackStarted = true;
         if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         long interval = Math.max(1000L, prefs.getLong("interval_ms", 1000L));
