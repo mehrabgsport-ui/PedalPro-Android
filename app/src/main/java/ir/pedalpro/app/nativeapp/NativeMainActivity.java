@@ -125,6 +125,7 @@ public final class NativeMainActivity extends Activity {
     private LinearLayout appRoot;
     private LinearLayout webHeader;
     private TextView rideDockLabel;
+    private ScrollView mainScroll;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
     private NativeRouteView activeRideRouteView;
@@ -251,16 +252,16 @@ public final class NativeMainActivity extends Activity {
         appRoot.addView(buildWebHeader(), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        scroll.setBackgroundColor(Color.TRANSPARENT);
+        mainScroll = new ScrollView(this);
+        mainScroll.setFillViewport(true);
+        mainScroll.setClipToPadding(false);
+        mainScroll.setBackgroundColor(Color.TRANSPARENT);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(16), dp(12), dp(16), dp(32));
         content.setClipChildren(false);
-        scroll.addView(content);
-        appRoot.addView(scroll, new LinearLayout.LayoutParams(
+        mainScroll.addView(content);
+        appRoot.addView(mainScroll, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         appRoot.addView(buildWebBottomNav(), new LinearLayout.LayoutParams(
@@ -3340,24 +3341,205 @@ public final class NativeMainActivity extends Activity {
         }
     }
 
+    private LinearLayout guideJumpCard(String title, String subtitle) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.END);
+        card.setPadding(dp(13), dp(13), dp(13), dp(13));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setBackground(roundRect(Color.argb(9, 255, 255, 255), 17, Color.argb(31, 255, 255, 255)));
+        TextView t = text(title, 14, true, Color.rgb(238, 249, 255));
+        TextView sub = text(subtitle, 11, false, Color.rgb(157, 182, 199));
+        sub.setPadding(0, dp(5), 0, 0);
+        sub.setLineSpacing(0, 1.7f);
+        card.addView(t);
+        card.addView(sub);
+        return card;
+    }
+
+    private LinearLayout guideArticleSection(String title, String body) {
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(13), dp(13), dp(13), dp(13));
+        section.setBackground(roundRect(Color.argb(153, 4, 24, 38), 18, Color.argb(26, 255, 255, 255)));
+        TextView heading = text(title, 16, true, Color.rgb(234, 250, 255));
+        section.addView(heading);
+        if (body != null && !body.isBlank()) {
+            TextView copy = text(body, 12, false, Color.rgb(212, 229, 239));
+            copy.setPadding(0, dp(9), 0, 0);
+            copy.setLineSpacing(0, 2f);
+            section.addView(copy);
+        }
+        return section;
+    }
+
+    private LinearLayout.LayoutParams guideArticleLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, dp(11));
+        return lp;
+    }
+
+    private LinearLayout.LayoutParams fullWrapLp(int topMargin) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(topMargin), 0, 0);
+        return lp;
+    }
+
+    private View guideFaq(String question, String answer) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setPadding(dp(12), dp(10), dp(12), dp(10));
+        item.setBackground(roundRect(Color.argb(8, 255, 255, 255), 13, Color.argb(23, 255, 255, 255)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, dp(7), 0, 0);
+        item.setLayoutParams(lp);
+
+        TextView summary = text(question, 12, true, TEXT);
+        TextView copy = text(answer, 12, false, Color.rgb(212, 229, 239));
+        copy.setPadding(0, dp(8), 0, 0);
+        copy.setLineSpacing(0, 1.8f);
+        copy.setVisibility(View.GONE);
+        item.addView(summary);
+        item.addView(copy);
+        item.setClickable(true);
+        item.setOnClickListener(v -> copy.setVisibility(copy.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        return item;
+    }
+
     private void showGuidePage() {
         currentPage = "guide";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("راهنمای کامل استفاده از PedalPro", "");
-        String[] sections = {
-                "۱. شروع کار", "۲. صفحه خانه", "۳. شروع و ثبت رکاب‌زنی", "۴. مسیرها و اکتشاف",
-                "۵. عملکرد و تمرین", "۶. باشگاه و ارتباطات", "۷. ایمنی و حریم خصوصی",
-                "۸. دوچرخه و نگهداری", "۹. تنظیمات تلفن همراه", "۱۰. نسخه و بروزرسانی"
+
+        LinearLayout shell = glassCard(26);
+        shell.setPadding(dp(14), dp(14), dp(14), dp(14));
+
+        shell.addView(text("راهنمای کامل استفاده از PedalPro", 22, true, TEXT));
+        TextView subtitle = text("راهنمای وب و اپلیکیشن Android، از شروع رکاب تا تحلیل عملکرد و ایمنی", 12, false, MUTED);
+        subtitle.setPadding(0, dp(4), 0, 0);
+        subtitle.setLineSpacing(0, 1.5f);
+        shell.addView(subtitle);
+
+        PedalActionView pdf = action(PedalIconView.Icon.DETAILS, "دانلود راهنمای PDF", PedalActionView.Style.PRIMARY);
+        pdf.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://pedalpro.ir/docs/PedalPro_User_Guide_4.7.40.pdf")));
+            } catch (Exception e) {
+                toast(e.getMessage());
+            }
+        });
+        shell.addView(pdf, fullActionLp(50));
+
+        final View[] jumpTargets = new View[8];
+        String[][] cards = {
+                {"شروع کار", "ورود، مجوزها و منوی اصلی"},
+                {"رکاب‌زنی", "GPS، حالت کم‌مصرف و رکاب گروهی"},
+                {"مسیرها", "Segments، Heatmap، Replay و Flyover"},
+                {"عملکرد", "Training Load، Power و تحلیل"},
+                {"باشگاه و ارتباطات", "برنامه، چالش، چت و فید"},
+                {"ایمنی", "Beacon، SOS و Privacy Zones"},
+                {"تنظیمات گوشی", "باتری، GPS و Background"},
+                {"رفع اشکال", "خطاهای متداول و راه‌حل"}
         };
-        for (String s : sections) {
-            LinearLayout box = glassCard(18);
-            box.addView(text(s, 15, true, TEXT));
-            content.addView(box, cardLp());
+        LinearLayout quickGrid = new LinearLayout(this);
+        quickGrid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams quickLp = new LinearLayout.LayoutParams(-1, -2);
+        quickLp.setMargins(0, dp(12), 0, dp(20));
+        for (int row = 0; row < 4; row++) {
+            LinearLayout pair = new LinearLayout(this);
+            pair.setOrientation(LinearLayout.HORIZONTAL);
+            pair.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            pair.setGravity(Gravity.TOP);
+            for (int col = 0; col < 2; col++) {
+                final int idx = row * 2 + col;
+                LinearLayout card = guideJumpCard(cards[idx][0], cards[idx][1]);
+                card.setOnClickListener(v -> {
+                    View target = jumpTargets[idx];
+                    if (target != null && mainScroll != null) {
+                        mainScroll.post(() -> mainScroll.smoothScrollTo(0, Math.max(0, target.getTop() - dp(95))));
+                    }
+                });
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
+                if (col == 0) cp.setMargins(dp(5), 0, 0, dp(9));
+                else cp.setMargins(0, 0, dp(5), dp(9));
+                pair.addView(card, cp);
+            }
+            quickGrid.addView(pair, new LinearLayout.LayoutParams(-1, -2));
         }
+        shell.addView(quickGrid, quickLp);
+
+        LinearLayout start = guideArticleSection("۱. شروع کار",
+                "از بالای صفحه وارد «حساب کاربری» شوید. برای ثبت فعالیت، دسترسی Location را فعال کنید. اگر از Cadence یا Power Meter استفاده می‌کنید Bluetooth و مجوزهای آن نیز لازم است.\n\n" +
+                "• خانه: داشبورد و فعالیت‌های زنده\n• فعالیت‌ها: برنامه‌ها و رویدادهای باشگاه\n• شروع رکاب: شروع یا ادامه رکاب‌زنی\n• مسیرها: مسیرهای GPS و ابزارهای اکتشاف\n• من: پروفایل و بخش‌های شخصی");
+        jumpTargets[0] = start; shell.addView(start, guideArticleLp());
+
+        LinearLayout home = guideArticleSection("۲. صفحه خانه",
+                "برنامه بعدی، خلاصه‌ها، فید فعالیت‌ها و رکاب‌زنی‌های زنده در خانه نمایش داده می‌شوند. کارت سبز مربوط به رکاب‌زنی فعال خود شماست و کارت نارنجی افراد دیگری را که در حال رکاب‌زدن هستند نشان می‌دهد.");
+        shell.addView(home, guideArticleLp());
+
+        LinearLayout ride = guideArticleSection("۳. شروع و ثبت رکاب‌زنی",
+                "۱. دکمه «شروع رکاب» را بزنید.\n۲. عنوان، دوچرخه و حریم خصوصی را انتخاب کنید.\n۳. رکاب را شروع کنید؛ زمان، سرعت، مسافت و GPS ثبت می‌شوند.\n۴. برای توقف موقت Pause و برای ادامه Resume را بزنید.\n۵. در پایان، فعالیت را خاتمه دهید تا در تاریخچه ثبت شود.\n\n" +
+                "حالت کم‌مصرف: صفحه تیره و ساده می‌شود و فقط اطلاعات ضروری رکاب نمایش داده می‌شود.\n\n" +
+                "رکاب گروهی: موقعیت گروه به‌صورت زنده به‌روزرسانی می‌شود. «رسیدن به گروه» برای مسیریابی به مقصد متحرک گروه استفاده می‌شود.");
+        jumpTargets[1] = ride; shell.addView(ride, guideArticleLp());
+
+        LinearLayout routes = guideArticleSection("۴. مسیرها و اکتشاف",
+                "• Segments: ساخت بخش رقابتی از مسیر و ثبت Effort.\n• Leaderboard: مقایسه عملکرد اعضا.\n• Personal / Club / Global Heatmap: نمایش مسیرهای پرتکرار.\n• مسیر پیشنهادی: پیشنهاد بر اساس محبوبیت، صعود و مسافت معمول شما.\n• Offline Routes: ذخیره اطلاعات مسیر روی دستگاه.\n• Replay: بازپخش مسیر با Timeline و سرعت 1×، 2× و 4×.\n• Flyover: نمای متحرک شبه‌سه‌بعدی مسیر و ارتفاع.");
+        jumpTargets[2] = routes; shell.addView(routes, guideArticleLp());
+
+        LinearLayout performance = guideArticleSection("۵. عملکرد و تمرین",
+                "• Training Load هفت‌روزه و پایه ۲۸ روزه\n• Fitness / Form و Acute/Chronic Ratio\n• Best Efforts و PR\n• Power و FTP در صورت وجود Power Meter\n• Cadence به RPM\n• Heart Rate Zones در صورت وجود منبع HR\n• تحلیل آب‌وهوا، ارتفاع، صعود، نزول و شیب");
+        LinearLayout performanceNotice = new LinearLayout(this);
+        performanceNotice.setOrientation(LinearLayout.VERTICAL);
+        performanceNotice.setPadding(dp(12), dp(10), dp(12), dp(10));
+        performanceNotice.setBackground(roundRect(Color.argb(24, 255, 217, 74), 13, Color.argb(62, 255, 217, 74)));
+        performanceNotice.addView(text("تحلیل‌های Training Load و Fitness ابزار ورزشی هستند و جایگزین ارزیابی پزشکی نیستند.", 11, false, TEXT));
+        performance.addView(performanceNotice, fullWrapLp(8));
+        jumpTargets[3] = performance; shell.addView(performance, guideArticleLp());
+
+        LinearLayout social = guideArticleSection("۶. باشگاه و ارتباطات",
+                "• مشاهده و ثبت‌نام برنامه‌های باشگاه\n• چالش‌ها و رتبه‌بندی هفتگی از شنبه تا جمعه\n• اعضا و گالری\n• چت‌روم\n• فید اجتماعی، Follow / Unfollow و Kudos\n• مشاور هوشمند");
+        jumpTargets[4] = social; shell.addView(social, guideArticleLp());
+
+        LinearLayout safety = guideArticleSection("۷. ایمنی و حریم خصوصی",
+                "• Beacon: لینک موقت برای مشاهده آخرین موقعیت رکاب‌زن.\n• SOS: مخاطب اضطراری و لینک زنده ۲۴ ساعته.\n• Privacy Zones: مخفی‌کردن مکان‌های حساس و نقاط شروع/پایان مسیر برای دیگران.");
+        jumpTargets[5] = safety; shell.addView(safety, guideArticleLp());
+
+        LinearLayout bike = guideArticleSection("۸. دوچرخه و نگهداری",
+                "دوچرخه‌ها را ثبت کنید، کیلومتر کارکرد را پیگیری کنید و برای زنجیر، لاستیک، لنت و سرویس عمومی دوره نگهداری تعریف کنید.");
+        shell.addView(bike, guideArticleLp());
+
+        LinearLayout settings = guideArticleSection("۹. تنظیمات تلفن همراه",
+                "• Battery Optimization برای PedalPro خاموش باشد.\n• Background Activity / Autostart در صورت وجود فعال باشد.\n• Location روی Precise قرار گیرد.\n• PedalPro در Sleeping / Deep Sleeping Apps قرار نگیرد.");
+        PedalActionView openPhone = action(PedalIconView.Icon.SETTINGS, "باز کردن تنظیمات تلفن همراه", PedalActionView.Style.OUTLINE);
+        openPhone.setOnClickListener(v -> showPhoneSettingsPage());
+        settings.addView(openPhone, fullActionLp(48));
+        jumpTargets[6] = settings; shell.addView(settings, guideArticleLp());
+
+        LinearLayout update = guideArticleSection("۱۰. نسخه و بروزرسانی",
+                "در بخش «نسخه اپلیکیشن» نسخه نصب‌شده و نسخه جدید بررسی می‌شود. بروزرسانی سایت با PPUP و بکاپ/Restore انجام می‌شود.");
+        PedalActionView openApp = action(PedalIconView.Icon.DETAILS, "رفتن به نسخه اپلیکیشن", PedalActionView.Style.OUTLINE);
+        openApp.setOnClickListener(v -> showAppVersionPage());
+        update.addView(openApp, fullActionLp(48));
+        shell.addView(update, guideArticleLp());
+
+        LinearLayout faq = guideArticleSection("۱۱. رفع اشکال سریع", "");
+        faq.addView(guideFaq("GPS در پس‌زمینه قطع می‌شود", "محدودیت باتری، Sleeping Apps و Background Restriction را غیرفعال کنید."));
+        faq.addView(guideFaq("مسافت یا سرعت غیرعادی است", "در فضای باز شروع کنید، Location دقیق را فعال نگه دارید و چند ثانیه برای تثبیت GPS صبر کنید."));
+        faq.addView(guideFaq("پیش‌بینی هوا دیر می‌آید", "داده هوا Cache می‌شود. اگر اینترنت یا Location کند باشد، بروزرسانی دستی را بزنید."));
+        faq.addView(guideFaq("صفحه عملکرد اطلاعات ندارد", "نسخه‌های جدید هنگام بازشدن صفحه اطلاعات را خودکار دریافت می‌کنند؛ اتصال سرور را بررسی کنید."));
+        faq.addView(guideFaq("سنسور پیدا نمی‌شود", "Bluetooth و مجوزها را بررسی کنید. سنسور باید پروتکل استاندارد BLE Cycling Speed/Cadence یا Cycling Power را ارائه کند."));
+        jumpTargets[7] = faq; shell.addView(faq, guideArticleLp());
+
+        LinearLayout check = guideArticleSection("۱۲. چک‌لیست قبل از رکاب",
+                "• شارژ کافی گوشی\n• GPS و Location دقیق\n• خروج PedalPro از محدودیت باتری\n• اینترنت برای Live/Group/Weather\n• Bluetooth در صورت استفاده از سنسور\n• انتخاب دوچرخه و حریم خصوصی مناسب");
+        shell.addView(check, guideArticleLp());
+
+        content.addView(shell, cardLp());
         VazirmatnLoader.apply(this, content);
         animatePageIn();
+        if (mainScroll != null) mainScroll.post(() -> mainScroll.scrollTo(0, 0));
     }
 
     private void showInstallPage() {
