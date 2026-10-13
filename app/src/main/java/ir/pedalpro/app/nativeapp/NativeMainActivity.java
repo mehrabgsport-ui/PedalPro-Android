@@ -121,6 +121,7 @@ public final class NativeMainActivity extends Activity {
     private LinearLayout appRoot;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
+    private NativeRouteView activeRideRouteView;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
     private LinearLayout weatherDaysHost;
@@ -135,7 +136,7 @@ public final class NativeMainActivity extends Activity {
         @Override public void run() {
             if (rideTimer != null && activeRide != null) {
                 long sec = rideBaseSeconds;
-                if (rideTimerAnchorElapsed > 0L) {
+                if (!manualPaused && rideTimerAnchorElapsed > 0L) {
                     sec += Math.max(0L, (SystemClock.elapsedRealtime() - rideTimerAnchorElapsed) / 1000L);
                 }
                 rideTimer.setText(formatDuration(sec));
@@ -162,6 +163,10 @@ public final class NativeMainActivity extends Activity {
                     double mps = j.optDouble("speed_mps", 0);
                     double acc = j.optDouble("accuracy", -1);
                     if (rideSpeed != null) rideSpeed.setText(String.format(Locale.US, "%.1f", Math.max(0, mps * 3.6)));
+                    if (activeRideRouteView != null) {
+                        double lat = j.optDouble("lat", Double.NaN), lng = j.optDouble("lng", Double.NaN);
+                        if (Double.isFinite(lat) && Double.isFinite(lng)) activeRideRouteView.setCurrent(lat, lng);
+                    }
                     if (rideGps != null) {
                         rideGps.setText(acc > 0 ? "GPS فعال · دقت ±" + Math.round(acc) + " متر" : "GPS فعال");
                         rideGps.setTextColor(GREEN);
@@ -421,25 +426,29 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(navRide);
         content.removeAllViews();
+        activeRideRouteView=null;
 
         if (activeRide == null) {
-            addHero("شروع رکاب‌زنی", "ابتدا GPS تازه و دقیق بررسی می‌شود؛ ثبت مسیر و تایمر فقط بعد از تأیید شما شروع می‌شود.");
-            LinearLayout gate = card();
-            TextView state = text("GPS هنوز بررسی نشده است.", 15, true, TEXT);
+            addHero("شروع رکاب‌زنی", "ثبت مسیر فقط بعد از دریافت موقعیت تازه و دقیق شروع می‌شود.");
+            LinearLayout gate = glassCard(28);
+            LinearLayout statusRow=new LinearLayout(this);statusRow.setOrientation(LinearLayout.HORIZONTAL);statusRow.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+            PedalIconView gpsIcon=new PedalIconView(this,PedalIconView.Icon.LOCATION,Color.rgb(31,231,242));
+            TextView state = text("در حال بررسی GPS…", 16, true, TEXT);
+            statusRow.addView(state,new LinearLayout.LayoutParams(0,-2,1f));statusRow.addView(gpsIcon,new LinearLayout.LayoutParams(dp(34),dp(34)));
             TextView accuracy = text("دقت: —", 12, false, MUTED);
-            Button check = primaryButton("بررسی GPS");
-            Button start = primaryButton("شروع ثبت مسیر");
-            start.setEnabled(false);
-
-            gate.addView(state);
-            gate.addView(accuracy);
-            gate.addView(check);
-            gate.addView(start);
+            accuracy.setPadding(0,dp(7),0,dp(4));
+            PedalActionView check = action(PedalIconView.Icon.REFRESH,"بررسی دوباره GPS",PedalActionView.Style.OUTLINE);
+            PedalActionView start = action(PedalIconView.Icon.PLAY,"شروع ثبت مسیر",PedalActionView.Style.PRIMARY);
+            start.setEnabled(false);start.setAlpha(.5f);
+            gate.addView(statusRow);gate.addView(accuracy);gate.addView(check,fullActionLp(52));gate.addView(start,fullActionLp(58));
             content.addView(gate, cardLp());
 
-            check.setOnClickListener(v -> startGpsPreflight(state, accuracy, start, check));
-            start.setOnClickListener(v -> createRideAndStartTracking(start, state));
-            startGpsPreflight(state, accuracy, start, check);
+            Button checkProxy=hiddenButtonProxy(check), startProxy=hiddenButtonProxy(start);
+            check.setOnClickListener(v->{check.setEnabled(false);startGpsPreflight(state,accuracy,startProxy,checkProxy);main.postDelayed(()->check.setEnabled(true),1600);});
+            start.setOnClickListener(v->{if(pendingFreshFix!=null)createRideAndStartTracking(startProxy,state);});
+            startGpsPreflight(state, accuracy, startProxy, checkProxy);
+            main.postDelayed(()->{if(pendingFreshFix!=null){start.setEnabled(true);start.setAlpha(1f);}},1200);
+            VazirmatnLoader.apply(this,content);animatePageIn();
             return;
         }
 
@@ -448,57 +457,55 @@ public final class NativeMainActivity extends Activity {
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         rideTimer = metricValue("زمان", formatDuration(activeRide.optLong("duration_seconds", 0)));
-        rideDistance = metricValue("مسافت km", String.format(Locale.US, "%.2f", activeRide.optDouble("distance_km", 0)));
-        rideSpeed = metricValue("سرعت km/h", String.format(Locale.US, "%.1f", activeRide.optDouble("avg_speed_kmh", 0)));
-        stats.addView(wrapMetric(rideTimer, "زمان"), weightHeightLp(dp(96)));
-        stats.addView(wrapMetric(rideDistance, "مسافت km"), weightHeightLp(dp(96)));
-        stats.addView(wrapMetric(rideSpeed, "سرعت km/h"), weightHeightLp(dp(96)));
+        rideDistance = metricValue("مسافت", String.format(Locale.US, "%.2f", activeRide.optDouble("distance_km", 0)));
+        rideSpeed = metricValue("سرعت", String.format(Locale.US, "%.1f", activeRide.optDouble("avg_speed_kmh", 0)));
+        stats.addView(wrapMetric(rideTimer, "زمان"), weightHeightLp(dp(100)));
+        stats.addView(wrapMetric(rideDistance, "km"), weightHeightLp(dp(100)));
+        stats.addView(wrapMetric(rideSpeed, "km/h"), weightHeightLp(dp(100)));
         content.addView(stats, cardLp());
 
-        LinearLayout gps = card();
-        rideGps = text(isTrackingServiceActive() ? "GPS اندروید فعال" : "GPS متوقف است", 13, true,
+        activeRideRouteView=new NativeRouteView(this);
+        content.addView(activeRideRouteView,new LinearLayout.LayoutParams(-1,dp(280)));
+        loadActiveRideRoute();
+
+        LinearLayout gps = glassCard(20);
+        rideGps = text(isTrackingServiceActive() ? "GPS فعال · ثبت مسیر در پس‌زمینه" : "GPS موقتاً متوقف است", 13, true,
                 isTrackingServiceActive() ? GREEN : ORANGE);
         gps.addView(rideGps);
         content.addView(gps, cardLp());
 
-        Button resume = primaryButton(isTrackingServiceActive() ? "GPS در حال ثبت است" : "ادامه ثبت GPS");
-        resume.setEnabled(!isTrackingServiceActive());
-        resume.setOnClickListener(v -> startTrackingService(activeRide.optInt("id", 0)));
+        PedalActionView pause=action(manualPaused?PedalIconView.Icon.PLAY:PedalIconView.Icon.PAUSE,manualPaused?"ادامه ثبت":"توقف ثبت",PedalActionView.Style.OUTLINE);
+        pause.setOnClickListener(v->toggleManualPause(pause));
+        content.addView(pause,fullActionLp(54));
 
-        Button stop = dangerButton("پایان رکاب‌زنی");
-        stop.setOnClickListener(v -> finishRide(stop));
+        PedalActionView groupNav=action(PedalIconView.Icon.BEACON,"رسیدن به گروه در حال حرکت",PedalActionView.Style.OUTLINE);
+        groupNav.setOnClickListener(v->openGroupNavigation());content.addView(groupNav,fullActionLp(52));
 
-        content.addView(resume);
+        PedalActionView sensors=action(PedalIconView.Icon.SENSOR,"سنسورهای Cadence / Power / HR",PedalActionView.Style.OUTLINE);
+        sensors.setOnClickListener(v->showSensors());content.addView(sensors,fullActionLp(52));
 
-        Button groupNav = normalButton("مسیریابی تا گروه در حال حرکت");
-        groupNav.setOnClickListener(v -> {
-            Intent i = new Intent(this, NativeLiveNavigationActivity.class);
-            i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE, "group");
-            i.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
-            i.putExtra(NativeLiveNavigationActivity.EXTRA_TITLE, "گروه");
+        PedalActionView beacon=action(PedalIconView.Icon.BEACON,"اشتراک زنده Beacon و SOS",PedalActionView.Style.OUTLINE);
+        beacon.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(beacon,fullActionLp(52));
+
+        PedalActionView low=action(PedalIconView.Icon.SUN,"حالت کم‌مصرف OLED",PedalActionView.Style.OUTLINE);
+        low.setOnClickListener(v->{
+            Intent i=new Intent(this,LowPowerRideActivity.class);
+            i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID,activeRide.optInt("id",0));
+            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS,activeRide.optLong("duration_seconds",0));
+            i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM,activeRide.optDouble("distance_km",0));
             startActivity(i);
         });
-        content.addView(groupNav);
+        content.addView(low,fullActionLp(52));
 
-        Button sensorsNow = normalButton("سنسورها و داده زنده");
-        sensorsNow.setOnClickListener(v -> showSensors());
-        content.addView(sensorsNow);
-        Button lowPower = normalButton("حالت کم‌مصرف OLED");
-        lowPower.setOnClickListener(v -> {
-            Intent i = new Intent(this, LowPowerRideActivity.class);
-            i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
-            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS, activeRide.optLong("duration_seconds", 0));
-            i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM, activeRide.optDouble("distance_km", 0));
-            startActivity(i);
-        });
-        content.addView(lowPower);
-
-
-        content.addView(stop);
+        PedalActionView stop=action(PedalIconView.Icon.CLOSE,"پایان رکاب‌زنی",PedalActionView.Style.OUTLINE);
+        stop.setAccent(RED);stop.setOnClickListener(v->confirmFinishRide(stop));
+        content.addView(stop,fullActionLp(54));
 
         rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
         rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
+        VazirmatnLoader.apply(this,content);animatePageIn();
     }
+
 
     private void showActivities() {
         if (!signedIn()) { showLogin(); return; }
@@ -1650,6 +1657,44 @@ public final class NativeMainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void toggleManualPause(PedalActionView button){
+        if(activeRide==null)return;
+        int rideId=activeRide.optInt("id",0);if(rideId<=0)return;
+        if(!manualPaused){
+            long elapsed=rideTimerAnchorElapsed>0?Math.max(0,(SystemClock.elapsedRealtime()-rideTimerAnchorElapsed)/1000L):0;
+            rideBaseSeconds+=elapsed;rideTimerAnchorElapsed=0;manualPaused=true;
+            Intent stop=new Intent(this,TrackingService.class);stop.setAction(TrackingService.ACTION_STOP);startService(stop);
+            if(rideSpeed!=null)rideSpeed.setText("0.0");if(rideGps!=null){rideGps.setText("توقف دستی · GPS موقتاً متوقف");rideGps.setTextColor(ORANGE);}
+            button.setLabel("ادامه ثبت");
+        }else{
+            manualPaused=false;rideTimerAnchorElapsed=SystemClock.elapsedRealtime();startTrackingService(rideId);
+            if(rideGps!=null){rideGps.setText("ثبت GPS دوباره فعال شد");rideGps.setTextColor(GREEN);}button.setLabel("توقف ثبت");
+        }
+    }
+
+    private void loadActiveRideRoute(){
+        if(activeRideRouteView==null||activeRide==null)return;
+        int id=activeRide.optInt("id",0);if(id<=0)return;
+        io.execute(()->{
+            try{
+                java.util.LinkedHashMap<String,Object> q=new java.util.LinkedHashMap<>();q.put("ride_id",id);q.put("point_mode","nav");
+                JSONObject d=api.get("ride_details",q);JSONObject r=d.optJSONObject("ride");JSONArray pts=r==null?null:r.optJSONArray("points");
+                main.post(()->{if(activeRideRouteView!=null)activeRideRouteView.setPoints(pts);});
+            }catch(Exception ignored){}
+        });
+    }
+
+    private void confirmFinishRide(View trigger){
+        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout box=glassCard(28);box.addView(text("پایان رکاب‌زنی؟",20,true,TEXT));box.addView(text("مسیر و آمار نهایی ذخیره می‌شود.",12,false,MUTED));
+        PedalActionView yes=action(PedalIconView.Icon.DETAILS,"ذخیره و پایان",PedalActionView.Style.PRIMARY);
+        PedalActionView no=action(PedalIconView.Icon.BACK,"ادامه رکاب‌زنی",PedalActionView.Style.OUTLINE);
+        yes.setOnClickListener(v->{d.dismiss();finishRide(hiddenButtonProxy(trigger));});no.setOnClickListener(v->d.dismiss());
+        box.addView(yes,fullActionLp(54));box.addView(no,fullActionLp(50));d.setContentView(box);d.show();
+        Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=-1;lp.height=-2;lp.gravity=Gravity.BOTTOM;w.setAttributes(lp);}
+        VazirmatnLoader.apply(this,box);
     }
 
     private void startTrackingService(int rideId) {
