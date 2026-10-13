@@ -11,6 +11,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -26,21 +27,17 @@ import java.util.concurrent.Executors;
 
 import ir.pedalpro.app.R;
 
-/**
- * Shared web-parity visual shell for all native feature pages.
- * Native views only; no WebView.
- */
 abstract class NativeScreenBase extends Activity {
     protected static final int BG=Color.rgb(4,17,27);
-    protected static final int CARD=Color.rgb(8,31,45);
-    protected static final int CARD2=Color.rgb(10,39,55);
+    protected static final int CARD=Color.argb(188,7,31,45);
+    protected static final int CARD2=Color.argb(184,8,39,55);
     protected static final int TEXT=Color.rgb(244,249,251);
-    protected static final int MUTED=Color.rgb(166,188,198);
-    protected static final int ACCENT=Color.rgb(31,213,227);
+    protected static final int MUTED=Color.rgb(176,197,207);
+    protected static final int ACCENT=Color.rgb(31,229,241);
     protected static final int GREEN=Color.rgb(49,219,161);
     protected static final int ORANGE=Color.rgb(255,187,68);
     protected static final int RED=Color.rgb(255,91,103);
-    protected static final int STROKE=Color.rgb(49,82,98);
+    protected static final int STROKE=Color.argb(105,235,248,255);
 
     protected final ExecutorService io=Executors.newSingleThreadExecutor();
     protected final Handler main=new Handler(Looper.getMainLooper());
@@ -60,10 +57,23 @@ abstract class NativeScreenBase extends Activity {
     }
 
     private void buildShell(){
+        FrameLayout frame=new FrameLayout(this);
+        frame.setBackgroundColor(BG);
+
+        ImageView bg=new ImageView(this);
+        bg.setImageResource(R.drawable.site_bg_reference);
+        bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        bg.setAlpha(.82f);
+        frame.addView(bg,new FrameLayout.LayoutParams(-1,-1));
+
+        View shade=new View(this);
+        shade.setBackgroundColor(Color.argb(58,2,12,20));
+        frame.addView(shade,new FrameLayout.LayoutParams(-1,-1));
+
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        root.setBackgroundColor(Color.TRANSPARENT);
 
         ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{
             androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -74,7 +84,7 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout head=new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(16),dp(10),dp(16),dp(10));
+        head.setPadding(dp(15),dp(9),dp(15),dp(9));
         head.setBackground(headerGradient());
 
         ImageView logo=new ImageView(this);
@@ -84,25 +94,21 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout titles=new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);
-        TextView title=text(screenTitle(),21,true,TEXT);
-        subtitle=text("",11,false,MUTED);
+        TextView title=text(screenTitle(),20,true,TEXT);
+        subtitle=text("",10,false,MUTED);
         titles.addView(title);
         titles.addView(subtitle);
 
-        Button back=new Button(this);
-        back.setText("‹");
-        back.setTextSize(28);
-        back.setTextColor(TEXT);
-        back.setAllCaps(false);
-        back.setPadding(0,0,0,0);
-        back.setBackground(round(CARD2,15,STROKE));
+        Button back=plainButton("‹",28);
+        back.setBackground(round(Color.argb(110,7,31,45),16,STROKE));
         back.setOnClickListener(v->finish());
 
-        head.addView(logo,new LinearLayout.LayoutParams(dp(80),dp(58)));
-        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,dp(58),1f);tp.setMargins(dp(8),0,dp(8),0);
+        head.addView(logo,new LinearLayout.LayoutParams(dp(78),dp(56)));
+        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,dp(56),1f);
+        tp.setMargins(dp(8),0,dp(8),0);
         head.addView(titles,tp);
-        head.addView(back,new LinearLayout.LayoutParams(dp(52),dp(50)));
-        root.addView(head,new LinearLayout.LayoutParams(-1,dp(86)));
+        head.addView(back,new LinearLayout.LayoutParams(dp(50),dp(48)));
+        root.addView(head,new LinearLayout.LayoutParams(-1,dp(80)));
 
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);
@@ -110,11 +116,12 @@ abstract class NativeScreenBase extends Activity {
 
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14),dp(14),dp(14),dp(24));
+        content.setPadding(dp(14),dp(14),dp(14),dp(26));
         scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
 
-        setContentView(root);
+        frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
+        setContentView(frame);
         onScreenReady();
     }
 
@@ -132,14 +139,14 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout x=new LinearLayout(this);
         x.setOrientation(LinearLayout.VERTICAL);
         x.setPadding(dp(16),dp(15),dp(16),dp(15));
-        x.setBackground(round(CARD,20,STROKE));
-        x.setElevation(dp(2));
+        x.setBackground(round(CARD,22,STROKE));
+        x.setElevation(dp(3));
         return x;
     }
 
     protected LinearLayout accentCard(int accent){
         LinearLayout x=card();
-        GradientDrawable g=round(CARD2,20,STROKE);
+        GradientDrawable g=round(CARD2,22,STROKE);
         g.setStroke(dp(2),accent);
         x.setBackground(g);
         return x;
@@ -181,17 +188,13 @@ abstract class NativeScreenBase extends Activity {
     }
 
     protected Button primary(String s){
-        Button b=new Button(this);
-        b.setText(s);
-        b.setTextSize(13);
-        b.setAllCaps(false);
+        Button b=plainButton(s,13);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         b.setTextColor(Color.rgb(3,34,42));
-        b.setGravity(Gravity.CENTER);
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{ACCENT,Color.rgb(27,181,246)});
-        g.setCornerRadius(dp(16));
+                new int[]{Color.rgb(29,239,244),Color.rgb(21,209,238),Color.rgb(43,178,255)});
+        g.setCornerRadius(dp(18));
         b.setBackground(g);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
         lp.setMargins(0,dp(9),0,0);
@@ -200,13 +203,8 @@ abstract class NativeScreenBase extends Activity {
     }
 
     protected Button normal(String s){
-        Button b=new Button(this);
-        b.setText(s);
-        b.setTextSize(13);
-        b.setAllCaps(false);
-        b.setTextColor(TEXT);
-        b.setGravity(Gravity.CENTER);
-        b.setBackground(round(CARD2,16,STROKE));
+        Button b=plainButton(s,13);
+        b.setBackground(round(CARD2,17,STROKE));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
         lp.setMargins(0,dp(8),0,0);
         b.setLayoutParams(lp);
@@ -216,7 +214,7 @@ abstract class NativeScreenBase extends Activity {
     protected Button danger(String s){
         Button b=normal(s);
         b.setTextColor(Color.WHITE);
-        b.setBackground(round(Color.rgb(152,50,62),16,0));
+        b.setBackground(round(Color.argb(210,120,36,50),17,Color.argb(130,255,120,145)));
         return b;
     }
 
@@ -224,7 +222,7 @@ abstract class NativeScreenBase extends Activity {
         TextView t=text(s,11,true,TEXT);
         t.setGravity(Gravity.CENTER);
         t.setPadding(dp(10),dp(7),dp(10),dp(7));
-        t.setBackground(round(CARD2,13,STROKE));
+        t.setBackground(round(CARD2,14,STROKE));
         return t;
     }
 
@@ -242,10 +240,27 @@ abstract class NativeScreenBase extends Activity {
         return g;
     }
 
+    private Button plainButton(String s,int sp){
+        Button b=new Button(this);
+        b.setText(s);
+        b.setTextSize(sp);
+        b.setAllCaps(false);
+        b.setTextColor(TEXT);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(0,0,0,0);
+        b.setMinHeight(0);
+        b.setMinWidth(0);
+        b.setStateListAnimator(null);
+        return b;
+    }
+
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(35,39,41),Color.rgb(4,47,65),Color.rgb(3,81,104)});
+                new int[]{
+                        Color.argb(205,38,47,50),
+                        Color.argb(210,5,49,68),
+                        Color.argb(220,3,78,101)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(28),dp(28),dp(28),dp(28)});
         g.setStroke(dp(1),STROKE);
         return g;
