@@ -43,6 +43,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import ir.pedalpro.app.TrackingService;
+import ir.pedalpro.app.CyclingSensorManager;
+import ir.pedalpro.app.HeartRateBleManager;
 
 /**
  * PedalPro 2.0 native launcher.
@@ -50,6 +52,7 @@ import ir.pedalpro.app.TrackingService;
  */
 public final class NativeMainActivity extends Activity {
     private static final int REQ_LOCATION = 2201;
+    private static final int REQ_BLE = 2202;
 
     private static final int BG = Color.rgb(6, 17, 30);
     private static final int CARD = Color.rgb(13, 39, 57);
@@ -67,6 +70,13 @@ public final class NativeMainActivity extends Activity {
     private PedalProApiClient api;
     private JSONObject bootstrap;
     private JSONObject activeRide;
+    private CyclingSensorManager cyclingSensors;
+    private HeartRateBleManager heartRateSensors;
+    private TextView sensorStatus;
+    private TextView cadenceValue;
+    private TextView powerValue;
+    private TextView heartRateValue;
+    private LinearLayout sensorDeviceList;
 
     private LinearLayout content;
     private TextView topStatus;
@@ -140,6 +150,14 @@ public final class NativeMainActivity extends Activity {
         super.onCreate(state);
         session = new SessionStore(this);
         api = new PedalProApiClient(this);
+        cyclingSensors = new CyclingSensorManager(this, new CyclingSensorManager.Listener() {
+            @Override public void onStatus(String json) { renderCyclingStatus(json); }
+            @Override public void onMeasurement(String json) { renderCyclingMeasurement(json); }
+        });
+        heartRateSensors = new HeartRateBleManager(this, new HeartRateBleManager.Listener() {
+            @Override public void onStatus(String json) { renderHeartRateStatus(json); }
+            @Override public void onHeartRate(String json) { renderHeartRateMeasurement(json); }
+        });
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         renderShell();
@@ -320,6 +338,19 @@ public final class NativeMainActivity extends Activity {
         content.addView(rideCard, cardLp());
 
         addLiveRidesSection(3);
+
+        LinearLayout tools = card();
+        tools.addView(text("بخش‌های Native", 16, true, TEXT));
+        Button club = primaryButton("باشگاه و اعضا");
+        club.setOnClickListener(v -> showClub());
+        Button challenges = primaryButton("چالش‌ها");
+        challenges.setOnClickListener(v -> showChallenges());
+        Button sensors = primaryButton("سنسورها");
+        sensors.setOnClickListener(v -> showSensors());
+        Button perf = primaryButton("عملکرد من");
+        perf.setOnClickListener(v -> showPerformance());
+        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf);
+        content.addView(tools, cardLp());
     }
 
     private void showRide() {
@@ -416,6 +447,266 @@ public final class NativeMainActivity extends Activity {
             }
         }
         if (added == 0 && liveCount() == 0) addEmpty("مسیر قابل نمایشی وجود ندارد.");
+    }
+
+
+    private void showClub() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("باشگاه", "اعضا و وضعیت کلی گروه");
+
+        JSONArray members = bootstrap.optJSONArray("members");
+        if (members == null || members.length() == 0) {
+            addEmpty("عضوی برای نمایش دریافت نشد.");
+            return;
+        }
+        for (int i = 0; i < members.length(); i++) {
+            JSONObject m = members.optJSONObject(i);
+            if (m == null) continue;
+            LinearLayout box = card();
+            String name = m.optString("display_name", m.optString("username", "عضو"));
+            box.addView(text(name, 15, true, TEXT));
+            String username = m.optString("username", "");
+            String role = m.optString("role", "");
+            box.addView(text((username.isBlank() ? "" : "@" + username) + (role.isBlank() ? "" : " · " + role), 11, false, MUTED));
+            content.addView(box, cardLp());
+        }
+    }
+
+    private void showChallenges() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("چالش‌ها", "چالش‌های فعال و برنامه‌ریزی‌شده");
+
+        JSONArray challenges = bootstrap.optJSONArray("challenges");
+        if (challenges == null || challenges.length() == 0) {
+            addEmpty("چالشی برای نمایش وجود ندارد.");
+            return;
+        }
+        for (int i = 0; i < challenges.length(); i++) {
+            JSONObject ch = challenges.optJSONObject(i);
+            if (ch == null) continue;
+            LinearLayout box = card();
+            boolean official = ch.optInt("is_official", 0) == 1;
+            box.addView(text((official ? "★ " : "") + ch.optString("title", "چالش"), 16, true, official ? ORANGE : TEXT));
+            String status = ch.optString("status", "");
+            int joined = ch.optInt("joiners_count", ch.optInt("participants_count", 0));
+            box.addView(text("وضعیت: " + status + " · همراهان: " + joined, 11, false, MUTED));
+            String desc = ch.optString("description", "");
+            if (!desc.isBlank()) box.addView(text(desc, 12, false, MUTED));
+            content.addView(box, cardLp());
+        }
+    }
+
+    private void showPerformance() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("عملکرد من", "خلاصه Native بر اساس فعالیت‌های ثبت‌شده");
+
+        JSONArray rides = bootstrap.optJSONArray("my_completed_rides");
+        if (rides == null) rides = bootstrap.optJSONArray("rides");
+
+        int count = 0;
+        double distance = 0;
+        double ascent = 0;
+        long seconds = 0;
+        double weightedSpeedDistance = 0;
+
+        if (rides != null) {
+            JSONObject user = bootstrap.optJSONObject("user");
+            int uid = user == null ? 0 : user.optInt("id", 0);
+            for (int i = 0; i < rides.length(); i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r == null) continue;
+                if (!"completed".equals(r.optString("status", "completed"))) continue;
+                int owner = r.optInt("owner_user_id", uid);
+                if (uid > 0 && owner > 0 && owner != uid) continue;
+                double d = Math.max(0, r.optDouble("distance_km", 0));
+                distance += d;
+                ascent += Math.max(0, r.optDouble("ascent_m", 0));
+                seconds += Math.max(0, r.optLong("duration_seconds", 0));
+                weightedSpeedDistance += Math.max(0, r.optDouble("avg_speed_kmh", 0)) * d;
+                count++;
+            }
+        }
+
+        LinearLayout a = new LinearLayout(this);
+        a.setOrientation(LinearLayout.HORIZONTAL);
+        a.addView(wrapMetric(metricValue("رکاب", String.valueOf(count)), "رکاب"), weightHeightLp(dp(96)));
+        a.addView(wrapMetric(metricValue("مسافت", String.format(Locale.US, "%.1f", distance)), "km"), weightHeightLp(dp(96)));
+        a.addView(wrapMetric(metricValue("صعود", String.format(Locale.US, "%.0f", ascent)), "m"), weightHeightLp(dp(96)));
+        content.addView(a, cardLp());
+
+        LinearLayout b = new LinearLayout(this);
+        b.setOrientation(LinearLayout.HORIZONTAL);
+        double avg = distance > 0 ? weightedSpeedDistance / distance : 0;
+        b.addView(wrapMetric(metricValue("میانگین", String.format(Locale.US, "%.1f", avg)), "km/h"), weightHeightLp(dp(96)));
+        b.addView(wrapMetric(metricValue("زمان", formatDuration(seconds)), "کل"), weightHeightLp(dp(96)));
+        content.addView(b, cardLp());
+
+        addCard("Training / Sensors", "Cadence و Power از BLE Native خوانده می‌شوند و آماده اتصال به محاسبات Training Load هستند.");
+    }
+
+    private void showSensors() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("سنسورها", "اتصال مستقیم Bluetooth LE بدون JavaScript Bridge");
+
+        LinearLayout metrics = new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.HORIZONTAL);
+        cadenceValue = metricValue("Cadence", "0");
+        powerValue = metricValue("Power", "0");
+        heartRateValue = metricValue("HR", "—");
+        metrics.addView(wrapMetric(cadenceValue, "rpm"), weightHeightLp(dp(96)));
+        metrics.addView(wrapMetric(powerValue, "W"), weightHeightLp(dp(96)));
+        metrics.addView(wrapMetric(heartRateValue, "bpm"), weightHeightLp(dp(96)));
+        content.addView(metrics, cardLp());
+
+        LinearLayout status = card();
+        sensorStatus = text("آماده جستجوی سنسور", 12, true, MUTED);
+        status.addView(sensorStatus);
+        Button scan = primaryButton("جستجوی Cadence / Power / Heart Rate");
+        scan.setOnClickListener(v -> startSensorScan());
+        status.addView(scan);
+        content.addView(status, cardLp());
+
+        sensorDeviceList = new LinearLayout(this);
+        sensorDeviceList.setOrientation(LinearLayout.VERTICAL);
+        content.addView(sensorDeviceList);
+
+        renderSensorDevices();
+    }
+
+    private void startSensorScan() {
+        if (!hasBlePermissions()) {
+            if (Build.VERSION.SDK_INT >= 31) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}, REQ_BLE);
+            } else {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQ_BLE);
+            }
+            return;
+        }
+        if (sensorStatus != null) {
+            sensorStatus.setText("در حال جستجوی سنسورها…");
+            sensorStatus.setTextColor(ACCENT);
+        }
+        cyclingSensors.startScan();
+        heartRateSensors.startScan();
+        main.postDelayed(this::renderSensorDevices, 2200);
+        main.postDelayed(this::renderSensorDevices, 5000);
+        main.postDelayed(this::renderSensorDevices, 9500);
+    }
+
+    private void renderSensorDevices() {
+        if (sensorDeviceList == null) return;
+        sensorDeviceList.removeAllViews();
+        int found = 0;
+        try {
+            JSONArray arr = new JSONArray(cyclingSensors.devicesJson());
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject d = arr.optJSONObject(i);
+                if (d == null) continue;
+                addSensorDevice(d.optString("name", "Cycling Sensor"),
+                        d.optString("address", ""),
+                        (d.optBoolean("cadence") ? "Cadence " : "") + (d.optBoolean("power") ? "Power" : ""),
+                        true);
+                found++;
+            }
+        } catch (Exception ignored) { }
+
+        try {
+            JSONArray arr = new JSONArray(heartRateSensors.devicesJson());
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject d = arr.optJSONObject(i);
+                if (d == null) continue;
+                addSensorDevice(d.optString("name", "Heart Rate Sensor"),
+                        d.optString("address", ""), "Heart Rate", false);
+                found++;
+            }
+        } catch (Exception ignored) { }
+
+        if (found == 0) {
+            LinearLayout box = card();
+            box.addView(text("هنوز سنسور استاندارد BLE پیدا نشده است.", 12, false, MUTED));
+            sensorDeviceList.addView(box, cardLp());
+        }
+    }
+
+    private void addSensorDevice(String name, String address, String type, boolean cycling) {
+        LinearLayout box = card();
+        box.addView(text(name == null || name.isBlank() ? type : name, 14, true, TEXT));
+        box.addView(text(type + (address.isBlank() ? "" : " · " + address), 10, false, MUTED));
+        Button connect = primaryButton("اتصال");
+        connect.setOnClickListener(v -> {
+            if (cycling) cyclingSensors.connect(address);
+            else heartRateSensors.connect(address);
+            if (sensorStatus != null) sensorStatus.setText("در حال اتصال…");
+        });
+        box.addView(connect);
+        sensorDeviceList.addView(box, cardLp());
+    }
+
+    private void renderCyclingStatus(String json) {
+        main.post(() -> {
+            try {
+                JSONObject o = new JSONObject(json);
+                if (sensorStatus != null && o.has("message")) sensorStatus.setText(o.optString("message"));
+                if (cadenceValue != null) cadenceValue.setText(String.format(Locale.US, "%.0f", o.optDouble("cadenceRpm", 0)));
+                if (powerValue != null) powerValue.setText(String.valueOf(o.optInt("powerW", 0)));
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private void renderCyclingMeasurement(String json) {
+        main.post(() -> {
+            try {
+                JSONObject o = new JSONObject(json);
+                if (cadenceValue != null) cadenceValue.setText(String.format(Locale.US, "%.0f", o.optDouble("cadence_rpm", 0)));
+                if (powerValue != null) powerValue.setText(String.valueOf(o.optInt("power_w", 0)));
+                if (sensorStatus != null) {
+                    sensorStatus.setText("سنسور دوچرخه متصل · داده زنده");
+                    sensorStatus.setTextColor(GREEN);
+                }
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private void renderHeartRateStatus(String json) {
+        main.post(() -> {
+            try {
+                JSONObject o = new JSONObject(json);
+                if (heartRateValue != null && o.optInt("bpm", 0) > 0) heartRateValue.setText(String.valueOf(o.optInt("bpm")));
+                if (sensorStatus != null && o.has("message")) sensorStatus.setText(o.optString("message"));
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private void renderHeartRateMeasurement(String json) {
+        main.post(() -> {
+            try {
+                JSONObject o = new JSONObject(json);
+                int bpm = o.optInt("bpm", 0);
+                if (heartRateValue != null && bpm > 0) heartRateValue.setText(String.valueOf(bpm));
+                if (sensorStatus != null) {
+                    sensorStatus.setText("Heart Rate متصل · داده زنده");
+                    sensorStatus.setTextColor(GREEN);
+                }
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private boolean hasBlePermissions() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            return ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+                    && ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+        }
+        return hasFineLocation();
     }
 
     private void showMe() {
@@ -851,6 +1142,12 @@ public final class NativeMainActivity extends Activity {
             } else {
                 toast("برای ثبت دقیق مسیر، دسترسی Precise Location لازم است.");
             }
+        } else if (requestCode == REQ_BLE) {
+            if (hasBlePermissions()) {
+                startSensorScan();
+            } else {
+                toast("برای اتصال سنسورها اجازه Bluetooth لازم است.");
+            }
         }
     }
 
@@ -864,6 +1161,8 @@ public final class NativeMainActivity extends Activity {
     protected void onDestroy() {
         main.removeCallbacks(clockTick);
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
+        try { if (cyclingSensors != null) { cyclingSensors.stopScan(); cyclingSensors.disconnect(); } } catch (Throwable ignored) { }
+        try { if (heartRateSensors != null) { heartRateSensors.stopScan(); heartRateSensors.disconnect(); } } catch (Throwable ignored) { }
         io.shutdownNow();
         super.onDestroy();
     }
