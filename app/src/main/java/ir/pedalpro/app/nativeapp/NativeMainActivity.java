@@ -961,6 +961,260 @@ public final class NativeMainActivity extends Activity {
         return hasFineLocation();
     }
 
+
+    private void showProfileEditor() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        JSONObject user = bootstrap.optJSONObject("user");
+        if (user == null) return;
+
+        addHero("ویرایش پروفایل", "اطلاعات حساب PedalPro");
+
+        LinearLayout box = card();
+        EditText name = input("نام نمایشی");
+        name.setText(user.optString("display_name", ""));
+        EditText age = input("سن");
+        age.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        age.setText(user.optString("age", ""));
+        EditText height = input("قد (cm)");
+        height.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        height.setText(user.optString("height_cm", ""));
+        EditText weight = input("وزن (kg)");
+        weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        weight.setText(user.optString("weight_kg", ""));
+        EditText bio = input("درباره من");
+        bio.setSingleLine(false);
+        bio.setMinLines(3);
+        bio.setText(user.optString("bio", ""));
+        CheckBox publicProfile = new CheckBox(this);
+        publicProfile.setText("پروفایل عمومی");
+        publicProfile.setTextColor(TEXT);
+        publicProfile.setChecked(user.optInt("profile_public", 1) == 1);
+
+        Button save = primaryButton("ذخیره پروفایل");
+        box.addView(name); box.addView(age); box.addView(height); box.addView(weight); box.addView(bio); box.addView(publicProfile); box.addView(save);
+        content.addView(box, cardLp());
+
+        save.setOnClickListener(v -> {
+            save.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("profile_save", new JSONObject()
+                            .put("display_name", name.getText().toString().trim())
+                            .put("age", age.getText().toString().trim())
+                            .put("height_cm", height.getText().toString().trim())
+                            .put("weight_kg", weight.getText().toString().trim())
+                            .put("bio", bio.getText().toString().trim())
+                            .put("profile_public", publicProfile.isChecked())
+                            .put("instagram_profile", user.optString("instagram_profile", ""))
+                            .put("telegram_profile", user.optString("telegram_profile", ""))
+                            .put("eitaa_profile", user.optString("eitaa_profile", ""))
+                            .put("bale_profile", user.optString("bale_profile", ""))
+                            .put("strava_profile", user.optString("strava_profile", ""))
+                            .put("relive_profile", user.optString("relive_profile", "")));
+                    bootstrap = api.bootstrap();
+                    activeRide = bootstrap.optJSONObject("my_active_ride");
+                    main.post(() -> {
+                        toast("پروفایل ذخیره شد.");
+                        showMe();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        save.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+    }
+
+    private void showBikes() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("دوچرخه‌های من", "مدیریت دوچرخه‌های PedalPro");
+
+        Button add = primaryButton("افزودن دوچرخه");
+        add.setOnClickListener(v -> showBikeEditor(null));
+        content.addView(add);
+
+        JSONArray bikes = bootstrap.optJSONArray("my_bikes");
+        if (bikes == null || bikes.length() == 0) {
+            addEmpty("هنوز دوچرخه‌ای ثبت نشده است.");
+            return;
+        }
+        for (int i = 0; i < bikes.length(); i++) {
+            JSONObject bike = bikes.optJSONObject(i);
+            if (bike == null) continue;
+            LinearLayout box = card();
+            String title = bike.optString("brand_model", bike.optString("bike_type", "دوچرخه"));
+            if (bike.optInt("is_primary", 0) == 1) title = "★ " + title;
+            box.addView(text(title, 15, true, TEXT));
+            String meta = bike.optString("bike_type", "");
+            if (!bike.optString("wheel_size", "").isBlank()) meta += " · چرخ " + bike.optString("wheel_size");
+            if (bike.optDouble("weight_kg", 0) > 0) meta += " · " + bike.optString("weight_kg") + " kg";
+            box.addView(text(meta, 11, false, MUTED));
+            Button edit = primaryButton("ویرایش");
+            JSONObject captured = bike;
+            edit.setOnClickListener(v -> showBikeEditor(captured));
+            box.addView(edit);
+            content.addView(box, cardLp());
+        }
+    }
+
+    private void showBikeEditor(JSONObject bike) {
+        selectNav(null);
+        content.removeAllViews();
+        boolean editing = bike != null;
+        addHero(editing ? "ویرایش دوچرخه" : "افزودن دوچرخه", "اطلاعات برای محاسبات رکاب‌زنی و نگهداری");
+
+        LinearLayout box = card();
+        EditText brand = input("برند / مدل");
+        EditText type = input("نوع دوچرخه");
+        EditText frame = input("سایز فریم");
+        EditText wheel = input("سایز چرخ");
+        EditText color = input("رنگ");
+        EditText weight = input("وزن دوچرخه (kg)");
+        weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        CheckBox primary = new CheckBox(this);
+        primary.setText("دوچرخه اصلی");
+        primary.setTextColor(TEXT);
+
+        if (bike != null) {
+            brand.setText(bike.optString("brand_model", ""));
+            type.setText(bike.optString("bike_type", ""));
+            frame.setText(bike.optString("frame_size", ""));
+            wheel.setText(bike.optString("wheel_size", ""));
+            color.setText(bike.optString("color", ""));
+            weight.setText(bike.optString("weight_kg", ""));
+            primary.setChecked(bike.optInt("is_primary", 0) == 1);
+        }
+
+        Button save = primaryButton("ذخیره");
+        box.addView(brand); box.addView(type); box.addView(frame); box.addView(wheel); box.addView(color); box.addView(weight); box.addView(primary); box.addView(save);
+
+        if (editing) {
+            Button delete = dangerButton("حذف دوچرخه");
+            delete.setOnClickListener(v -> deleteBike(bike.optInt("id", 0), delete));
+            box.addView(delete);
+        }
+        content.addView(box, cardLp());
+
+        save.setOnClickListener(v -> {
+            save.setEnabled(false);
+            int id = bike == null ? 0 : bike.optInt("id", 0);
+            io.execute(() -> {
+                try {
+                    api.post("bike_save", new JSONObject()
+                            .put("id", id)
+                            .put("brand_model", brand.getText().toString().trim())
+                            .put("bike_type", type.getText().toString().trim())
+                            .put("frame_size", frame.getText().toString().trim())
+                            .put("wheel_size", wheel.getText().toString().trim())
+                            .put("color", color.getText().toString().trim())
+                            .put("weight_kg", weight.getText().toString().trim())
+                            .put("is_primary", primary.isChecked()));
+                    bootstrap = api.bootstrap();
+                    activeRide = bootstrap.optJSONObject("my_active_ride");
+                    main.post(() -> {
+                        toast("دوچرخه ذخیره شد.");
+                        showBikes();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        save.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+    }
+
+    private void deleteBike(int id, Button button) {
+        if (id <= 0) return;
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("bike_delete", new JSONObject().put("id", id));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    toast("دوچرخه حذف شد.");
+                    showBikes();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    button.setEnabled(true);
+                    toast(e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void showFitness() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("وضعیت بدن", "وزن و شاخص‌های بدنی");
+
+        LinearLayout add = card();
+        EditText date = input("تاریخ YYYY-MM-DD");
+        date.setText(java.time.LocalDate.now().toString());
+        EditText weight = input("وزن (kg)");
+        weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText fat = input("درصد چربی");
+        fat.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText note = input("یادداشت");
+        Button save = primaryButton("ثبت وضعیت");
+        add.addView(date); add.addView(weight); add.addView(fat); add.addView(note); add.addView(save);
+        content.addView(add, cardLp());
+
+        save.setOnClickListener(v -> {
+            if (weight.getText().toString().trim().isBlank()) {
+                toast("وزن را وارد کنید.");
+                return;
+            }
+            save.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    api.post("body_metric_add", new JSONObject()
+                            .put("measured_on", date.getText().toString().trim())
+                            .put("weight_kg", weight.getText().toString().trim())
+                            .put("body_fat_pct", fat.getText().toString().trim())
+                            .put("note", note.getText().toString().trim()));
+                    bootstrap = api.bootstrap();
+                    activeRide = bootstrap.optJSONObject("my_active_ride");
+                    main.post(() -> {
+                        toast("وضعیت بدن ثبت شد.");
+                        showFitness();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        save.setEnabled(true);
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+
+        JSONArray metrics = bootstrap.optJSONArray("body_metrics");
+        if (metrics == null || metrics.length() == 0) {
+            addEmpty("هنوز داده بدنی ثبت نشده است.");
+            return;
+        }
+        for (int i = metrics.length() - 1; i >= 0; i--) {
+            JSONObject m = metrics.optJSONObject(i);
+            if (m == null) continue;
+            LinearLayout box = card();
+            box.addView(text(m.optString("measured_on", ""), 11, true, MUTED));
+            box.addView(text(m.optString("weight_kg", "—") + " kg", 20, true, ACCENT));
+            if (!m.optString("body_fat_pct", "").isBlank()) box.addView(text("چربی بدن: " + m.optString("body_fat_pct") + "%", 11, false, MUTED));
+            if (!m.optString("note", "").isBlank()) box.addView(text(m.optString("note"), 11, false, MUTED));
+            content.addView(box, cardLp());
+        }
+    }
+
     private void showMe() {
         if (!signedIn()) { showLogin(); return; }
         selectNav(navMe);
@@ -972,6 +1226,18 @@ public final class NativeMainActivity extends Activity {
         addCard("نسخه اپ", "PedalPro Native 2.0.0-dev · رابط اصلی بدون WebView");
         addCard("GPS", "Foreground TrackingService، Fused GPS و فیلتر مسیر Native فعال است.");
         addCard("BLE", "هسته Cadence / Power / Heart Rate موجود از پروژه قبلی حفظ شده است.");
+
+        Button profile = primaryButton("ویرایش پروفایل");
+        profile.setOnClickListener(v -> showProfileEditor());
+        content.addView(profile);
+
+        Button bikes = primaryButton("دوچرخه‌های من");
+        bikes.setOnClickListener(v -> showBikes());
+        content.addView(bikes);
+
+        Button fitness = primaryButton("وضعیت بدن");
+        fitness.setOnClickListener(v -> showFitness());
+        content.addView(fitness);
 
         Button refresh = primaryButton("بروزرسانی اطلاعات");
         refresh.setOnClickListener(v -> refreshBootstrap(false));
