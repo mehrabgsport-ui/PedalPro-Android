@@ -1,0 +1,81 @@
+name: Native RC QA
+
+on:
+  push:
+    branches: [ native/android-2.0.0 ]
+  workflow_dispatch:
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER"             "platforms;android-36"             "build-tools;36.0.0"             "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Source architecture checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'android:name=".nativeapp.NativeMainActivity"' app/src/main/AndroidManifest.xml
+          grep -q 'versionCode 45' app/build.gradle
+          grep -q "versionName '2.0.0-native-rc1'" app/build.gradle
+          ! grep -q 'new WebView' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
+          ! grep -q 'WeatherUiModel' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/LowPowerRideActivity.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/PedalIconView.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/WeatherClient.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/JalaliDate.java
+
+      - name: Unit tests
+        run: |
+          gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             --stacktrace
+
+      - name: Android lint
+        run: |
+          gradle             :app:lintBazaarRelease             :app:lintMyketRelease             --stacktrace
+
+      - name: Unsigned release smoke build
+        run: |
+          gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             --stacktrace
+
+      - name: APK manifest smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt | sort | tail -1)"
+          BAZAAR="$(find app/build/outputs/apk/bazaar/release -name '*.apk' | head -n1)"
+          MYKET="$(find app/build/outputs/apk/myket/release -name '*.apk' | head -n1)"
+          test -n "$BAZAAR"
+          test -n "$MYKET"
+          "$AAPT" dump badging "$BAZAAR" | tee /tmp/bazaar-badging.txt
+          "$AAPT" dump badging "$MYKET" | tee /tmp/myket-badging.txt
+          grep -q "package: name='ir.pedalpro.app'" /tmp/bazaar-badging.txt
+          grep -q "versionCode='45'" /tmp/bazaar-badging.txt
+          grep -q "versionName='2.0.0-native-rc1'" /tmp/bazaar-badging.txt
+          grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/bazaar-badging.txt
+          grep -q "package: name='ir.pedalpro.app'" /tmp/myket-badging.txt
+          grep -q "versionCode='45'" /tmp/myket-badging.txt
+          grep -q "versionName='2.0.0-native-rc1'" /tmp/myket-badging.txt
+          grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/myket-badging.txt
