@@ -52,6 +52,39 @@ final class JalaliDate {
         return new int[]{jy,jm,jd};
     }
 
+    static String toGregorianIso(String jalali){
+        if(jalali==null||jalali.isBlank())return "";
+        String x=en(jalali.trim()).replace('-','/').replace('.','/');
+        String[] p=x.split("/");
+        if(p.length<3)return "";
+        try{
+            int jy=Integer.parseInt(p[0].trim()),jm=Integer.parseInt(p[1].trim()),jd=Integer.parseInt(p[2].trim().split("\\s+")[0]);
+            int[] g=toGregorian(jy,jm,jd);
+            return String.format(java.util.Locale.US,"%04d-%02d-%02d",g[0],g[1],g[2]);
+        }catch(Exception e){return "";}
+    }
+
+    static int[] toGregorian(int jy,int jm,int jd){
+        jy+=1595;
+        long days=-355668L+365L*jy+(jy/33)*8+((jy%33+3)/4)+jd+(jm<7?(jm-1)*31:(jm-7)*30+186);
+        int gy=(int)(400*(days/146097));days%=146097;
+        if(days>36524){gy+=(int)(100*(--days/36524));days%=36524;if(days>=365)days++;}
+        gy+=(int)(4*(days/1461));days%=1461;
+        if(days>365){gy+=(int)((days-1)/365);days=(days-1)%365;}
+        int gd=(int)days+1;
+        int[] sal={0,31,((gy%4==0&&gy%100!=0)||gy%400==0)?29:28,31,30,31,30,31,31,30,31,30,31};
+        int gm=1;while(gm<=12&&gd>sal[gm]){gd-=sal[gm];gm++;}
+        return new int[]{gy,gm,gd};
+    }
+
+    static String en(String value){
+        if(value==null)return "";
+        String s=value;
+        char[] fa="۰۱۲۳۴۵۶۷۸۹".toCharArray(), ar="٠١٢٣٤٥٦٧٨٩".toCharArray(), en="0123456789".toCharArray();
+        for(int i=0;i<10;i++){s=s.replace(fa[i],en[i]);s=s.replace(ar[i],en[i]);}
+        return s;
+    }
+
     static String fa(Object value){
         String s=String.valueOf(value);
         char[] en="0123456789".toCharArray(), fa="۰۱۲۳۴۵۶۷۸۹".toCharArray();
