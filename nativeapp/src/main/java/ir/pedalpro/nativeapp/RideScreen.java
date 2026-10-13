@@ -25,11 +25,7 @@ final class RideScreen {
         LinearLayout map = NativeUi.card(c);
         map.setGravity(Gravity.CENTER);
         map.setBackground(NativeUi.bg(Color.rgb(10,45,59),22,c));
-        TextView route = NativeUi.text(c,"🗺️
-
-مسیر زنده
-
-طرقبه  ━━━━━━━●  مشهد",22,true);
+        TextView route = NativeUi.text(c,"🗺️\\n\\nمسیر زنده\\n\\nطرقبه  ━━━━━━━●  مشهد",22,true);
         route.setGravity(Gravity.CENTER);
         route.setTextColor(NativeUi.PRIMARY);
         map.addView(route,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,NativeUi.dp(c,260)));
