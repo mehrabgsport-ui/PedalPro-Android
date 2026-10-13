@@ -52,6 +52,14 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".nativeapp.NativeRideDetailActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeLiveNavigationActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeClubActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativePerformanceActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeChatActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAiActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSensorsActivity" android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="false"
