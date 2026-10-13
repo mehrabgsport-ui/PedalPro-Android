@@ -729,13 +729,297 @@ public final class NativeMainActivity extends Activity {
     }
 
 
+    private View buildHomeQuickGrid() {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setGravity(Gravity.CENTER);
+        row.setPadding(0, dp(4), 0, dp(12));
+
+        View[] cards = new View[]{
+                homeQuickCard(PedalIconView.Icon.CALENDAR, "برنامه‌ها", "رویدادهای هیجان‌انگیز", this::showActivities),
+                homeQuickCard(PedalIconView.Icon.ROUTE, "مسیرها", "نقشه و جزئیات", this::showRoutes),
+                homeQuickCard(PedalIconView.Icon.HOME_MEMBERS, "اعضا", "آشنایی با ما", this::showClub),
+                homeQuickCard(PedalIconView.Icon.GALLERY, "گالری", "عکس‌ها و ویدیوها", this::showGalleryPage)
+        };
+        for (int i = 0; i < cards.length; i++) {
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(150), 1f);
+            if (i > 0) lp.setMargins(dp(8), 0, 0, 0);
+            row.addView(cards[i], lp);
+        }
+        return row;
+    }
+
+    private View homeQuickCard(PedalIconView.Icon icon, String title, String subtitle, Runnable run) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);
+        card.setPadding(dp(5), dp(14), dp(5), dp(14));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setContentDescription(title);
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
+        bg.setCornerRadius(dp(26));
+        bg.setStroke(dp(1), Color.argb(54, 255, 255, 255));
+        card.setBackground(bg);
+
+        PedalIconView iv = new PedalIconView(this, icon, Color.rgb(32, 228, 241));
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(64), dp(64));
+        card.addView(iv, iconLp);
+
+        TextView name = text(title, 18, true, TEXT);
+        name.setGravity(Gravity.CENTER);
+        name.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(-2, -2);
+        nameLp.setMargins(0, dp(4), 0, 0);
+        card.addView(name, nameLp);
+
+        TextView sub = text(subtitle, 10, false, Color.rgb(224, 237, 246));
+        sub.setTextSize(10.5f);
+        sub.setGravity(Gravity.CENTER);
+        sub.setIncludeFontPadding(false);
+        sub.setMaxLines(2);
+        sub.setLineSpacing(0, 1.5f);
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
+        subLp.setMargins(0, dp(5), 0, 0);
+        card.addView(sub, subLp);
+
+        card.setOnClickListener(v -> run.run());
+        return card;
+    }
+
+    private View buildHomeLiveHub() {
+        LinearLayout hub = glassCard(28);
+        hub.setPadding(dp(14), dp(14), dp(14), dp(14));
+
+        JSONArray lives = otherVisibleLiveRides();
+        int activeCount = (activeRide == null ? 0 : 1) + lives.length();
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        TextView liveDot = text("●", 12, false, Color.rgb(52, 231, 177));
+        TextView title = text("رکاب‌زنی‌های زنده", 19, true, TEXT);
+        LinearLayout titleWrap = new LinearLayout(this);
+        titleWrap.setOrientation(LinearLayout.HORIZONTAL);
+        titleWrap.setGravity(Gravity.CENTER_VERTICAL);
+        titleWrap.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        titleWrap.addView(liveDot);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(-2, -2);
+        titleLp.setMargins(dp(8), 0, 0, 0);
+        titleWrap.addView(title, titleLp);
+
+        TextView summary = text(JalaliDate.fa(activeCount) + " رکاب‌زنی فعال", 11, false, Color.rgb(199, 217, 231));
+        head.addView(titleWrap, new LinearLayout.LayoutParams(0, -2, 1f));
+        head.addView(summary);
+        hub.addView(head);
+
+        View mine = homeLiveCard(true, activeRide, lives.length());
+        LinearLayout.LayoutParams mineLp = new LinearLayout.LayoutParams(-1, dp(94));
+        mineLp.setMargins(0, dp(10), 0, 0);
+        hub.addView(mine, mineLp);
+
+        View others = homeLiveCard(false, null, lives.length());
+        LinearLayout.LayoutParams othersLp = new LinearLayout.LayoutParams(-1, dp(94));
+        othersLp.setMargins(0, dp(10), 0, 0);
+        hub.addView(others, othersLp);
+        return hub;
+    }
+
+    private View homeLiveCard(boolean mine, JSONObject ride, int othersCount) {
+        boolean active = mine ? ride != null : othersCount > 0;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        card.setPadding(dp(12), dp(12), dp(12), dp(12));
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setAlpha(active ? 1f : .74f);
+
+        int[] colors = mine
+                ? new int[]{Color.argb(235, 9, 104, 77), Color.argb(242, 6, 56, 57)}
+                : new int[]{Color.argb(240, 139, 77, 12), Color.argb(245, 75, 42, 10)};
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, colors);
+        bg.setCornerRadius(dp(22));
+        bg.setStroke(dp(1), mine ? Color.argb(122, 58, 238, 174) : Color.argb(143, 255, 177, 67));
+        card.setBackground(bg);
+
+        TextView icon = text(mine ? "🚴" : "◉", 26, false, TEXT);
+        icon.setGravity(Gravity.CENTER);
+        icon.setBackground(roundRect(Color.argb(26, 255, 255, 255), 17, 0));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(52), dp(52)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+
+        String name;
+        String meta;
+        if (mine) {
+            if (ride != null) {
+                name = ride.optString("title", "").trim();
+                if (name.isBlank()) name = "رکاب‌زنی زنده من";
+                meta = String.format(Locale.US, "%.2f km · %s · لمس کنید تا برگردید",
+                        ride.optDouble("distance_km", 0), formatDuration(ride.optLong("duration_seconds", 0)));
+            } else {
+                name = "رکاب‌زنی من";
+                meta = "فعال نیست · برای شروع لمس کنید";
+            }
+        } else {
+            name = "رکاب‌زنی زنده دیگران";
+            JSONArray rides = otherVisibleLiveRides();
+            if (othersCount == 0) {
+                meta = "فعلاً کسی در حال رکاب‌زنی نیست";
+            } else if (othersCount == 1) {
+                JSONObject one = rides.optJSONObject(0);
+                String riderName = one == null ? "یک عضو" : one.optString("owner_name", one.optString("display_name", "یک عضو"));
+                meta = riderName + " در حال رکاب‌زنی است";
+            } else {
+                meta = JalaliDate.fa(othersCount) + " نفر در حال رکاب‌زنی هستند · مشاهده";
+            }
+        }
+
+        TextView t = text(name, 16, true, TEXT);
+        t.setMaxLines(1);
+        TextView m = text(meta, 11, false, Color.rgb(224, 237, 245));
+        m.setMaxLines(2);
+        m.setLineSpacing(0, 1.7f);
+        LinearLayout.LayoutParams metaLp = new LinearLayout.LayoutParams(-1, -2);
+        metaLp.setMargins(0, dp(6), 0, 0);
+        copy.addView(t);
+        copy.addView(m, metaLp);
+
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        copyLp.setMargins(dp(11), 0, dp(11), 0);
+        card.addView(copy, copyLp);
+
+        if (mine) {
+            TextView go = text("‹", 23, false, TEXT);
+            go.setGravity(Gravity.CENTER);
+            card.addView(go, new LinearLayout.LayoutParams(dp(30), dp(36)));
+            card.setOnClickListener(v -> showRide());
+        } else {
+            TextView count = text(String.valueOf(othersCount), 14, true, TEXT);
+            count.setGravity(Gravity.CENTER);
+            count.setBackground(roundRect(Color.argb(36, 255, 255, 255), 12, 0));
+            card.addView(count, new LinearLayout.LayoutParams(dp(36), dp(36)));
+            card.setOnClickListener(v -> showLiveRidesSheet());
+        }
+        return card;
+    }
+
+    private JSONArray otherVisibleLiveRides() {
+        JSONArray out = new JSONArray();
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
+        JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (rides == null) return out;
+        for (int i = 0; i < rides.length(); i++) {
+            JSONObject r = rides.optJSONObject(i);
+            if (r == null || !"active".equals(r.optString("status")) || r.optInt("owner_user_id", 0) == uid) continue;
+            boolean visible = r.optInt("public_tracking", 0) == 1 || admin || r.optInt("viewer_can_live", 0) == 1;
+            if (visible) out.put(r);
+        }
+        return out;
+    }
+
+    private View buildHomeReport() {
+        JSONArray events = bootstrap == null ? null : bootstrap.optJSONArray("events");
+        int completedEvents = 0;
+        int totalEvents = events == null ? 0 : events.length();
+        if (events != null) {
+            for (int i = 0; i < events.length(); i++) {
+                JSONObject event = events.optJSONObject(i);
+                if (event != null && "completed".equals(event.optString("status"))) completedEvents++;
+            }
+        }
+        int programs = completedEvents > 0 ? completedEvents : totalEvents;
+
+        JSONArray members = bootstrap == null ? null : bootstrap.optJSONArray("members");
+        int memberCount = members == null ? 0 : members.length();
+        double totalKm = 0;
+        if (members != null) {
+            for (int i = 0; i < members.length(); i++) {
+                JSONObject member = members.optJSONObject(i);
+                if (member != null) totalKm += member.optDouble("total_distance_m", 0) / 1000.0;
+            }
+        }
+
+        LinearLayout report = new LinearLayout(this);
+        report.setOrientation(LinearLayout.HORIZONTAL);
+        report.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        report.setGravity(Gravity.CENTER_VERTICAL);
+        report.setMinimumHeight(dp(124));
+        report.setPadding(dp(8), dp(14), dp(8), dp(14));
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(184, 16, 61, 84), Color.argb(184, 10, 43, 64)});
+        bg.setCornerRadius(dp(34));
+        bg.setStroke(dp(2), Color.argb(56, 255, 255, 255));
+        report.setBackground(bg);
+
+        report.addView(homeReportItem(PedalIconView.Icon.REPORT_PROGRAMS,
+                JalaliDate.fa(programs), "برنامه برگزار شده"), new LinearLayout.LayoutParams(0, -1, 1f));
+        report.addView(homeReportSeparator());
+        report.addView(homeReportItem(PedalIconView.Icon.REPORT_MEMBERS,
+                JalaliDate.fa(memberCount), "عضو فعال"), new LinearLayout.LayoutParams(0, -1, 1f));
+        report.addView(homeReportSeparator());
+        report.addView(homeReportItem(PedalIconView.Icon.REPORT_DISTANCE,
+                JalaliDate.fa(Math.round(totalKm)), "کیلومتر رکاب زده"), new LinearLayout.LayoutParams(0, -1, 1f));
+        return report;
+    }
+
+    private View homeReportItem(PedalIconView.Icon icon, String value, String label) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        item.setGravity(Gravity.CENTER);
+        item.setPadding(dp(7), dp(6), dp(7), dp(6));
+
+        PedalIconView iv = new PedalIconView(this, icon, Color.rgb(19, 231, 239));
+        item.addView(iv, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        copy.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView number = text(value, 26, true, TEXT);
+        number.setIncludeFontPadding(false);
+        TextView caption = text(label, 11, true, Color.rgb(237, 245, 250));
+        caption.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams captionLp = new LinearLayout.LayoutParams(-2, -2);
+        captionLp.setMargins(0, dp(7), 0, 0);
+        copy.addView(number);
+        copy.addView(caption, captionLp);
+
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(-2, -2);
+        copyLp.setMargins(dp(7), 0, 0, 0);
+        item.addView(copy, copyLp);
+        return item;
+    }
+
+    private View homeReportSeparator() {
+        View line = new View(this);
+        line.setBackgroundColor(Color.argb(43, 255, 255, 255));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(1), dp(72));
+        line.setLayoutParams(lp);
+        return line;
+    }
+
     private void showHome() {
         currentPage = "dashboard";
         selectNav(navHome);
         content.removeAllViews();
 
-        LinearLayout hero = glassCard(27);
-        hero.setPadding(dp(15), dp(17), dp(15), dp(15));
+        LinearLayout hero = glassCard(38);
+        hero.setPadding(dp(18), dp(28), dp(18), dp(42));
+
         TextView eyebrow = text(uiString("home_eyebrow", "گروه دوچرخه سواری"), 17, true, TEXT);
         hero.addView(eyebrow);
 
@@ -744,50 +1028,48 @@ public final class NativeMainActivity extends Activity {
         brand.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         brand.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         int brandSize = getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density <= 430 ? 37 : 41;
-        TextView pedal = text("پدال ", brandSize, true, TEXT);
+        TextView pedal = text("پدال", brandSize, true, TEXT);
         TextView pro = text("پرو", brandSize, true, Color.rgb(31, 231, 242));
+        LinearLayout.LayoutParams proLp = new LinearLayout.LayoutParams(-2, -2);
+        proLp.setMargins(dp(12), 0, 0, 0);
         brand.addView(pedal);
-        brand.addView(pro);
+        brand.addView(pro, proLp);
         hero.addView(brand);
 
-        TextView tagline = text(uiString("home_tagline", "رکاب بزن، طبیعت، مسیرهای جدید"), 12, false, TEXT);
-        tagline.setPadding(0, dp(7), 0, dp(4));
+        TextView tagline = text(uiString("home_tagline", "رکاب بزن، طبیعت، مسیرهای جدید"), 12, true, Color.rgb(237, 248, 255));
+        tagline.setPadding(0, dp(16), 0, dp(4));
         hero.addView(tagline);
 
-        PedalActionView register = action(PedalIconView.Icon.PLUS,
+        PedalActionView register = action(PedalIconView.Icon.CALENDAR,
                 uiString("home_primary_button_text", "ثبت نام برنامه"), PedalActionView.Style.PRIMARY);
         register.setOnClickListener(v -> homeRegisterNextEventNative());
-        hero.addView(register, fullActionLp(49));
+        LinearLayout.LayoutParams registerLp = fullActionLp(70);
+        registerLp.setMargins(0, dp(16), 0, 0);
+        hero.addView(register, registerLp);
 
         PedalActionView routes = action(PedalIconView.Icon.ROUTE,
                 uiString("home_secondary_button_text", "مشاهده مسیرها"), PedalActionView.Style.OUTLINE);
         routes.setOnClickListener(v -> showRoutes());
-        hero.addView(routes, fullActionLp(49));
+        LinearLayout.LayoutParams routesLp = fullActionLp(70);
+        routesLp.setMargins(0, dp(8), 0, 0);
+        hero.addView(routes, routesLp);
         content.addView(hero, cardLp());
+
+        content.addView(buildHomeQuickGrid(), fullWrapLp(4));
 
         JSONObject event = nextUpcomingEvent();
         content.addView(buildUpcomingCard(event), cardLp());
 
+        content.addView(buildHomeLiveHub(), cardLp());
+
         content.addView(buildWeatherCard(), cardLp());
         loadWeather(false);
 
-        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
-        int live = 0;
-        if (rides != null) {
-            JSONObject me = bootstrap.optJSONObject("user");
-            int uid = me == null ? 0 : me.optInt("id", 0);
-            for (int i = 0; i < rides.length(); i++) {
-                JSONObject r = rides.optJSONObject(i);
-                if (r != null && "active".equals(r.optString("status")) && r.optInt("owner_user_id", 0) != uid) live++;
-            }
-        }
-        if (live > 0) {
-            PedalActionView liveBtn = action(PedalIconView.Icon.BEACON, "رکاب‌زنی زنده · " + JalaliDate.fa(live), PedalActionView.Style.OUTLINE);
-            liveBtn.setOnClickListener(v -> showLiveRidesSheet());
-            content.addView(liveBtn, cardLp());
-        }
+        content.addView(buildHomeReport(), fullWrapLp(2));
+
         VazirmatnLoader.apply(this, content);
         animatePageIn();
+        if (mainScroll != null) mainScroll.post(() -> mainScroll.scrollTo(0, 0));
     }
 
 
