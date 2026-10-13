@@ -1,5 +1,7 @@
 package ir.pedalpro.app.nativeapp;
 
+import android.content.Context;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -9,58 +11,150 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 /**
- * Minimal native API transport.
- * The native app talks to the PedalPro backend directly and does not render website HTML.
+ * Native PedalPro API transport with persistent PHP session/remember cookies and CSRF.
+ * This client never renders website HTML.
  */
 public final class PedalProApiClient {
     public static final String BASE_URL = "https://pedalpro.ir/api.php";
 
-    public JSONObject get(String action, String bearerToken) throws Exception {
-        URL url = new URL(BASE_URL + "?action=" + action);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("GET");
-        c.setConnectTimeout(12000);
-        c.setReadTimeout(15000);
-        c.setRequestProperty("Accept", "application/json");
-        if (bearerToken != null && !bearerToken.isEmpty()) {
-            c.setRequestProperty("Authorization", "Bearer " + bearerToken);
-        }
-        return readJson(c);
+    private final SessionStore session;
+
+    public PedalProApiClient(Context context) {
+        session = new SessionStore(context.getApplicationContext());
     }
 
-    public JSONObject post(String action, JSONObject body, String bearerToken) throws Exception {
-        URL url = new URL(BASE_URL + "?action=" + action);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("POST");
-        c.setConnectTimeout(12000);
-        c.setReadTimeout(15000);
-        c.setDoOutput(true);
-        c.setRequestProperty("Accept", "application/json");
-        c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        if (bearerToken != null && !bearerToken.isEmpty()) {
-            c.setRequestProperty("Authorization", "Bearer " + bearerToken);
-        }
-        byte[] data = body.toString().getBytes(StandardCharsets.UTF_8);
-        try (OutputStream os = c.getOutputStream()) {
-            os.write(data);
-        }
-        return readJson(c);
+    public JSONObject get(String action) throws Exception {
+        return request("GET", action, null, true);
     }
 
-    private JSONObject readJson(HttpURLConnection c) throws Exception {
-        int status = c.getResponseCode();
-        InputStream stream = status >= 200 && status < 300 ? c.getInputStream() : c.getErrorStream();
+    public JSONObject post(String action, JSONObject body) throws Exception {
+        return request("POST", action, body == null ? new JSONObject() : body, true);
+    }
+
+    public JSONObject bootstrap() throws Exception {
+        JSONObject data = get("bootstrap");
+        String csrf = data.optString("csrf", "");
+        if (!csrf.isBlank()) session.saveCsrf(csrf);
+        JSONObject user = data.optJSONObject("user");
+        session.saveUserJson(user == null ? "" : user.toString());
+        return data;
+    }
+
+    public JSONObject login(String username, String password, boolean remember) throws Exception {
+        // Obtain a fresh PHP session + CSRF before auth_login.
+        bootstrap();
+        JSONObject body = new JSONObject()
+                .put("username", username == null ? "" : username.trim())
+                .put("password", password == null ? "" : password)
+                .put("remember", remember);
+        JSONObject result = post("auth_login", body);
+        bootstrap();
+        return result;
+    }
+
+    public void logout() throws Exception {
+        try { post("auth_logout", new JSONObject()); }
+        finally { session.clear(); }
+    }
+
+    private JSONObject request(String method, String action, JSONObject body, boolean retry419) throws Exception {
+        HttpURLConnection c = null;
+        try {
+            URL url = new URL(BASE_URL + "?action=" + java.net.URLEncoder.encode(action, StandardCharsets.UTF_8));
+            c = (HttpURLConnection) url.openConnection();
+            c.setConnectTimeout(12000);
+            c.setReadTimeout(18000);
+            c.setRequestMethod(method);
+            c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("Cache-Control", "no-cache");
+
+            String cookie = session.cookie();
+            if (!cookie.isBlank()) c.setRequestProperty("Cookie", cookie);
+
+            if (!"GET".equals(method)) {
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                String csrf = session.csrf();
+                if (!csrf.isBlank()) c.setRequestProperty("X-CSRF-Token", csrf);
+                byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
+                c.setFixedLengthStreamingMode(bytes.length);
+                try (OutputStream os = c.getOutputStream()) { os.write(bytes); }
+            }
+
+            int status = c.getResponseCode();
+            captureCookies(c);
+            String raw = readBody(status >= 400 ? c.getErrorStream() : c.getInputStream());
+            JSONObject json = new JSONObject(raw == null || raw.isBlank() ? "{}" : raw);
+
+            String csrf = json.optString("csrf", "");
+            if (!csrf.isBlank()) session.saveCsrf(csrf);
+
+            if (status == 419 && retry419) {
+                bootstrap();
+                return request(method, action, body, false);
+            }
+            if (status < 200 || status >= 300 || json.optBoolean("ok", true) == false) {
+                throw new IllegalStateException(json.optString("error", "HTTP " + status));
+            }
+            return json;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    private void captureCookies(HttpURLConnection c) {
+        Map<String, List<String>> headers = c.getHeaderFields();
+        if (headers == null) return;
+        StringBuilder merged = new StringBuilder();
+        for (Map.Entry<String, List<String>> e : headers.entrySet()) {
+            if (e.getKey() == null || !"set-cookie".equalsIgnoreCase(e.getKey())) continue;
+            for (String line : e.getValue()) {
+                if (line == null || line.isBlank()) continue;
+                String pair = line.split(";", 2)[0].trim();
+                if (pair.isBlank()) continue;
+                if (merged.length() > 0) merged.append("; ");
+                merged.append(pair);
+            }
+        }
+        if (merged.length() > 0) {
+            String previous = session.cookie();
+            session.saveCookie(mergeCookiePairs(previous, merged.toString()));
+        }
+    }
+
+    private String mergeCookiePairs(String oldCookie, String incoming) {
+        java.util.LinkedHashMap<String, String> map = new java.util.LinkedHashMap<>();
+        addCookieString(map, oldCookie);
+        addCookieString(map, incoming);
         StringBuilder out = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+        for (Map.Entry<String, String> e : map.entrySet()) {
+            if (out.length() > 0) out.append("; ");
+            out.append(e.getKey()).append("=").append(e.getValue());
+        }
+        return out.toString();
+    }
+
+    private void addCookieString(java.util.LinkedHashMap<String, String> map, String cookie) {
+        if (cookie == null) return;
+        for (String part : cookie.split(";")) {
+            String p = part.trim();
+            int eq = p.indexOf('=');
+            if (eq <= 0) continue;
+            map.put(p.substring(0, eq).trim(), p.substring(eq + 1).trim());
+        }
+    }
+
+    private String readBody(InputStream in) throws Exception {
+        if (in == null) return "";
+        StringBuilder out = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) out.append(line);
         }
-        JSONObject json = new JSONObject(out.toString().isEmpty() ? "{}" : out.toString());
-        if (status < 200 || status >= 300) {
-            throw new IllegalStateException(json.optString("error", "HTTP " + status));
-        }
-        return json;
+        return out.toString();
     }
 }
