@@ -287,15 +287,15 @@ public final class NativeMainActivity extends Activity {
                 }
                 main.post(() -> {
                     updateHeaderAccess(d);
+                    applyUiSettings(d);
                     JSONObject user = d.optJSONObject("user");
                     if (user == null) {
                         setTopStatus("ورود به PedalPro", MUTED);
-                        showLogin();
                     } else {
                         setTopStatus("متصل · " + user.optString("display_name", user.optString("username", "PedalPro")), GREEN);
-                        if (firstLaunch) showHome();
-                        else refreshVisibleScreen();
                     }
+                    if (firstLaunch) showHome();
+                    else refreshVisibleScreen();
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -370,37 +370,39 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showHome() {
-        if (!signedIn()) { showLogin(); return; }
         currentPage = "dashboard";
         selectNav(navHome);
         content.removeAllViews();
 
-        LinearLayout hero = glassCard(32);
-        hero.setPadding(dp(20), dp(22), dp(20), dp(24));
-        TextView eyebrow = text("گروه دوچرخه سواری", 18, true, TEXT);
+        LinearLayout hero = glassCard(27);
+        hero.setPadding(dp(15), dp(17), dp(15), dp(15));
+        TextView eyebrow = text(uiString("home_eyebrow", "گروه دوچرخه سواری"), 17, true, TEXT);
         hero.addView(eyebrow);
 
         LinearLayout brand = new LinearLayout(this);
         brand.setOrientation(LinearLayout.HORIZONTAL);
         brand.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         brand.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        TextView pedal = text("پدال ", 38, true, TEXT);
-        TextView pro = text("پرو", 38, true, Color.rgb(31, 231, 242));
+        int brandSize = getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density <= 430 ? 37 : 41;
+        TextView pedal = text("پدال ", brandSize, true, TEXT);
+        TextView pro = text("پرو", brandSize, true, Color.rgb(31, 231, 242));
         brand.addView(pedal);
         brand.addView(pro);
         hero.addView(brand);
 
-        TextView tagline = text("رکاب بزن، طبیعت، مسیرهای جدید", 13, false, TEXT);
-        tagline.setPadding(0, 0, 0, dp(8));
+        TextView tagline = text(uiString("home_tagline", "رکاب بزن، طبیعت، مسیرهای جدید"), 12, false, TEXT);
+        tagline.setPadding(0, dp(7), 0, dp(4));
         hero.addView(tagline);
 
-        PedalActionView register = action(PedalIconView.Icon.PLUS, "ثبت نام برنامه", PedalActionView.Style.PRIMARY);
-        register.setOnClickListener(v -> showActivities());
-        hero.addView(register, fullActionLp(60));
+        PedalActionView register = action(PedalIconView.Icon.PLUS,
+                uiString("home_primary_button_text", "ثبت نام برنامه"), PedalActionView.Style.PRIMARY);
+        register.setOnClickListener(v -> homeRegisterNextEventNative());
+        hero.addView(register, fullActionLp(49));
 
-        PedalActionView routes = action(PedalIconView.Icon.ROUTE, "مشاهده مسیرها", PedalActionView.Style.OUTLINE);
+        PedalActionView routes = action(PedalIconView.Icon.ROUTE,
+                uiString("home_secondary_button_text", "مشاهده مسیرها"), PedalActionView.Style.OUTLINE);
         routes.setOnClickListener(v -> showRoutes());
-        hero.addView(routes, fullActionLp(58));
+        hero.addView(routes, fullActionLp(49));
         content.addView(hero, cardLp());
 
         JSONObject event = nextUpcomingEvent();
@@ -409,7 +411,7 @@ public final class NativeMainActivity extends Activity {
         content.addView(buildWeatherCard(), cardLp());
         loadWeather(false);
 
-        JSONArray rides = bootstrap.optJSONArray("rides");
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
         int live = 0;
         if (rides != null) {
             JSONObject me = bootstrap.optJSONObject("user");
@@ -516,7 +518,6 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showActivities() {
-        if (!signedIn()) { showLogin(); return; }
         currentPage = "activities";
         selectNav(navActivities);
         content.removeAllViews();
@@ -526,15 +527,16 @@ public final class NativeMainActivity extends Activity {
         tools.setGravity(Gravity.CENTER_VERTICAL);
         tools.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
-        PedalActionView add = action(PedalIconView.Icon.PLUS, "برنامه جدید", PedalActionView.Style.PRIMARY);
-        add.setOnClickListener(v -> {
-            if (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1) showEventEditor(null);
-            else showInlineMessage("دسترسی مدیریت", "ایجاد برنامه فقط برای مدیر گروه فعال است.", ORANGE);
-        });
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (admin) {
+            PedalActionView add = action(PedalIconView.Icon.PLUS, "برنامه جدید", PedalActionView.Style.PRIMARY);
+            add.setOnClickListener(v -> showEventEditor(null));
+            tools.addView(add, rowWeightLp());
+        }
         PedalActionView refresh = action(PedalIconView.Icon.REFRESH, "بروزرسانی", PedalActionView.Style.OUTLINE);
         refresh.setOnClickListener(v -> refreshAndRender(this::showActivities));
-        tools.addView(add, rowWeightLp());
-        LinearLayout.LayoutParams refreshLp = rowWeightLp(); refreshLp.setMargins(dp(8),0,0,0);
+        LinearLayout.LayoutParams refreshLp = rowWeightLp();
+        if (admin) refreshLp.setMargins(dp(8),0,0,0);
         tools.addView(refresh, refreshLp);
         content.addView(tools, cardLp());
 
@@ -590,7 +592,6 @@ public final class NativeMainActivity extends Activity {
 
     private void showRoutes() {
         currentPage = "routes";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(navRoutes);
         content.removeAllViews();
         addHero("مسیرها و رکاب‌زنی‌ها", "");
@@ -637,7 +638,6 @@ public final class NativeMainActivity extends Activity {
 
     private void showChallenges() {
         currentPage = "challenges";
-        if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
         addHero("چالش‌ها", "");
@@ -670,6 +670,10 @@ public final class NativeMainActivity extends Activity {
 
     private void toggleChallengeJoin(int challengeId, boolean join, Button button) {
         if (challengeId <= 0) return;
+        if (!signedIn()) {
+            showLogin();
+            return;
+        }
         button.setEnabled(false);
         io.execute(() -> {
             try {
@@ -677,6 +681,8 @@ public final class NativeMainActivity extends Activity {
                 bootstrap = api.bootstrap();
                 activeRide = bootstrap.optJSONObject("my_active_ride");
                 main.post(() -> {
+                    updateHeaderAccess(bootstrap);
+                    applyUiSettings(bootstrap);
                     toast(join ? "به چالش ملحق شدید." : "همراهی لغو شد.");
                     showChallenges();
                 });
@@ -1628,7 +1634,11 @@ public final class NativeMainActivity extends Activity {
 
     private void toggleEventRegistration(int eventId, boolean join, Button button) {
         if (eventId <= 0) return;
-        setProxyEnabled(button,false);
+        if (!signedIn()) {
+            showLogin();
+            return;
+        }
+        setProxyEnabled(button, false);
         io.execute(() -> {
             try {
                 if (join) api.post("register_event", new JSONObject().put("event_id", eventId));
@@ -1636,12 +1646,14 @@ public final class NativeMainActivity extends Activity {
                 bootstrap = api.bootstrap();
                 activeRide = bootstrap.optJSONObject("my_active_ride");
                 main.post(() -> {
+                    updateHeaderAccess(bootstrap);
+                    applyUiSettings(bootstrap);
                     toast(join ? "ثبت‌نام انجام شد." : "ثبت‌نام لغو شد.");
                     showActivities();
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    setProxyEnabled(button,true);
+                    setProxyEnabled(button, true);
                     toast(e.getMessage());
                 });
             }
@@ -1852,6 +1864,62 @@ public final class NativeMainActivity extends Activity {
 
     private boolean isTrackingServiceActive() {
         return getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE).getBoolean("active", false);
+    }
+
+    private String uiString(String key, String fallback) {
+        JSONObject ui = bootstrap == null ? null : bootstrap.optJSONObject("ui");
+        if (ui == null) return fallback;
+        String value = ui.optString(key, "").trim();
+        return value.isBlank() ? fallback : value;
+    }
+
+    private int uiInt(String key, int fallback, int min, int max) {
+        JSONObject ui = bootstrap == null ? null : bootstrap.optJSONObject("ui");
+        int value = ui == null ? fallback : ui.optInt(key, fallback);
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private void applyUiSettings(JSONObject data) {
+        int topGap = uiInt("mobile_header_top_gap_px", 20, 6, 50);
+        if (webHeader != null) webHeader.setPadding(dp(10), dp(topGap), dp(10), dp(14));
+        if (rideDockLabel != null) {
+            String label = uiString("ride_button_text", "شروع رکاب").trim();
+            if ("شروع رکاب".equals(label)) rideDockLabel.setText("شروع\nرکاب");
+            else rideDockLabel.setText(label);
+        }
+    }
+
+    private void homeRegisterNextEventNative() {
+        JSONObject event = nextUpcomingEvent();
+        if (event == null) {
+            showActivities();
+            return;
+        }
+        if (!signedIn()) {
+            showLogin();
+            return;
+        }
+        int eventId = event.optInt("id", 0);
+        if (isRegisteredForEvent(eventId)) {
+            toast("شما قبلاً در این برنامه ثبت‌نام کرده‌اید.");
+            showEventDetail(event);
+            return;
+        }
+        io.execute(() -> {
+            try {
+                api.post("register_event", new JSONObject().put("event_id", eventId));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    updateHeaderAccess(bootstrap);
+                    applyUiSettings(bootstrap);
+                    toast("ثبت‌نام انجام شد.");
+                    showHome();
+                });
+            } catch (Exception e) {
+                main.post(() -> toast(e.getMessage()));
+            }
+        });
     }
 
     private boolean signedIn() {
