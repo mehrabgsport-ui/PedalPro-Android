@@ -139,15 +139,23 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout x=new LinearLayout(this);
         x.setOrientation(LinearLayout.VERTICAL);
         x.setPadding(dp(16),dp(15),dp(16),dp(15));
-        x.setBackground(round(CARD,22,STROKE));
-        x.setElevation(dp(3));
+        GradientDrawable g=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(41,23,54,77),Color.argb(56,8,28,45)});
+        g.setCornerRadius(dp(26));
+        g.setStroke(dp(1),Color.argb(54,255,255,255));
+        x.setBackground(g);
+        x.setElevation(0);
         return x;
     }
 
     protected LinearLayout accentCard(int accent){
         LinearLayout x=card();
-        GradientDrawable g=round(CARD2,22,STROKE);
-        g.setStroke(dp(2),accent);
+        GradientDrawable g=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(56,19,64,93),Color.argb(71,8,30,46)});
+        g.setCornerRadius(dp(26));
+        g.setStroke(dp(1),accent);
         x.setBackground(g);
         return x;
     }
@@ -180,7 +188,7 @@ abstract class NativeScreenBase extends Activity {
         e.setTextSize(13);
         e.setSingleLine(false);
         e.setPadding(dp(12),dp(11),dp(12),dp(11));
-        e.setBackground(round(CARD2,14,STROKE));
+        e.setBackground(round(Color.argb(122,5,25,40),15,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
         lp.setMargins(0,dp(6),0,dp(6));
         e.setLayoutParams(lp);
@@ -190,11 +198,11 @@ abstract class NativeScreenBase extends Activity {
     protected Button primary(String s){
         Button b=plainButton(s,13);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        b.setTextColor(Color.rgb(4,36,24));
+        b.setTextColor(Color.rgb(5,40,55));
         GradientDrawable g=new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(23,201,145),Color.rgb(46,230,166)});
-        g.setCornerRadius(dp(12));
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(19,220,232),Color.rgb(37,200,244)});
+        g.setCornerRadius(dp(17));
         b.setBackground(g);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
         lp.setMargins(0,dp(9),0,0);
@@ -204,7 +212,7 @@ abstract class NativeScreenBase extends Activity {
 
     protected Button normal(String s){
         Button b=plainButton(s,13);
-        b.setBackground(round(CARD2,12,Color.rgb(42,66,92)));
+        b.setBackground(round(Color.argb(18,255,255,255),17,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
         lp.setMargins(0,dp(8),0,0);
         b.setLayoutParams(lp);
@@ -256,10 +264,10 @@ abstract class NativeScreenBase extends Activity {
 
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.argb(235,7,20,32),Color.argb(235,8,22,37)});
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(87,24,59,82),Color.argb(107,8,31,49)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
-        g.setStroke(dp(1),Color.rgb(23,40,58));
+        g.setStroke(dp(1),Color.argb(51,255,255,255));
         return g;
     }
 
