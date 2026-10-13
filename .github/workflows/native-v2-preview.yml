@@ -3,7 +3,7 @@ name: PedalPro Native V2 Preview
 on:
   workflow_dispatch:
   push:
-    branches: [ native-v2-final ]
+    branches: [ main, native-v2-final ]
 
 jobs:
   build-native:
