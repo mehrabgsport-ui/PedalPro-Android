@@ -349,7 +349,9 @@ public final class NativeMainActivity extends Activity {
         sensors.setOnClickListener(v -> showSensors());
         Button perf = primaryButton("عملکرد من");
         perf.setOnClickListener(v -> showPerformance());
-        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf);
+        Button ai = primaryButton("مشاور هوش مصنوعی");
+        ai.setOnClickListener(v -> showAiAdvisor());
+        tools.addView(club); tools.addView(challenges); tools.addView(sensors); tools.addView(perf); tools.addView(ai);
         content.addView(tools, cardLp());
     }
 
@@ -496,8 +498,127 @@ public final class NativeMainActivity extends Activity {
             box.addView(text("وضعیت: " + status + " · همراهان: " + joined, 11, false, MUTED));
             String desc = ch.optString("description", "");
             if (!desc.isBlank()) box.addView(text(desc, 12, false, MUTED));
+            boolean joinedByMe = ch.optInt("joined_by_me", 0) == 1;
+            Button join = primaryButton(joinedByMe ? "لغو همراهی" : "پیوستن به چالش");
+            int challengeId = ch.optInt("id", 0);
+            join.setOnClickListener(v -> toggleChallengeJoin(challengeId, !joinedByMe, join));
+            box.addView(join);
             content.addView(box, cardLp());
         }
+    }
+
+
+    private void toggleChallengeJoin(int challengeId, boolean join, Button button) {
+        if (challengeId <= 0) return;
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("join_challenge", new JSONObject().put("challenge_id", challengeId).put("join", join));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    toast(join ? "به چالش ملحق شدید." : "همراهی لغو شد.");
+                    showChallenges();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    button.setEnabled(true);
+                    toast(e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void showAiAdvisor() {
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        addHero("مشاور هوش مصنوعی", "گفتگوی Native مستقیم با سرویس PedalPro");
+
+        LinearLayout messages = new LinearLayout(this);
+        messages.setOrientation(LinearLayout.VERTICAL);
+        content.addView(messages);
+
+        LinearLayout composer = card();
+        EditText prompt = input("پیام خود را بنویسید…");
+        prompt.setSingleLine(false);
+        prompt.setMinLines(3);
+        Button send = primaryButton("ارسال");
+        composer.addView(prompt);
+        composer.addView(send);
+        content.addView(composer, cardLp());
+
+        loadAiMessages(messages);
+
+        send.setOnClickListener(v -> {
+            String message = prompt.getText().toString().trim();
+            if (message.isBlank()) return;
+            hideKeyboard();
+            send.setEnabled(false);
+            send.setText("در حال دریافت پاسخ…");
+            addAiBubble(messages, "شما", message, false);
+            prompt.setText("");
+            io.execute(() -> {
+                try {
+                    JSONObject d = api.post("ai_chat", new JSONObject()
+                            .put("message", message)
+                            .put("mode", "coach")
+                            .put("use_profile_context", true));
+                    String answer = d.optString("answer", "پاسخی دریافت نشد.");
+                    main.post(() -> {
+                        addAiBubble(messages, "PedalPro AI", answer, true);
+                        send.setEnabled(true);
+                        send.setText("ارسال");
+                    });
+                } catch (Exception e) {
+                    main.post(() -> {
+                        send.setEnabled(true);
+                        send.setText("ارسال");
+                        toast(e.getMessage());
+                    });
+                }
+            });
+        });
+    }
+
+    private void loadAiMessages(LinearLayout host) {
+        io.execute(() -> {
+            try {
+                JSONObject d = api.get("ai_history");
+                JSONArray rows = d.optJSONArray("messages");
+                main.post(() -> {
+                    host.removeAllViews();
+                    if (rows == null || rows.length() == 0) {
+                        LinearLayout e = card();
+                        e.addView(text("گفتگو هنوز شروع نشده است.", 12, false, MUTED));
+                        host.addView(e, cardLp());
+                        return;
+                    }
+                    for (int i = 0; i < rows.length(); i++) {
+                        JSONObject m = rows.optJSONObject(i);
+                        if (m == null) continue;
+                        boolean assistant = "assistant".equals(m.optString("role"));
+                        addAiBubble(host, assistant ? "PedalPro AI" : "شما", m.optString("body", ""), assistant);
+                    }
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    LinearLayout box = card();
+                    box.addView(text("تاریخچه AI دریافت نشد: " + e.getMessage(), 12, false, MUTED));
+                    host.addView(box, cardLp());
+                });
+            }
+        });
+    }
+
+    private void addAiBubble(LinearLayout host, String sender, String body, boolean assistant) {
+        LinearLayout box = card();
+        box.setBackgroundColor(assistant ? Color.rgb(10, 54, 67) : Color.rgb(24, 45, 66));
+        box.addView(text(sender, 11, true, assistant ? ACCENT : ORANGE));
+        TextView msg = text(body, 13, false, TEXT);
+        msg.setPadding(0, dp(6), 0, 0);
+        box.addView(msg);
+        host.addView(box, cardLp());
     }
 
     private void showPerformance() {
