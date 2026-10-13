@@ -21,6 +21,7 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
     private int replayIndex=0;
     private boolean replayRunning=false;
     private TextView replayStatus;
+    private LinearLayout commentsHost;
 
     private final Runnable replayTick=new Runnable(){
         @Override public void run(){
@@ -71,7 +72,9 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         LinearLayout head=card();
         head.addView(text(r.optString("title","رکاب‌زنی"),18,true,TEXT));
-        head.addView(text("👤 "+r.optString("owner_name",""),12,false,MUTED));
+        head.addView(text(r.optString("owner_name",""),12,false,MUTED));
+        String started=r.optString("started_at","");
+        if(!started.isBlank())head.addView(text(JalaliDate.format(started,true),11,false,MUTED));
         head.addView(text(String.format(Locale.US,"%.2f km · %s · %.1f km/h · %.0f m صعود",
                 r.optDouble("distance_km",r.optDouble("distance_m",0)/1000.0),
                 formatDuration(r.optLong("duration_seconds",0)),
@@ -121,7 +124,56 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         content.addView(replayStatus);
 
         JSONArray pts=r.optJSONArray("points");
-        addCard("داده مسیر",(pts==null?0:pts.length())+" نقطه دریافت‌شده · نمایش کاملاً Native و بدون WebView");
+        addCard("داده مسیر",(pts==null?0:pts.length())+" نقطه GPS دریافت‌شده");
+
+        LinearLayout social=card();
+        social.addView(text("دیدگاه‌ها",17,true,TEXT));
+        commentsHost=new LinearLayout(this);
+        commentsHost.setOrientation(LinearLayout.VERTICAL);
+        social.addView(commentsHost);
+        android.widget.EditText comment=input("دیدگاه خود را بنویسید…");
+        comment.setSingleLine(false);comment.setMinLines(2);
+        Button send=primary("ارسال دیدگاه");
+        send.setOnClickListener(v->{
+            String body=comment.getText().toString().trim();
+            if(body.isBlank())return;
+            send.setEnabled(false);
+            io.execute(()->{
+                try{
+                    api.post("comment_add",new JSONObject().put("target_type","ride").put("target_id",rideId).put("body",body));
+                    main.post(()->{comment.setText("");send.setEnabled(true);loadComments();});
+                }catch(Exception e){main.post(()->{send.setEnabled(true);toast(e.getMessage());});}
+            });
+        });
+        social.addView(comment);social.addView(send);
+        content.addView(social,cardLp());
+        loadComments();
+        VazirmatnLoader.apply(this,content);
+    }
+
+    private void loadComments(){
+        if(commentsHost==null)return;
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();q.put("target_type","ride");q.put("target_id",rideId);
+                JSONObject d=api.get("comments_list",q);
+                JSONArray rows=d.optJSONArray("comments");
+                main.post(()->{
+                    if(commentsHost==null)return;
+                    commentsHost.removeAllViews();
+                    if(rows==null||rows.length()==0){commentsHost.addView(text("هنوز دیدگاهی ثبت نشده است.",11,false,MUTED));return;}
+                    for(int i=0;i<rows.length();i++){
+                        JSONObject x=rows.optJSONObject(i);if(x==null)continue;
+                        LinearLayout bubble=accentCard(CARD2);
+                        bubble.addView(text(x.optString("display_name","عضو"),11,true,ACCENT));
+                        bubble.addView(text(x.optString("body",""),13,false,TEXT));
+                        bubble.addView(text(JalaliDate.format(x.optString("created_at",""),true),9,false,MUTED));
+                        commentsHost.addView(bubble,cardLp());
+                    }
+                    VazirmatnLoader.apply(this,commentsHost);
+                });
+            }catch(Exception e){main.post(()->{commentsHost.removeAllViews();commentsHost.addView(text("نمایش دیدگاه‌ها ممکن نشد.",11,false,RED));});}
+        });
     }
 
     private void loadReplay(Button b){
