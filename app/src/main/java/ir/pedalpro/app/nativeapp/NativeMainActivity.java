@@ -890,52 +890,24 @@ public final class NativeMainActivity extends Activity {
         currentPage = "performance";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
-        content.removeAllViews();
-        addHero("عملکرد من", "خلاصه Native بر اساس فعالیت‌های ثبت‌شده");
-
-        JSONArray rides = bootstrap.optJSONArray("my_completed_rides");
-        if (rides == null) rides = bootstrap.optJSONArray("rides");
-
-        int count = 0;
-        double distance = 0;
-        double ascent = 0;
-        long seconds = 0;
-        double weightedSpeedDistance = 0;
-
-        if (rides != null) {
-            JSONObject user = bootstrap.optJSONObject("user");
-            int uid = user == null ? 0 : user.optInt("id", 0);
-            for (int i = 0; i < rides.length(); i++) {
-                JSONObject r = rides.optJSONObject(i);
-                if (r == null) continue;
-                if (!"completed".equals(r.optString("status", "completed"))) continue;
-                int owner = r.optInt("owner_user_id", uid);
-                if (uid > 0 && owner > 0 && owner != uid) continue;
-                double d = Math.max(0, r.optDouble("distance_km", 0));
-                distance += d;
-                ascent += Math.max(0, r.optDouble("ascent_m", 0));
-                seconds += Math.max(0, r.optLong("duration_seconds", 0));
-                weightedSpeedDistance += Math.max(0, r.optDouble("avg_speed_kmh", 0)) * d;
-                count++;
+        showLoadingState("در حال محاسبه عملکرد…");
+        io.execute(() -> {
+            try {
+                JSONObject report = api.get("user_performance_report");
+                JSONObject training;
+                try { training = api.get("pp_training_summary"); } catch (Exception ignored) { training = new JSONObject(); }
+                JSONObject finalTraining = training;
+                main.post(() -> renderPerformanceReport(report, finalTraining));
+            } catch (Exception e) {
+                main.post(() -> {
+                    content.removeAllViews();
+                    addHero("عملکرد من", "گزارش شخصی");
+                    showInlineMessage("گزارش در دسترس نیست", e.getMessage(), RED);
+                });
             }
-        }
-
-        LinearLayout a = new LinearLayout(this);
-        a.setOrientation(LinearLayout.HORIZONTAL);
-        a.addView(wrapMetric(metricValue("رکاب", String.valueOf(count)), "رکاب"), weightHeightLp(dp(96)));
-        a.addView(wrapMetric(metricValue("مسافت", String.format(Locale.US, "%.1f", distance)), "km"), weightHeightLp(dp(96)));
-        a.addView(wrapMetric(metricValue("صعود", String.format(Locale.US, "%.0f", ascent)), "m"), weightHeightLp(dp(96)));
-        content.addView(a, cardLp());
-
-        LinearLayout b = new LinearLayout(this);
-        b.setOrientation(LinearLayout.HORIZONTAL);
-        double avg = distance > 0 ? weightedSpeedDistance / distance : 0;
-        b.addView(wrapMetric(metricValue("میانگین", String.format(Locale.US, "%.1f", avg)), "km/h"), weightHeightLp(dp(96)));
-        b.addView(wrapMetric(metricValue("زمان", formatDuration(seconds)), "کل"), weightHeightLp(dp(96)));
-        content.addView(b, cardLp());
-
-        addCard("Training / Sensors", "Cadence و Power از BLE Native خوانده می‌شوند و آماده اتصال به محاسبات Training Load هستند.");
+        });
     }
+
 
     private void showSensors() {
         currentPage = "sensors";
