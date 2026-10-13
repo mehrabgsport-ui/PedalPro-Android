@@ -36,9 +36,8 @@
         </provider>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".nativeapp.NativeMainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -51,11 +50,13 @@
                 <data android:scheme="https" android:host="pedalpro.ir" />
                 <data android:scheme="https" android:host="www.pedalpro.ir" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-            </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="unspecified" />
 
         <service
             android:name=".TrackingService"
