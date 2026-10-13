@@ -9,7 +9,6 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.location.Location;
 import android.os.Bundle;
-import android.os.SystemClock;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -42,20 +41,22 @@ import ir.pedalpro.app.R;
 import ir.pedalpro.app.TrackingService;
 
 /**
- * Polished Native 2.0 launcher.
- * No WebView is created or loaded.
+ * PedalPro Native 2.0 launcher styled to match the existing web application.
+ * No WebView is used.
  */
 public final class NativeLauncherActivity extends Activity {
-    private static final int BG=Color.rgb(5,17,28);
-    private static final int CARD=Color.rgb(11,38,54);
-    private static final int CARD2=Color.rgb(9,31,45);
-    private static final int TEXT=Color.rgb(240,248,251);
-    private static final int MUTED=Color.rgb(147,174,187);
-    private static final int ACCENT=Color.rgb(37,215,220);
-    private static final int GREEN=Color.rgb(45,223,158);
-    private static final int ORANGE=Color.rgb(255,182,67);
-    private static final int STROKE=Color.rgb(26,69,87);
-    private static final int REQ_LOCATION=5201;
+    private static final int BG=Color.rgb(4,17,27);
+    private static final int PANEL=Color.rgb(8,31,45);
+    private static final int PANEL2=Color.rgb(10,39,55);
+    private static final int TEXT=Color.rgb(244,249,251);
+    private static final int MUTED=Color.rgb(166,188,198);
+    private static final int CYAN=Color.rgb(31,213,227);
+    private static final int BLUE=Color.rgb(31,159,235);
+    private static final int GREEN=Color.rgb(49,219,161);
+    private static final int ORANGE=Color.rgb(255,187,68);
+    private static final int RED=Color.rgb(170,51,62);
+    private static final int STROKE=Color.rgb(49,82,98);
+    private static final int REQ_LOCATION=6301;
 
     private final ExecutorService io=Executors.newSingleThreadExecutor();
     private PedalProApiClient api;
@@ -63,6 +64,7 @@ public final class NativeLauncherActivity extends Activity {
     private JSONObject data;
     private JSONObject activeRide;
     private LinearLayout content;
+    private LinearLayout header;
     private TextView status;
     private Button navHome,navActivities,navRide,navRoutes,navMe;
     private Location pendingFix;
@@ -83,88 +85,107 @@ public final class NativeLauncherActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
         root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
         ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{
             androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(0,bars.top,0,bars.bottom);
             return insets;
         });
 
-        LinearLayout header=new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(16),dp(7),dp(16),dp(7));
-
-        LinearLayout ht=new LinearLayout(this);
-        ht.setOrientation(LinearLayout.VERTICAL);
-        ht.setGravity(Gravity.END);
-        TextView brand=txt("PedalPro",19,true,TEXT);
-        status=txt("در حال اتصال…",10,false,MUTED);
-        ht.addView(brand);ht.addView(status);
-
-        ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
-        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-
-        header.addView(ht,new LinearLayout.LayoutParams(0,dp(54),1f));
-        header.addView(logo,new LinearLayout.LayoutParams(dp(50),dp(50)));
-        root.addView(header);
+        header=buildHeader();
+        root.addView(header,new LinearLayout.LayoutParams(-1,dp(112)));
 
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16),dp(5),dp(16),dp(24));
+        content.setPadding(dp(16),dp(14),dp(16),dp(30));
         scroll.addView(content);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
 
-        LinearLayout nav=new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        nav.setPadding(dp(5),dp(5),dp(5),dp(5));
-        nav.setBackground(round(Color.rgb(6,27,40),0,0));
-
-        navHome=nav("خانه",this::home);
-        navActivities=nav("فعالیت‌ها",this::activities);
-        navRide=nav("رکاب‌زنی",this::ride);
-        navRoutes=nav("مسیرها",this::routes);
-        navMe=nav("من",this::me);
-        nav.addView(navHome,weight());
-        nav.addView(navActivities,weight());
-        nav.addView(navRide,weight());
-        nav.addView(navRoutes,weight());
-        nav.addView(navMe,weight());
-        root.addView(nav,new LinearLayout.LayoutParams(-1,dp(62)));
+        root.addView(buildBottomNav(),new LinearLayout.LayoutParams(-1,dp(92)));
         setContentView(root);
     }
 
+    private LinearLayout buildHeader(){
+        LinearLayout h=new LinearLayout(this);
+        h.setOrientation(LinearLayout.HORIZONTAL);
+        h.setGravity(Gravity.CENTER_VERTICAL);
+        h.setPadding(dp(20),dp(12),dp(16),dp(12));
+        h.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        h.setBackground(headerGradient());
+
+        ImageView logo=new ImageView(this);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        h.addView(logo,new LinearLayout.LayoutParams(dp(105),dp(72)));
+
+        LinearLayout spacer=new LinearLayout(this);
+        h.addView(spacer,new LinearLayout.LayoutParams(0,1,1f));
+
+        Button account=outline("حساب کاربری");
+        account.setOnClickListener(v->me());
+        h.addView(account,new LinearLayout.LayoutParams(dp(126),dp(54)));
+
+        Button settings=square("⚙");
+        settings.setOnClickListener(v->me());
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(58),dp(54));sp.setMargins(dp(8),0,0,0);
+        h.addView(settings,sp);
+
+        Button menu=square("☰");
+        menu.setTextSize(28);
+        menu.setOnClickListener(v->menu());
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(58),dp(54));mp.setMargins(dp(8),0,0,0);
+        h.addView(menu,mp);
+
+        status=new TextView(this);
+        status.setVisibility(View.GONE);
+        return h;
+    }
+
+    private LinearLayout buildBottomNav(){
+        LinearLayout nav=new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER);
+        nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        nav.setPadding(dp(8),dp(8),dp(8),dp(8));
+        nav.setBackground(bottomGradient());
+
+        navHome=bottom("⌂\nخانه",this::home);
+        navActivities=bottom("▣\nبرنامه‌ها",this::activities);
+        navRide=bottom("شروع\nرکاب",this::ride);
+        navRoutes=bottom("⌖\nمسیرها",this::routes);
+        navMe=bottom("●\nمن",this::me);
+
+        nav.addView(navHome,bottomLp(1f,64));
+        nav.addView(navActivities,bottomLp(1f,64));
+        nav.addView(navRide,bottomLp(1.35f,78));
+        nav.addView(navRoutes,bottomLp(1f,64));
+        nav.addView(navMe,bottomLp(1f,64));
+        return nav;
+    }
+
     private void load(boolean first){
-        status.setText("در حال همگام‌سازی…");
         io.execute(()->{
             try{
                 JSONObject d=api.bootstrap();
                 data=d;activeRide=d.optJSONObject("my_active_ride");
                 runOnUiThread(()->{
                     JSONObject u=d.optJSONObject("user");
-                    if(u==null){status.setText("ورود لازم است");login();return;}
-                    status.setText("متصل · "+u.optString("display_name",u.optString("username","PedalPro")));
-                    status.setTextColor(GREEN);
+                    if(u==null){login();return;}
                     if(first)home();
                 });
             }catch(Exception e){
-                runOnUiThread(()->{
-                    status.setText("ارتباط با سرور برقرار نشد");
-                    status.setTextColor(ORANGE);
-                    error("خطای اتصال",e.getMessage());
-                });
+                runOnUiThread(()->error("خطای اتصال",e.getMessage()));
             }
         });
     }
 
     private void login(){
         select(null);content.removeAllViews();
-        hero("ورود به PedalPro","نسخه مستقل Android · بدون WebView");
-        LinearLayout box=card();
+        heroSimple("ورود به PedalPro","اپلیکیشن مستقل اندروید");
+        LinearLayout box=glassCard();
         EditText user=input("نام کاربری");
         EditText pass=input("رمز عبور");
         pass.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -180,10 +201,8 @@ public final class NativeLauncherActivity extends Activity {
                 try{
                     api.login(u,pw,true);
                     data=api.bootstrap();activeRide=data.optJSONObject("my_active_ride");
-                    runOnUiThread(()->{go.setEnabled(true);p.setVisibility(View.GONE);home();});
-                }catch(Exception e){
-                    runOnUiThread(()->{go.setEnabled(true);p.setVisibility(View.GONE);toast(e.getMessage());});
-                }
+                    runOnUiThread(this::home);
+                }catch(Exception e){runOnUiThread(()->{go.setEnabled(true);p.setVisibility(View.GONE);toast(e.getMessage());});}
             });
         });
     }
@@ -191,70 +210,90 @@ public final class NativeLauncherActivity extends Activity {
     private void home(){
         if(!signed()){login();return;}
         select(navHome);content.removeAllViews();
-        JSONObject u=data.optJSONObject("user");
-        String name=u==null?"رکاب‌زن":u.optString("display_name","رکاب‌زن");
 
-        LinearLayout h=card();
-        h.addView(txt("سلام "+name,22,true,TEXT));
-        TextView sub=txt(activeRide==null?"برای یک رکاب‌زنی دقیق آماده‌ای.":"رکاب‌زنی فعال داری؛ ادامه‌اش بده.",12,false,MUTED);
-        sub.setPadding(0,dp(5),0,0);h.addView(sub);
-        content.addView(h,cardLp());
+        LinearLayout hero=glassCard();
+        TextView kicker=txt("گروه دوچرخه سواری",17,true,TEXT);
+        TextView name=txt("پدال پرو",38,true,TEXT);
+        name.setTextColor(TEXT);
+        TextView cyan=txt("پرو",38,true,CYAN);
+        LinearLayout titleRow=new LinearLayout(this);titleRow.setOrientation(LinearLayout.HORIZONTAL);titleRow.setGravity(Gravity.END);
+        titleRow.addView(cyan);titleRow.addView(name);
+        TextView desc=txt("رکاب بزن، طبیعت، مسیرهای جدید",13,false,TEXT);
+        desc.setPadding(0,dp(2),0,dp(10));
+        hero.addView(kicker);
+        hero.addView(titleRow);
+        hero.addView(desc);
 
-        LinearLayout metrics=new LinearLayout(this);metrics.setOrientation(LinearLayout.HORIZONTAL);
-        metrics.addView(metric("فعالیت‌ها",completedCount()),metricLp());
-        metrics.addView(metric("اعضا",arrayCount("members")),metricLp());
-        metrics.addView(metric("زنده",liveCount()),metricLp());
-        content.addView(metrics,cardLp());
+        Button join=primary("▣   ثبت نام برنامه");
+        join.setOnClickListener(v->activities());
+        Button see=outline("⌖   مشاهده مسیرها");
+        see.setOnClickListener(v->routes());
+        hero.addView(join);
+        hero.addView(see);
+        content.addView(hero,cardLp());
 
-        LinearLayout rc=card();
-        rc.addView(txt(activeRide==null?"شروع رکاب‌زنی":"رکاب‌زنی فعال",18,true,TEXT));
-        TextView rm=txt(activeRide==null?
-                "GPS ابتدا بررسی می‌شود؛ تایمر و مسیر فقط بعد از تأیید شما شروع می‌شوند.":
-                String.format(Locale.US,"%.2f km  ·  %s",activeRide.optDouble("distance_km",0),duration(activeRide.optLong("duration_seconds",0))),
-                11,false,MUTED);
-        rm.setPadding(0,dp(6),0,0);rc.addView(rm);
-        Button go=primary(activeRide==null?"آماده‌سازی GPS":"بازگشت به رکاب‌زنی");
-        go.setOnClickListener(v->ride());rc.addView(go);content.addView(rc,cardLp());
+        sectionTitle("برنامه پیش رو  ▣");
+        JSONObject upcoming=firstUpcoming();
+        if(upcoming!=null) programPreview(upcoming);
+        else smallCard("برنامه پیش رو ثبت نشده است.");
 
-        section("رکاب‌زنی زنده");
-        JSONArray rides=data.optJSONArray("rides");int shown=0;int uid=u==null?0:u.optInt("id",0);
-        if(rides!=null)for(int i=0;i<rides.length()&&shown<3;i++){
+        sectionTitle("رکاب‌زنی زنده");
+        JSONObject u=data.optJSONObject("user");int uid=u==null?0:u.optInt("id",0),shown=0;
+        JSONArray rides=data.optJSONArray("rides");
+        if(rides!=null)for(int i=0;i<rides.length()&&shown<2;i++){
             JSONObject r=rides.optJSONObject(i);
             if(r==null||!"active".equals(r.optString("status"))||r.optInt("owner_user_id",0)==uid)continue;
             rideCard(r,true);shown++;
         }
-        if(shown==0)smallCard("فعلاً رکاب‌زن زنده دیگری دیده نمی‌شود.");
+        if(shown==0)smallCard("در حال حاضر رکاب‌زن زنده دیگری دیده نمی‌شود.");
 
-        section("امکانات");
-        quickRow("باشگاه","چالش‌ها",
-                ()->open(NativeClubActivity.class),()->open(NativeClubActivity.class));
-        quickRow("سنسورها","عملکرد من",
-                ()->open(NativeSensorsActivity.class),()->open(NativePerformanceActivity.class));
-        quickRow("تحلیل حرفه‌ای","هوش مصنوعی",
-                ()->open(NativeAdvancedActivity.class),()->open(NativeAiActivity.class));
-        quickRow("چت گروهی","فید اجتماعی",
-                ()->open(NativeChatActivity.class),()->open(NativeSocialActivity.class));
-        quickRow("ایمنی و SOS","Heatmap",
-                ()->open(NativeSafetyActivity.class),()->open(NativeHeatmapActivity.class));
+        sectionTitle("دسترسی سریع");
+        quickRow("باشگاه","عملکرد من",()->open(NativeClubActivity.class),()->open(NativePerformanceActivity.class));
+        quickRow("تحلیل حرفه‌ای","سنسورها",()->open(NativeAdvancedActivity.class),()->open(NativeSensorsActivity.class));
+        quickRow("ایمنی و حریم خصوصی","فید اجتماعی",()->open(NativeSafetyActivity.class),()->open(NativeSocialActivity.class));
     }
 
     private void activities(){
         if(!signed()){login();return;}
-        select(navActivities);content.removeAllViews();hero("فعالیت‌ها","رکاب‌زنی‌های ثبت‌شده شما");
-        JSONArray rides=data.optJSONArray("my_completed_rides");if(rides==null)rides=data.optJSONArray("rides");
-        JSONObject u=data.optJSONObject("user");int uid=u==null?0:u.optInt("id",0),shown=0;
-        if(rides!=null)for(int i=0;i<rides.length()&&shown<50;i++){
-            JSONObject r=rides.optJSONObject(i);if(r==null)continue;
-            if(!"completed".equals(r.optString("status","completed")))continue;
-            int owner=r.optInt("owner_user_id",uid);if(uid>0&&owner>0&&owner!=uid)continue;
-            rideCard(r,false);shown++;
+        select(navActivities);content.removeAllViews();
+
+        LinearLayout top=new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        Button add=primary("+ برنامه جدید");
+        add.setEnabled(false);
+        Button refresh=outline("↻ بروزرسانی");
+        refresh.setOnClickListener(v->loadAnd(this::activities));
+        top.addView(add,new LinearLayout.LayoutParams(0,dp(52),1f));
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,dp(52),1f);rp.setMargins(dp(8),0,0,0);top.addView(refresh,rp);
+        content.addView(top,cardLp());
+
+        LinearLayout title=glassCard();
+        title.addView(txt("برنامه‌ها و فعالیت‌ها",28,true,TEXT));
+        title.addView(txt("تنها اعضایی که شماره تلفن تایید شده داشته باشند امکان ثبت نام دارند.",12,false,MUTED));
+        content.addView(title,cardLp());
+
+        JSONArray events=data.optJSONArray("events");
+        if(events==null)events=data.optJSONArray("programs");
+        int shown=0;
+        if(events!=null)for(int i=0;i<events.length();i++){
+            JSONObject e=events.optJSONObject(i);if(e==null)continue;
+            programCard(e,i==0?GREEN:BLUE);shown++;
         }
-        if(shown==0)smallCard("هنوز فعالیت ثبت‌شده‌ای وجود ندارد.");
+        if(shown==0){
+            JSONArray rides=data.optJSONArray("rides");
+            if(rides!=null)for(int i=0;i<rides.length()&&shown<20;i++){
+                JSONObject r=rides.optJSONObject(i);if(r==null||!"planned".equals(r.optString("status")))continue;
+                programCard(r,shown==0?GREEN:BLUE);shown++;
+            }
+        }
+        if(shown==0)smallCard("برنامه فعالی برای نمایش وجود ندارد.");
     }
 
     private void routes(){
         if(!signed()){login();return;}
-        select(navRoutes);content.removeAllViews();hero("مسیرها","مسیرها و رکاب‌زنی‌های زنده PedalPro");
+        select(navRoutes);content.removeAllViews();
+        heroSimple("مسیرهای GPS","مسیرها و رکاب‌زنی‌های زنده");
         JSONArray rides=data.optJSONArray("rides");int shown=0;
         if(rides!=null)for(int i=0;i<rides.length()&&shown<50;i++){
             JSONObject r=rides.optJSONObject(i);if(r==null)continue;
@@ -267,12 +306,12 @@ public final class NativeLauncherActivity extends Activity {
         if(!signed()){login();return;}
         select(navRide);content.removeAllViews();
         if(activeRide==null){
-            hero("شروع رکاب‌زنی","ابتدا GPS تازه و دقیق بررسی می‌شود.");
-            LinearLayout box=card();
-            TextView state=txt("در حال بررسی GPS…",15,true,TEXT);
-            TextView accuracy=txt("دقت: —",11,false,MUTED);
-            Button check=normal("بررسی دوباره GPS");
-            Button start=primary("شروع ثبت مسیر");
+            heroSimple("شروع رکاب‌زنی","ابتدا GPS تازه و دقیق بررسی می‌شود.");
+            LinearLayout box=glassCard();
+            TextView state=txt("در حال بررسی GPS…",17,true,TEXT);
+            TextView accuracy=txt("دقت: —",12,false,MUTED);
+            Button check=outline("بررسی دوباره GPS");
+            Button start=primary("▶ شروع ثبت مسیر");
             start.setEnabled(false);
             box.addView(state);box.addView(accuracy);box.addView(check);box.addView(start);
             content.addView(box,cardLp());
@@ -282,53 +321,110 @@ public final class NativeLauncherActivity extends Activity {
             return;
         }
 
-        hero("رکاب‌زنی فعال",activeRide.optString("title","PedalPro"));
-        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
-        row.addView(metricText("زمان",duration(activeRide.optLong("duration_seconds",0))),metricLp());
-        row.addView(metricText("مسافت",String.format(Locale.US,"%.2f km",activeRide.optDouble("distance_km",0))),metricLp());
-        row.addView(metricText("میانگین",String.format(Locale.US,"%.1f",activeRide.optDouble("avg_speed_kmh",0))),metricLp());
-        content.addView(row,cardLp());
+        heroSimple("رکاب‌زنی فعال",activeRide.optString("title","PedalPro"));
+        LinearLayout stats=new LinearLayout(this);stats.setOrientation(LinearLayout.HORIZONTAL);
+        stats.addView(metricBox("زمان",duration(activeRide.optLong("duration_seconds",0))),metricLp());
+        stats.addView(metricBox("مسافت",String.format(Locale.US,"%.2f km",activeRide.optDouble("distance_km",0))),metricLp());
+        stats.addView(metricBox("میانگین",String.format(Locale.US,"%.1f",activeRide.optDouble("avg_speed_kmh",0))),metricLp());
+        content.addView(stats,cardLp());
 
-        Button navGroup=normal("مسیریابی تا گروه در حال حرکت");
-        navGroup.setOnClickListener(v->{
+        Button group=outline("◎ رسیدن به گروه در حال حرکت");
+        group.setOnClickListener(v->{
             Intent x=new Intent(this,NativeLiveNavigationActivity.class);
             x.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");
             x.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID,activeRide.optInt("id",0));
             startActivity(x);
         });
-        content.addView(navGroup);
-
-        Button sensors=normal("سنسورها و داده زنده");
-        sensors.setOnClickListener(v->open(NativeSensorsActivity.class));content.addView(sensors);
-
-        Button stop=danger("پایان رکاب‌زنی");
-        stop.setOnClickListener(v->finishRide(stop));content.addView(stop);
+        content.addView(group);
+        Button sensors=outline("⌁ سنسورهای Cadence / Power");
+        sensors.setOnClickListener(v->open(NativeSensorsActivity.class));
+        content.addView(sensors);
+        Button stop=danger("■ پایان رکاب‌زنی");
+        stop.setOnClickListener(v->finishRide(stop));
+        content.addView(stop);
     }
 
     private void me(){
         if(!signed()){login();return;}
         select(navMe);content.removeAllViews();
         JSONObject u=data.optJSONObject("user");
-        hero(u==null?"حساب من":u.optString("display_name","حساب من"),u==null?"":"@"+u.optString("username",""));
+        heroSimple(u==null?"حساب من":u.optString("display_name","حساب من"),u==null?"":"@"+u.optString("username",""));
         quickRow("باشگاه","عملکرد",()->open(NativeClubActivity.class),()->open(NativePerformanceActivity.class));
         quickRow("سنسورها","تحلیل حرفه‌ای",()->open(NativeSensorsActivity.class),()->open(NativeAdvancedActivity.class));
         quickRow("ایمنی","اجتماعی",()->open(NativeSafetyActivity.class),()->open(NativeSocialActivity.class));
-        Button refresh=normal("بروزرسانی اطلاعات");refresh.setOnClickListener(v->load(true));content.addView(refresh);
+        Button refresh=outline("↻ بروزرسانی اطلاعات");refresh.setOnClickListener(v->loadAnd(this::me));content.addView(refresh);
         Button logout=danger("خروج از حساب");logout.setOnClickListener(v->io.execute(()->{
             try{api.logout();}catch(Exception ignored){session.clear();}
             runOnUiThread(this::login);
         }));content.addView(logout);
     }
 
+    private void menu(){
+        select(null);content.removeAllViews();
+        LinearLayout panel=glassCard();
+        ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.pedalpro_app_icon);logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        panel.addView(logo,new LinearLayout.LayoutParams(-1,dp(150)));
+        panel.addView(menuRow("⌂  صفحه اصلی",this::home));
+        panel.addView(menuRow("▣  فعالیت‌ها و برنامه‌ها",this::activities));
+        panel.addView(menuRow("⌖  مسیرهای GPS",this::routes));
+        panel.addView(menuRow("🚴  رکاب‌زنی",this::ride));
+        panel.addView(menuRow("◉  مسیرها و اکتشاف",()->open(NativeAdvancedActivity.class)));
+        panel.addView(menuRow("👥  باشگاه",()->open(NativeClubActivity.class)));
+        panel.addView(menuRow("●  ارتباطات",()->open(NativeChatActivity.class)));
+        panel.addView(menuRow("▥  عملکرد من",()->open(NativePerformanceActivity.class)));
+        panel.addView(menuRow("◈  ایمنی و حریم خصوصی",()->open(NativeSafetyActivity.class)));
+        panel.addView(menuRow("👤  حساب من",this::me));
+        content.addView(panel,cardLp());
+    }
+
+    private View menuRow(String label,Runnable action){
+        Button b=outline(label);b.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);b.setTextSize(16);b.setOnClickListener(v->action.run());return b;
+    }
+
+    private JSONObject firstUpcoming(){
+        JSONArray a=data==null?null:data.optJSONArray("events");
+        if(a==null)a=data==null?null:data.optJSONArray("programs");
+        return a!=null&&a.length()>0?a.optJSONObject(0):null;
+    }
+
+    private void programPreview(JSONObject e){
+        LinearLayout box=glassCard();
+        box.addView(txt(e.optString("title","برنامه شماره "+e.optInt("id",0)),20,true,TEXT));
+        String desc=e.optString("description",e.optString("notes",""));
+        if(!desc.isBlank())box.addView(txt(desc,12,false,MUTED));
+        LinearLayout meta=new LinearLayout(this);meta.setOrientation(LinearLayout.HORIZONTAL);
+        meta.addView(chip("⌖ "+e.optString("location_name",e.optString("meeting_place","مسیر"))),chipLp());
+        meta.addView(chip("↔ "+String.format(Locale.US,"%.0f km",e.optDouble("distance_km",0))),chipLp());
+        box.addView(meta);
+        content.addView(box,cardLp());
+    }
+
+    private void programCard(JSONObject e,int accent){
+        LinearLayout box=glassCard();
+        GradientDrawable g=round(PANEL2,22,STROKE);g.setStroke(dp(2),accent);box.setBackground(g);
+        box.addView(txt(e.optString("title","برنامه شماره "+e.optInt("id",0)),21,true,TEXT));
+        String info=e.optString("date",e.optString("starts_at",""))+"  ·  "+e.optString("location_name",e.optString("meeting_place",""));
+        box.addView(txt(info,11,false,MUTED));
+        String desc=e.optString("description",e.optString("notes",""));
+        if(!desc.isBlank()){TextView d=txt(desc,12,false,TEXT);d.setPadding(0,dp(8),0,0);box.addView(d);}
+        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);
+        Button details=outline("جزئیات");
+        Button share=outline("اشتراک‌گذاری");
+        Button nav=outline("مسیریابی تا شروع");
+        actions.addView(details,actionLp());actions.addView(share,actionLp());actions.addView(nav,actionLp());
+        box.addView(actions);
+        content.addView(box,cardLp());
+    }
+
     private void rideCard(JSONObject r,boolean live){
-        LinearLayout box=card();
-        box.addView(txt((live?"● ":"")+r.optString("owner_name","PedalPro")+" · "+r.optString("title","رکاب‌زنی"),15,true,live?ORANGE:TEXT));
+        LinearLayout box=glassCard();
+        box.addView(txt((live?"● ":"")+r.optString("owner_name","PedalPro")+" · "+r.optString("title","رکاب‌زنی"),16,true,live?ORANGE:TEXT));
         box.addView(txt(String.format(Locale.US,"%.2f km  ·  %s  ·  %.1f km/h",
                 r.optDouble("distance_km",r.optDouble("distance_m",0)/1000.0),
                 duration(r.optLong("duration_seconds",0)),r.optDouble("avg_speed_kmh",0)),11,false,MUTED));
         int id=r.optInt("id",0);
         if(id>0){
-            Button detail=normal("جزئیات مسیر");
+            Button detail=outline("جزئیات");
             detail.setOnClickListener(v->{Intent x=new Intent(this,NativeRideDetailActivity.class);x.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,id);startActivity(x);});
             box.addView(detail);
         }
@@ -398,42 +494,54 @@ public final class NativeLauncherActivity extends Activity {
         });
     }
 
-    private boolean signed(){return data!=null&&data.optJSONObject("user")!=null;}
-    private int arrayCount(String k){JSONArray a=data==null?null:data.optJSONArray(k);return a==null?0:a.length();}
-    private int completedCount(){
-        JSONArray a=data==null?null:data.optJSONArray("my_completed_rides");if(a!=null)return a.length();
-        JSONArray rides=data==null?null:data.optJSONArray("rides");int n=0;if(rides!=null)for(int i=0;i<rides.length();i++){JSONObject r=rides.optJSONObject(i);if(r!=null&&"completed".equals(r.optString("status")))n++;}return n;
+    private void loadAnd(Runnable page){
+        io.execute(()->{
+            try{data=api.bootstrap();activeRide=data.optJSONObject("my_active_ride");runOnUiThread(page);}
+            catch(Exception e){runOnUiThread(()->toast(e.getMessage()));}
+        });
     }
+
+    private boolean signed(){return data!=null&&data.optJSONObject("user")!=null;}
     private int liveCount(){JSONArray a=data==null?null:data.optJSONArray("rides");int n=0;if(a!=null)for(int i=0;i<a.length();i++){JSONObject r=a.optJSONObject(i);if(r!=null&&"active".equals(r.optString("status")))n++;}return n;}
 
     private void open(Class<? extends Activity> cls){startActivity(new Intent(this,cls));}
-    private void error(String title,String body){content.removeAllViews();hero(title,body==null?"":body);Button b=primary("تلاش دوباره");b.setOnClickListener(v->load(true));content.addView(b);}
-    private void hero(String title,String sub){LinearLayout x=card();x.addView(txt(title,21,true,TEXT));TextView s=txt(sub,12,false,MUTED);s.setPadding(0,dp(5),0,0);x.addView(s);content.addView(x,cardLp());}
-    private void section(String s){TextView t=txt(s,15,true,TEXT);t.setPadding(dp(2),dp(10),dp(2),dp(8));content.addView(t);}
-    private void smallCard(String s){LinearLayout x=card();x.addView(txt(s,12,false,MUTED));content.addView(x,cardLp());}
+    private void error(String title,String body){content.removeAllViews();heroSimple(title,body==null?"":body);Button b=primary("تلاش دوباره");b.setOnClickListener(v->load(true));content.addView(b);}
+    private void heroSimple(String title,String sub){LinearLayout x=glassCard();x.addView(txt(title,24,true,TEXT));TextView s=txt(sub,12,false,MUTED);s.setPadding(0,dp(5),0,0);x.addView(s);content.addView(x,cardLp());}
+    private void sectionTitle(String s){TextView t=txt(s,18,true,TEXT);t.setPadding(dp(4),dp(12),dp(4),dp(8));content.addView(t);}
+    private void smallCard(String s){LinearLayout x=glassCard();x.addView(txt(s,12,false,MUTED));content.addView(x,cardLp());}
+
+    private LinearLayout glassCard(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setPadding(dp(16),dp(16),dp(16),dp(16));x.setBackground(round(PANEL,22,STROKE));x.setElevation(dp(2));return x;}
+    private LinearLayout.LayoutParams cardLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(12));return p;}
+    private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-1,1f);}
+    private LinearLayout.LayoutParams bottomLp(float weight,int h){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(h),weight);p.setMargins(dp(3),0,dp(3),0);return p;}
+    private LinearLayout.LayoutParams actionLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1f);p.setMargins(dp(3),dp(8),dp(3),0);return p;}
+    private LinearLayout.LayoutParams chipLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1f);p.setMargins(dp(3),dp(8),dp(3),0);return p;}
+    private LinearLayout.LayoutParams metricLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(84),1f);p.setMargins(dp(4),0,dp(4),0);return p;}
+
+    private Button bottom(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setTextSize(11);b.setAllCaps(false);b.setTextColor(TEXT);b.setGravity(Gravity.CENTER);b.setBackground(round(PANEL2,24,0));b.setOnClickListener(v->r.run());return b;}
+    private void select(Button selected){Button[] all={navHome,navActivities,navRide,navRoutes,navMe};for(Button b:all){if(b==null)continue;b.setTextColor(b==selected?CYAN:TEXT);b.setTypeface(Typeface.DEFAULT,b==selected?Typeface.BOLD:Typeface.NORMAL);b.setBackground(b==selected?round(Color.rgb(8,58,76),24,CYAN):round(PANEL2,24,0));}}
+
+    private View metricBox(String label,String value){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setGravity(Gravity.CENTER);x.setBackground(round(PANEL2,16,STROKE));TextView v=txt(value,17,true,CYAN);v.setGravity(Gravity.CENTER);TextView l=txt(label,10,false,MUTED);l.setGravity(Gravity.CENTER);l.setPadding(0,dp(3),0,0);x.addView(v);x.addView(l);return x;}
+    private View chip(String s){TextView t=txt(s,11,true,TEXT);t.setGravity(Gravity.CENTER);t.setBackground(round(PANEL2,14,STROKE));return t;}
 
     private void quickRow(String a,String b,Runnable ra,Runnable rb){
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
-        row.addView(quick(a,ra),quickLp());row.addView(quick(b,rb),quickLp());content.addView(row);
+        Button x=outline(a);x.setOnClickListener(v->ra.run());Button y=outline(b);y.setOnClickListener(v->rb.run());
+        row.addView(x,quickLp());row.addView(y,quickLp());content.addView(row);
     }
-    private Button quick(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setTextSize(13);b.setAllCaps(false);b.setTextColor(TEXT);b.setGravity(Gravity.CENTER);b.setBackground(round(CARD2,16,STROKE));b.setOnClickListener(v->r.run());return b;}
-    private LinearLayout.LayoutParams quickLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(62),1f);p.setMargins(dp(4),dp(4),dp(4),dp(4));return p;}
+    private LinearLayout.LayoutParams quickLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(58),1f);p.setMargins(dp(4),dp(4),dp(4),dp(4));return p;}
 
-    private View metric(String label,int value){return metricText(label,String.valueOf(value));}
-    private View metricText(String label,String value){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setGravity(Gravity.CENTER);x.setBackground(round(CARD2,16,STROKE));TextView v=txt(value,18,true,ACCENT);v.setGravity(Gravity.CENTER);TextView l=txt(label,10,false,MUTED);l.setGravity(Gravity.CENTER);l.setPadding(0,dp(3),0,0);x.addView(v);x.addView(l);return x;}
-    private LinearLayout.LayoutParams metricLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(84),1f);p.setMargins(dp(4),0,dp(4),0);return p;}
-
-    private LinearLayout card(){LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setPadding(dp(15),dp(14),dp(15),dp(14));x.setBackground(round(CARD,18,STROKE));x.setElevation(dp(1));return x;}
-    private LinearLayout.LayoutParams cardLp(){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(10));return p;}
-    private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-1,1f);}
-    private Button nav(String s,Runnable r){Button b=new Button(this);b.setText(s);b.setTextSize(10);b.setAllCaps(false);b.setTextColor(TEXT);b.setGravity(Gravity.CENTER);b.setBackgroundColor(Color.TRANSPARENT);b.setOnClickListener(v->r.run());return b;}
-    private void select(Button selected){Button[] all={navHome,navActivities,navRide,navRoutes,navMe};for(Button b:all){if(b==null)continue;b.setTextColor(b==selected?ACCENT:TEXT);b.setTypeface(Typeface.DEFAULT,b==selected?Typeface.BOLD:Typeface.NORMAL);b.setBackground(b==selected?round(Color.rgb(10,45,61),14,0):round(Color.TRANSPARENT,14,0));}}
     private TextView txt(String s,int sp,boolean bold,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(sp);t.setTextColor(color);t.setGravity(Gravity.END);if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return t;}
-    private EditText input(String hint){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(MUTED);e.setTextColor(TEXT);e.setSingleLine(true);e.setPadding(dp(10),dp(10),dp(10),dp(10));e.setBackground(round(CARD2,12,STROKE));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));p.setMargins(0,dp(5),0,dp(5));e.setLayoutParams(p);return e;}
-    private Button primary(String s){Button b=new Button(this);b.setText(s);b.setTextSize(13);b.setAllCaps(false);b.setTextColor(Color.rgb(2,31,38));b.setGravity(Gravity.CENTER);b.setBackground(round(ACCENT,15,0));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(50));p.setMargins(0,dp(9),0,0);b.setLayoutParams(p);return b;}
-    private Button normal(String s){Button b=primary(s);b.setTextColor(TEXT);b.setBackground(round(Color.rgb(21,57,75),15,STROKE));return b;}
-    private Button danger(String s){Button b=primary(s);b.setTextColor(Color.WHITE);b.setBackground(round(Color.rgb(145,49,61),15,0));return b;}
+    private EditText input(String hint){EditText e=new EditText(this);e.setHint(hint);e.setHintTextColor(MUTED);e.setTextColor(TEXT);e.setSingleLine(true);e.setPadding(dp(12),dp(10),dp(12),dp(10));e.setBackground(round(PANEL2,14,STROKE));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));p.setMargins(0,dp(6),0,dp(6));e.setLayoutParams(p);return e;}
+
+    private Button primary(String s){Button b=new Button(this);b.setText(s);b.setTextSize(14);b.setAllCaps(false);b.setTextColor(Color.rgb(3,34,42));b.setGravity(Gravity.CENTER);GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{CYAN,Color.rgb(27,181,246)});g.setCornerRadius(dp(16));b.setBackground(g);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(54));p.setMargins(0,dp(10),0,0);b.setLayoutParams(p);return b;}
+    private Button outline(String s){Button b=new Button(this);b.setText(s);b.setTextSize(13);b.setAllCaps(false);b.setTextColor(TEXT);b.setGravity(Gravity.CENTER);b.setBackground(round(PANEL2,16,STROKE));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(52));p.setMargins(0,dp(8),0,0);b.setLayoutParams(p);return b;}
+    private Button square(String s){Button b=outline(s);b.setPadding(0,0,0,0);return b;}
+    private Button danger(String s){Button b=primary(s);b.setTextColor(Color.WHITE);b.setBackground(round(RED,16,0));return b;}
+
     private GradientDrawable round(int fill,int radius,int stroke){GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(radius));if(stroke!=0)g.setStroke(dp(1),stroke);return g;}
+    private GradientDrawable headerGradient(){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.rgb(34,38,40),Color.rgb(4,45,63),Color.rgb(3,83,105)});g.setCornerRadii(new float[]{0,0,0,0,dp(30),dp(30),dp(30),dp(30)});g.setStroke(dp(1),STROKE);return g;}
+    private GradientDrawable bottomGradient(){GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{Color.rgb(8,42,58),Color.rgb(4,28,42)});g.setCornerRadii(new float[]{dp(28),dp(28),dp(28),dp(28),0,0,0,0});g.setStroke(dp(1),STROKE);return g;}
     private String duration(long s){s=Math.max(0,s);return String.format(Locale.US,"%02d:%02d:%02d",s/3600,(s%3600)/60,s%60);}
     private void toast(String s){Toast.makeText(this,s==null?"خطا":s,Toast.LENGTH_LONG).show();}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
