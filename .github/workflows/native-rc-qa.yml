@@ -79,3 +79,13 @@ jobs:
           grep -q "versionCode='45'" /tmp/myket-badging.txt
           grep -q "versionName='2.0.0-native-rc1'" /tmp/myket-badging.txt
           grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/myket-badging.txt
+
+
+      - name: Enforce lint success
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.lint.outcome }}" != "success" ]; then
+            echo "Android lint did not pass."
+            exit 1
+          fi
