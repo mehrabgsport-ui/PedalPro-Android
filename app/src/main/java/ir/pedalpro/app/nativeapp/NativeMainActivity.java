@@ -122,7 +122,9 @@ public final class NativeMainActivity extends Activity {
     private View navMe;
     private FrameLayout stageRoot;
     private ImageView siteBackground;
-    private LinearLayout appRoot;\n    private LinearLayout webHeader;\n    private TextView rideDockLabel;
+    private LinearLayout appRoot;
+    private LinearLayout webHeader;
+    private TextView rideDockLabel;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
     private NativeRouteView activeRideRouteView;
