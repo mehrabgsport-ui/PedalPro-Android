@@ -28,16 +28,16 @@ import java.util.concurrent.Executors;
 import ir.pedalpro.app.R;
 
 abstract class NativeScreenBase extends Activity {
-    protected static final int BG=Color.rgb(4,17,27);
-    protected static final int CARD=Color.argb(188,7,31,45);
-    protected static final int CARD2=Color.argb(184,8,39,55);
-    protected static final int TEXT=Color.rgb(244,249,251);
-    protected static final int MUTED=Color.rgb(176,197,207);
-    protected static final int ACCENT=Color.rgb(31,229,241);
-    protected static final int GREEN=Color.rgb(49,219,161);
-    protected static final int ORANGE=Color.rgb(255,187,68);
-    protected static final int RED=Color.rgb(255,91,103);
-    protected static final int STROKE=Color.argb(105,235,248,255);
+    protected static final int BG=Color.rgb(6,17,30);
+    protected static final int CARD=Color.rgb(13,28,44);
+    protected static final int CARD2=Color.rgb(16,35,56);
+    protected static final int TEXT=Color.rgb(245,247,251);
+    protected static final int MUTED=Color.rgb(159,178,200);
+    protected static final int ACCENT=Color.rgb(46,230,166);
+    protected static final int GREEN=Color.rgb(46,230,166);
+    protected static final int ORANGE=Color.rgb(255,124,70);
+    protected static final int RED=Color.rgb(255,92,108);
+    protected static final int STROKE=Color.rgb(33,54,77);
 
     protected final ExecutorService io=Executors.newSingleThreadExecutor();
     protected final Handler main=new Handler(Looper.getMainLooper());
@@ -190,11 +190,11 @@ abstract class NativeScreenBase extends Activity {
     protected Button primary(String s){
         Button b=plainButton(s,13);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        b.setTextColor(Color.rgb(3,34,42));
+        b.setTextColor(Color.rgb(4,36,24));
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.rgb(29,239,244),Color.rgb(21,209,238),Color.rgb(43,178,255)});
-        g.setCornerRadius(dp(18));
+                new int[]{Color.rgb(23,201,145),Color.rgb(46,230,166)});
+        g.setCornerRadius(dp(12));
         b.setBackground(g);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
         lp.setMargins(0,dp(9),0,0);
@@ -204,7 +204,7 @@ abstract class NativeScreenBase extends Activity {
 
     protected Button normal(String s){
         Button b=plainButton(s,13);
-        b.setBackground(round(CARD2,17,STROKE));
+        b.setBackground(round(CARD2,12,Color.rgb(42,66,92)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
         lp.setMargins(0,dp(8),0,0);
         b.setLayoutParams(lp);
@@ -214,7 +214,7 @@ abstract class NativeScreenBase extends Activity {
     protected Button danger(String s){
         Button b=normal(s);
         b.setTextColor(Color.WHITE);
-        b.setBackground(round(Color.argb(210,120,36,50),17,Color.argb(130,255,120,145)));
+        b.setBackground(round(Color.rgb(120,36,50),12,Color.rgb(190,70,90)));
         return b;
     }
 
@@ -257,12 +257,9 @@ abstract class NativeScreenBase extends Activity {
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{
-                        Color.argb(205,38,47,50),
-                        Color.argb(210,5,49,68),
-                        Color.argb(220,3,78,101)});
-        g.setCornerRadii(new float[]{0,0,0,0,dp(28),dp(28),dp(28),dp(28)});
-        g.setStroke(dp(1),STROKE);
+                new int[]{Color.argb(235,7,20,32),Color.argb(235,8,22,37)});
+        g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
+        g.setStroke(dp(1),Color.rgb(23,40,58));
         return g;
     }
 
