@@ -3969,12 +3969,201 @@ public final class NativeMainActivity extends Activity {
         animatePageIn();
     }
 
+    private View liveRiderCard(JSONObject ride, Dialog sheet) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(10), dp(10), dp(10), dp(10));
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.argb(89,126,70,14), Color.argb(9,255,255,255)});
+        bg.setCornerRadius(dp(18));
+        bg.setStroke(dp(1), Color.argb(61,255,190,86));
+        card.setBackground(bg);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        String name = ride == null ? "عضو پدال‌پرو" :
+                ride.optString("owner_name", ride.optString("display_name", "عضو پدال‌پرو"));
+        String initial = name.trim().isEmpty() ? "پ" : name.trim().substring(0, 1);
+
+        FrameLayout avatarFrame = new FrameLayout(this);
+        TextView avatar = text(initial, 17, true, Color.rgb(46,27,3));
+        avatar.setGravity(Gravity.CENTER);
+        GradientDrawable avatarBg = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(239,155,47), Color.rgb(255,189,85)});
+        avatarBg.setCornerRadius(dp(15));
+        avatar.setBackground(avatarBg);
+        avatarFrame.addView(avatar, new FrameLayout.LayoutParams(-1, -1));
+
+        View online = new View(this);
+        GradientDrawable onlineBg = new GradientDrawable();
+        onlineBg.setShape(GradientDrawable.OVAL);
+        onlineBg.setColor(GREEN);
+        onlineBg.setStroke(dp(2), Color.rgb(11,33,49));
+        online.setBackground(onlineBg);
+        FrameLayout.LayoutParams onlineLp = new FrameLayout.LayoutParams(dp(13), dp(13), Gravity.BOTTOM | Gravity.START);
+        onlineLp.leftMargin = -dp(2);
+        onlineLp.bottomMargin = -dp(2);
+        avatarFrame.addView(online, onlineLp);
+        top.addView(avatarFrame, new LinearLayout.LayoutParams(dp(46), dp(46)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        TextView who = text(name, 13, true, TEXT);
+        who.setMaxLines(1);
+        String rideTitle = ride == null ? "رکاب‌زنی زنده" :
+                ride.optString("challenge_title", ride.optString("event_title", ride.optString("title", "رکاب‌زنی زنده")));
+        String meta = rideTitle + "\n" +
+                String.format(Locale.US, "%.2f km · %s",
+                        ride == null ? 0 : ride.optDouble("distance_km", 0),
+                        formatDuration(ride == null ? 0 : ride.optLong("duration_seconds", 0)));
+        TextView details = text(meta, 10, false, Color.rgb(199,219,233));
+        details.setPadding(0, dp(4), 0, 0);
+        details.setLineSpacing(0, 1.6f);
+        copy.addView(who);
+        copy.addView(details);
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        copyLp.setMargins(dp(8), 0, 0, 0);
+        top.addView(copy, copyLp);
+        card.addView(top);
+
+        Button watch = plainButton("مشاهده زنده", 12, Color.rgb(255,214,152));
+        watch.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        watch.setBackground(roundRect(Color.argb(33,255,164,45), 12, Color.argb(102,255,190,86)));
+        LinearLayout.LayoutParams watchLp = new LinearLayout.LayoutParams(-1, dp(40));
+        watchLp.setMargins(0, dp(9), 0, 0);
+        card.addView(watch, watchLp);
+
+        int rideId = ride == null ? 0 : ride.optInt("id", 0);
+        watch.setOnClickListener(v -> {
+            sheet.dismiss();
+            Intent x = new Intent(this, NativeLiveNavigationActivity.class);
+            x.putExtra(NativeLiveNavigationActivity.EXTRA_MODE, "live");
+            x.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID, rideId);
+            x.putExtra(NativeLiveNavigationActivity.EXTRA_TITLE, name);
+            startActivity(x);
+        });
+        return card;
+    }
+
     private void showLiveRidesSheet() {
-        JSONArray rides=bootstrap.optJSONArray("rides");JSONObject me=bootstrap.optJSONObject("user");int uid=me==null?0:me.optInt("id",0);
-        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);LinearLayout box=glassCard(30);box.setPadding(dp(16),dp(16),dp(16),dp(20));box.addView(text("رکاب‌زنی‌های زنده",20,true,TEXT));
-        int count=0;if(rides!=null)for(int i=0;i<rides.length();i++){JSONObject r=rides.optJSONObject(i);if(r==null||!"active".equals(r.optString("status"))||r.optInt("owner_user_id",0)==uid)continue;count++;LinearLayout row=glassCard(18);row.addView(text(r.optString("owner_name","رکاب‌زن"),15,true,ORANGE));row.addView(text(String.format(Locale.US,"%.2f km · %.1f km/h",r.optDouble("distance_km",0),r.optDouble("avg_speed_kmh",0)),11,false,MUTED));int rideId=r.optInt("id",0);PedalActionView go=action(PedalIconView.Icon.BEACON,"مشاهده و مسیریابی",PedalActionView.Style.PRIMARY);go.setOnClickListener(v->{d.dismiss();Intent x=new Intent(this,NativeLiveNavigationActivity.class);x.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"live");x.putExtra(NativeLiveNavigationActivity.EXTRA_RIDE_ID,rideId);x.putExtra(NativeLiveNavigationActivity.EXTRA_TITLE,r.optString("owner_name","رکاب‌زن"));startActivity(x);});row.addView(go,fullActionLp(50));box.addView(row,cardLp());}
-        if(count==0)box.addView(text("رکاب‌زن زنده دیگری دیده نمی‌شود.",13,false,MUTED));
-        d.setContentView(box);d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=-1;lp.height=-2;lp.gravity=Gravity.BOTTOM;w.setAttributes(lp);}VazirmatnLoader.apply(this,box);
+        JSONArray lives = otherVisibleLiveRides();
+
+        Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        shell.setPadding(dp(14), dp(10), dp(14), dp(16));
+        GradientDrawable shellBg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(16,45,64), Color.rgb(7,24,39)});
+        shellBg.setCornerRadii(new float[]{dp(28),dp(28),dp(28),dp(28),0,0,0,0});
+        shellBg.setStroke(dp(1), Color.argb(51,255,255,255));
+        shell.setBackground(shellBg);
+
+        View handle = new View(this);
+        handle.setBackground(roundRect(Color.argb(77,255,255,255), 999, 0));
+        LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(54), dp(5));
+        handleLp.gravity = Gravity.CENTER_HORIZONTAL;
+        handleLp.setMargins(0, dp(2), 0, dp(12));
+        shell.addView(handle, handleLp);
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        LinearLayout headCopy = new LinearLayout(this);
+        headCopy.setOrientation(LinearLayout.VERTICAL);
+        headCopy.setGravity(Gravity.END);
+        headCopy.addView(text("رکاب‌زنی‌های زنده دیگران", 20, true, TEXT));
+        String sub = lives.length() > 0
+                ? JalaliDate.fa(lives.length()) + " نفر همین حالا فعال هستند"
+                : "رکاب‌زن فعالی وجود ندارد";
+        TextView subView = text(sub, 11, false, Color.rgb(159,185,201));
+        subView.setPadding(0, dp(4), 0, 0);
+        headCopy.addView(subView);
+
+        Button close = plainButton("×", 24, TEXT);
+        close.setAllCaps(false);
+        close.setBackground(roundRect(Color.argb(23,255,255,255), 13, 0));
+        close.setOnClickListener(v -> d.dismiss());
+
+        head.addView(headCopy, new LinearLayout.LayoutParams(0, -2, 1f));
+        head.addView(close, new LinearLayout.LayoutParams(dp(38), dp(38)));
+        shell.addView(head);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setVerticalScrollBarEnabled(false);
+
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, dp(10), 0, dp(8));
+
+        if (lives.length() == 0) {
+            TextView empty = text("در حال حاضر رکاب‌زنی زنده دیگری وجود ندارد.", 13, false, Color.rgb(199,217,231));
+            empty.setGravity(Gravity.CENTER);
+            list.addView(empty, new LinearLayout.LayoutParams(-1, dp(90)));
+        } else {
+            boolean singleColumn = getResources().getDisplayMetrics().widthPixels /
+                    getResources().getDisplayMetrics().density <= 390;
+            if (singleColumn) {
+                for (int i = 0; i < lives.length(); i++) {
+                    JSONObject ride = lives.optJSONObject(i);
+                    if (ride == null) continue;
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+                    lp.setMargins(0, 0, 0, dp(8));
+                    list.addView(liveRiderCard(ride, d), lp);
+                }
+            } else {
+                for (int i = 0; i < lives.length(); i += 2) {
+                    LinearLayout row = new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                    for (int j = 0; j < 2; j++) {
+                        int idx = i + j;
+                        if (idx >= lives.length()) {
+                            row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+                            continue;
+                        }
+                        JSONObject ride = lives.optJSONObject(idx);
+                        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
+                        if (j == 0) cp.setMargins(dp(4), 0, 0, dp(8));
+                        else cp.setMargins(0, 0, dp(4), dp(8));
+                        row.addView(liveRiderCard(ride, d), cp);
+                    }
+                    list.addView(row, new LinearLayout.LayoutParams(-1, -2));
+                }
+            }
+        }
+
+        scroll.addView(list);
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        d.setContentView(shell);
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            int maxHeight = Math.min(dp(680), Math.round(getResources().getDisplayMetrics().heightPixels * .78f));
+            lp.height = maxHeight;
+            lp.gravity = Gravity.BOTTOM;
+            lp.dimAmount = .58f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this, shell);
     }
 
     private void showEventDetail(JSONObject event) {
