@@ -2242,9 +2242,8 @@ public final class NativeMainActivity extends Activity {
         int topGap = uiInt("mobile_header_top_gap_px", 20, 6, 50);
         if (webHeader != null) webHeader.setPadding(dp(10), dp(topGap), dp(10), dp(14));
         if (rideDockLabel != null) {
-            String label = uiString("ride_button_text", "شروع رکاب").trim();
-            if ("شروع رکاب".equals(label)) rideDockLabel.setText("شروع\nرکاب");
-            else rideDockLabel.setText(label);
+            String label = uiString("ride_button_text", "شروع").trim();
+            rideDockLabel.setText(label + "\nرکاب");
         }
     }
 
@@ -2573,42 +2572,50 @@ public final class NativeMainActivity extends Activity {
         nav.setPadding(dp(10), dp(16), dp(10), dp(10));
         nav.setBackground(bottomGradient());
 
-        navHome = bottomItem(PedalIconView.Icon.HOME, "خانه", this::showHome);
-        navActivities = bottomItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها", this::showActivities);
+        navHome = bottomGlyphItem("⌂", "خانه", this::showHome);
+        navActivities = bottomGlyphItem("🗓️", "فعالیت‌ها", this::showActivities);
         navRide = centerRideItem();
-        navRoutes = bottomItem(PedalIconView.Icon.ROUTE, "مسیرها", this::showRoutes);
-        navMe = bottomItem(PedalIconView.Icon.USER, "من", this::showMe);
+        navRoutes = bottomGlyphItem("📍", "مسیرها", this::showRoutes);
+        navMe = bottomGlyphItem("👤", "من", this::showMe);
 
         nav.addView(navHome, bottomWeightLp(1f, 90));
         nav.addView(navActivities, bottomWeightLp(1f, 90));
+
         LinearLayout center = new LinearLayout(this);
         center.setGravity(Gravity.CENTER);
         center.setClipChildren(false);
         navRide.setTranslationY(-dp(38));
         center.addView(navRide, new LinearLayout.LayoutParams(dp(106), dp(106)));
         nav.addView(center, new LinearLayout.LayoutParams(0, dp(106), 1.12f));
+
         nav.addView(navRoutes, bottomWeightLp(1f, 90));
         nav.addView(navMe, bottomWeightLp(1f, 90));
         return nav;
     }
 
-    private View bottomItem(PedalIconView.Icon icon, String label, Runnable run) {
+    
+
+    private View bottomGlyphItem(String glyph, String label, Runnable run) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
         host.setClickable(true);
         host.setFocusable(true);
         host.setPadding(dp(6), dp(10), dp(6), dp(8));
+        host.setContentDescription(label);
 
-        PedalIconView iv = new PedalIconView(this, icon, Color.rgb(238, 248, 255));
+        TextView icon = text(glyph, 24, false, Color.rgb(238, 248, 255));
+        icon.setGravity(Gravity.CENTER);
+        icon.setIncludeFontPadding(false);
+        host.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
+
         TextView tv = text(label, 11, true, Color.rgb(238, 248, 255));
-        tv.setTextSize(11.5f);
         tv.setGravity(Gravity.CENTER);
-        host.addView(iv, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        tv.setIncludeFontPadding(false);
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2);
         tlp.setMargins(0, dp(9), 0, 0);
         host.addView(tv, tlp);
-        host.setContentDescription(label);
+
         host.setOnClickListener(v -> run.run());
         return host;
     }
@@ -2627,17 +2634,18 @@ public final class NativeMainActivity extends Activity {
         LinearLayout inner = new LinearLayout(this);
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setGravity(Gravity.CENTER);
+        inner.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable cyan = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 new int[]{Color.rgb(29, 239, 244), Color.rgb(21, 209, 238), Color.rgb(43, 178, 255)});
         cyan.setShape(GradientDrawable.OVAL);
         inner.setBackground(cyan);
 
-        PedalIconView bike = new PedalIconView(this, PedalIconView.Icon.RIDE, Color.rgb(6, 39, 55));
-        rideDockLabel = text("شروع\nرکاب", 15, true, Color.rgb(6, 39, 55));
+        rideDockLabel = text("شروع\nرکاب", 16, true, Color.rgb(6, 39, 55));
         rideDockLabel.setGravity(Gravity.CENTER);
-        inner.addView(bike, new LinearLayout.LayoutParams(dp(32), dp(32)));
-        inner.addView(rideDockLabel);
+        rideDockLabel.setIncludeFontPadding(false);
+        rideDockLabel.setLineSpacing(0, 1.08f);
+        inner.addView(rideDockLabel, new LinearLayout.LayoutParams(-2, -2));
 
         FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER);
         ring.addView(inner, ilp);
