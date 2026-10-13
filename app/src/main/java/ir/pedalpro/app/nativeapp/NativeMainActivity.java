@@ -67,6 +67,8 @@ import ir.pedalpro.app.HeartRateBleManager;
 public final class NativeMainActivity extends Activity {
     private static final int REQ_LOCATION = 2201;
     private static final int REQ_BLE = 2202;
+    private static final int REQ_EVENT_PHOTO = 2301;
+    private static final int REQ_EVENT_COVER = 2302;
 
     private static final int BG = Color.rgb(6, 17, 30);
     private static final int CARD = Color.argb(188, 13, 28, 44);
@@ -119,6 +121,8 @@ public final class NativeMainActivity extends Activity {
     private LinearLayout appRoot;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
+    private int pendingEventPhotoId = 0;
+    private android.net.Uri pendingEditorCoverUri;
     private LinearLayout weatherDaysHost;
     private TextView weatherStatus;
 
@@ -2248,27 +2252,163 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showEventDetail(JSONObject event) {
-        content.removeAllViews();currentPage="event_detail";selectNav(navActivities);
+        content.removeAllViews();
+        currentPage="event_detail";
+        selectNav(navActivities);
         addHero(event.optString("title","جزئیات برنامه"),JalaliDate.format(event.optString("event_date",""),true));
-        String cover=eventCover(event);ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setClipToOutline(true);image.setBackground(roundRect(Color.TRANSPARENT,24,Color.argb(100,245,249,252)));RemoteImageLoader.load(this,image,cover,R.drawable.program_reference);content.addView(image,new LinearLayout.LayoutParams(-1,dp(220)));
-        LinearLayout card=glassCard(24);card.addView(text("محل شروع: "+event.optString("meeting_location","—"),13,true,TEXT));if(!event.optString("finish_location","").isBlank())card.addView(text("پایان: "+event.optString("finish_location"),12,false,MUTED));if(!event.optString("route_name","").isBlank())card.addView(text("مسیر: "+event.optString("route_name"),12,false,MUTED));if(!event.optString("description","").isBlank())card.addView(text(event.optString("description"),13,false,TEXT));
+
+        String cover=eventCover(event);
+        ImageView image=new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setClipToOutline(true);
+        image.setBackground(roundRect(Color.TRANSPARENT,24,Color.argb(100,245,249,252)));
+        RemoteImageLoader.load(this,image,cover,R.drawable.program_reference);
+        content.addView(image,new LinearLayout.LayoutParams(-1,dp(220)));
+
+        LinearLayout card=glassCard(24);
+        card.addView(text("محل شروع: "+event.optString("meeting_location","—"),13,true,TEXT));
+        if(!event.optString("finish_location","").isBlank())card.addView(text("پایان: "+event.optString("finish_location"),12,false,MUTED));
+        if(!event.optString("route_name","").isBlank())card.addView(text("مسیر: "+event.optString("route_name"),12,false,MUTED));
+        if(event.optDouble("planned_distance",0)>0)card.addView(text("مسافت برنامه: "+JalaliDate.fa(Math.round(event.optDouble("planned_distance",0)))+" کیلومتر",12,false,MUTED));
+        if(!event.optString("description","").isBlank())card.addView(text(event.optString("description"),13,false,TEXT));
         content.addView(card,cardLp());
-        LinearLayout participants=glassCard(24);participants.addView(text("شرکت‌کنندگان",17,true,TEXT));JSONArray regs=bootstrap.optJSONArray("registrations");int count=0;if(regs!=null)for(int i=0;i<regs.length();i++){JSONObject r=regs.optJSONObject(i);if(r!=null&&r.optInt("event_id",0)==event.optInt("id",0)){count++;participants.addView(text("• "+r.optString("display_name","عضو")+(r.optInt("attended",0)==1?" · حاضر":""),12,false,TEXT));}}if(count==0)participants.addView(text("هنوز کسی ثبت‌نام نکرده است.",12,false,MUTED));content.addView(participants,cardLp());
-        JSONArray photos=bootstrap.optJSONArray("event_photos");LinearLayout gallery=glassCard(24);gallery.addView(text("آلبوم تصاویر",17,true,TEXT));int pc=0;if(photos!=null)for(int i=0;i<photos.length()&&pc<12;i++){JSONObject p=photos.optJSONObject(i);if(p!=null&&p.optInt("event_id",0)==event.optInt("id",0)){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,p.optString("file_name",""),R.drawable.program_reference);gallery.addView(im,new LinearLayout.LayoutParams(-1,dp(160)));pc++;}}if(pc==0)gallery.addView(text("هنوز تصویری بارگذاری نشده است.",12,false,MUTED));content.addView(gallery,cardLp());
-        PedalActionView share=action(PedalIconView.Icon.SHARE,"اشتراک‌گذاری",PedalActionView.Style.OUTLINE);share.setOnClickListener(v->shareEvent(event));content.addView(share,fullActionLp(54));
-        double lat=event.optDouble("meeting_lat",Double.NaN),lng=event.optDouble("meeting_lng",Double.NaN);if(Double.isFinite(lat)&&Double.isFinite(lng)){PedalActionView nav=action(PedalIconView.Icon.ROUTE,"مسیریابی تا ابتدای مسیر",PedalActionView.Style.PRIMARY);nav.setOnClickListener(v->openNeshanPoint(lat,lng));content.addView(nav,fullActionLp(56));}
-        PedalActionView back=action(PedalIconView.Icon.BACK,"بازگشت به برنامه‌ها",PedalActionView.Style.OUTLINE);back.setOnClickListener(v->showActivities());content.addView(back,fullActionLp(52));VazirmatnLoader.apply(this,content);animatePageIn();
+
+        LinearLayout participants=glassCard(24);
+        participants.addView(text("شرکت‌کنندگان",17,true,TEXT));
+        JSONArray regs=bootstrap.optJSONArray("registrations");
+        int count=0; boolean mine=false; JSONObject me=bootstrap.optJSONObject("user"); int uid=me==null?0:me.optInt("id",0);
+        if(regs!=null)for(int i=0;i<regs.length();i++){
+            JSONObject r=regs.optJSONObject(i);
+            if(r!=null&&r.optInt("event_id",0)==event.optInt("id",0)){
+                count++; if(r.optInt("user_id",0)==uid)mine=true;
+                participants.addView(text("• "+r.optString("display_name","عضو")+(r.optInt("attended",0)==1?" · حاضر":""),12,false,TEXT));
+            }
+        }
+        if(count==0)participants.addView(text("هنوز کسی ثبت‌نام نکرده است.",12,false,MUTED));
+        content.addView(participants,cardLp());
+
+        LinearLayout gallery=glassCard(24);
+        gallery.addView(text("آلبوم تصاویر",17,true,TEXT));
+        JSONArray photos=bootstrap.optJSONArray("event_photos");
+        int pc=0;
+        if(photos!=null)for(int i=0;i<photos.length()&&pc<20;i++){
+            JSONObject p=photos.optJSONObject(i);
+            if(p!=null&&p.optInt("event_id",0)==event.optInt("id",0)){
+                ImageView im=new ImageView(this);
+                im.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                im.setClipToOutline(true);
+                im.setBackground(roundRect(Color.TRANSPARENT,18,Color.argb(80,245,249,252)));
+                RemoteImageLoader.load(this,im,p.optString("file_name",""),R.drawable.program_reference);
+                LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(-1,dp(170));ilp.setMargins(0,dp(8),0,0);gallery.addView(im,ilp);
+                String cap=p.optString("caption",p.optString("uploader_name",""));
+                if(!cap.isBlank()){TextView ct=text(cap,10,false,MUTED);ct.setPadding(0,dp(3),0,0);gallery.addView(ct);}
+                pc++;
+            }
+        }
+        if(pc==0)gallery.addView(text("هنوز تصویری بارگذاری نشده است.",12,false,MUTED));
+        boolean canUpload=bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1||mine;
+        if(canUpload){
+            PedalActionView upload=action(PedalIconView.Icon.PLUS,"افزودن عکس به آلبوم",PedalActionView.Style.OUTLINE);
+            upload.setOnClickListener(v->{pendingEventPhotoId=event.optInt("id",0);pickImage(REQ_EVENT_PHOTO);});
+            gallery.addView(upload,fullActionLp(50));
+        }
+        content.addView(gallery,cardLp());
+
+        boolean registered=isRegisteredForEvent(event.optInt("id",0));
+        if(event.optInt("registration_open",1)==1&&"planned".equals(event.optString("status","planned"))){
+            PedalActionView reg=action(registered?PedalIconView.Icon.CLOSE:PedalIconView.Icon.PLUS,registered?"لغو ثبت‌نام":"ثبت‌نام",registered?PedalActionView.Style.OUTLINE:PedalActionView.Style.PRIMARY);
+            reg.setOnClickListener(v->toggleEventRegistration(event.optInt("id",0),!registered,hiddenButtonProxy(reg)));
+            content.addView(reg,fullActionLp(54));
+        }
+        PedalActionView share=action(PedalIconView.Icon.SHARE,"اشتراک‌گذاری",PedalActionView.Style.OUTLINE);
+        share.setOnClickListener(v->shareEvent(event));content.addView(share,fullActionLp(54));
+
+        double lat=event.optDouble("meeting_lat",Double.NaN),lng=event.optDouble("meeting_lng",Double.NaN);
+        if(Double.isFinite(lat)&&Double.isFinite(lng)){
+            PedalActionView nav=action(PedalIconView.Icon.ROUTE,"مسیریابی تا ابتدای مسیر",PedalActionView.Style.PRIMARY);
+            nav.setOnClickListener(v->openNeshanPoint(lat,lng));content.addView(nav,fullActionLp(56));
+        }
+        if(bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1){
+            PedalActionView edit=action(PedalIconView.Icon.EDIT,"ویرایش برنامه",PedalActionView.Style.OUTLINE);
+            edit.setOnClickListener(v->showEventEditor(event));content.addView(edit,fullActionLp(52));
+        }
+        PedalActionView back=action(PedalIconView.Icon.BACK,"بازگشت به برنامه‌ها",PedalActionView.Style.OUTLINE);
+        back.setOnClickListener(v->showActivities());content.addView(back,fullActionLp(52));
+        VazirmatnLoader.apply(this,content);animatePageIn();
     }
 
+
     private void showEventEditor(JSONObject event) {
-        boolean editing=event!=null;content.removeAllViews();currentPage="event_editor";selectNav(navActivities);addHero(editing?"ویرایش برنامه":"برنامه جدید","اطلاعات برنامه باشگاه");
-        LinearLayout form=glassCard(24);EditText title=input("عنوان");EditText date=input("تاریخ/زمان Gregorian: YYYY-MM-DD HH:mm:ss");EditText distance=input("مسافت برنامه (km)");EditText meeting=input("محل شروع");EditText route=input("نام مسیر");EditText finish=input("محل پایان");EditText desc=input("توضیحات");desc.setSingleLine(false);desc.setMinLines(3);
-        if(editing){title.setText(event.optString("title",""));date.setText(event.optString("event_date",""));distance.setText(event.optString("planned_distance",""));meeting.setText(event.optString("meeting_location",""));route.setText(event.optString("route_name",""));finish.setText(event.optString("finish_location",""));desc.setText(event.optString("description",""));}
-        form.addView(title);form.addView(date);form.addView(distance);form.addView(meeting);form.addView(route);form.addView(finish);form.addView(desc);
-        PedalActionView save=action(PedalIconView.Icon.DETAILS,"ذخیره برنامه",PedalActionView.Style.PRIMARY);form.addView(save,fullActionLp(56));content.addView(form,cardLp());
-        save.setOnClickListener(v->{if(title.getText().toString().trim().isBlank()||date.getText().toString().trim().isBlank()){showInlineMessage("اطلاعات ناقص","عنوان و تاریخ برنامه الزامی است.",RED);return;}save.setEnabled(false);io.execute(()->{try{JSONObject payload=new JSONObject().put("id",editing?event.optInt("id",0):0).put("title",title.getText().toString().trim()).put("event_date",date.getText().toString().trim()).put("planned_distance",distance.getText().toString().trim()).put("meeting_location",meeting.getText().toString().trim()).put("meeting_lat",editing?event.opt("meeting_lat"):"").put("meeting_lng",editing?event.opt("meeting_lng"):"").put("finish_location",finish.getText().toString().trim()).put("finish_lat",editing?event.opt("finish_lat"):"").put("finish_lng",editing?event.opt("finish_lng"):"").put("route_name",route.getText().toString().trim()).put("status",editing?event.optString("status","planned"):"planned").put("registration_open",true).put("description",desc.getText().toString().trim()).put("cover_image_path",editing?event.optString("cover_image_path",""):"");api.post("save_event",payload);bootstrap=api.bootstrap();activeRide=bootstrap.optJSONObject("my_active_ride");main.post(()->{toast("برنامه ذخیره شد.");showActivities();});}catch(Exception e){main.post(()->{save.setEnabled(true);showInlineMessage("ذخیره انجام نشد",e.getMessage(),RED);});}});});
-        PedalActionView cancel=action(PedalIconView.Icon.BACK,"انصراف",PedalActionView.Style.OUTLINE);cancel.setOnClickListener(v->showActivities());content.addView(cancel,fullActionLp(52));VazirmatnLoader.apply(this,content);
+        boolean editing=event!=null;
+        pendingEditorCoverUri=null;
+        content.removeAllViews();currentPage="event_editor";selectNav(navActivities);
+        addHero(editing?"ویرایش برنامه":"برنامه جدید","اطلاعات برنامه باشگاه");
+
+        LinearLayout form=glassCard(24);
+        EditText title=input("عنوان");
+        EditText date=input("تاریخ/زمان: YYYY-MM-DD HH:mm:ss");
+        EditText distance=input("مسافت برنامه (km)");
+        EditText meeting=input("محل شروع");
+        EditText meetingLat=input("عرض جغرافیایی شروع");
+        EditText meetingLng=input("طول جغرافیایی شروع");
+        EditText route=input("نام مسیر");
+        EditText finish=input("محل پایان");
+        EditText finishLat=input("عرض جغرافیایی پایان");
+        EditText finishLng=input("طول جغرافیایی پایان");
+        EditText desc=input("توضیحات");desc.setSingleLine(false);desc.setMinLines(3);
+
+        if(editing){
+            title.setText(event.optString("title",""));date.setText(event.optString("event_date",""));distance.setText(event.optString("planned_distance",""));
+            meeting.setText(event.optString("meeting_location",""));meetingLat.setText(event.optString("meeting_lat",""));meetingLng.setText(event.optString("meeting_lng",""));
+            route.setText(event.optString("route_name",""));finish.setText(event.optString("finish_location",""));finishLat.setText(event.optString("finish_lat",""));finishLng.setText(event.optString("finish_lng",""));desc.setText(event.optString("description",""));
+        }
+        TextView jalali=text("نمایش: "+(date.getText().length()>0?JalaliDate.format(date.getText().toString(),true):"—"),11,false,MUTED);
+        date.setOnFocusChangeListener((v,has)->{if(!has)jalali.setText("نمایش: "+JalaliDate.format(date.getText().toString(),true));});
+        form.addView(title);form.addView(date);form.addView(jalali);form.addView(distance);form.addView(meeting);form.addView(meetingLat);form.addView(meetingLng);form.addView(route);form.addView(finish);form.addView(finishLat);form.addView(finishLng);form.addView(desc);
+
+        PedalActionView cover=action(PedalIconView.Icon.PLUS,"انتخاب تصویر کاور",PedalActionView.Style.OUTLINE);
+        cover.setOnClickListener(v->pickImage(REQ_EVENT_COVER));
+        form.addView(cover,fullActionLp(50));
+
+        PedalActionView save=action(PedalIconView.Icon.DETAILS,"ذخیره برنامه",PedalActionView.Style.PRIMARY);
+        form.addView(save,fullActionLp(56));content.addView(form,cardLp());
+
+        save.setOnClickListener(v->{
+            if(title.getText().toString().trim().isBlank()||date.getText().toString().trim().isBlank()){showInlineMessage("اطلاعات ناقص","عنوان و تاریخ برنامه الزامی است.",RED);return;}
+            save.setEnabled(false);
+            io.execute(()->{
+                try{
+                    JSONObject payload=new JSONObject()
+                            .put("id",editing?event.optInt("id",0):0)
+                            .put("title",title.getText().toString().trim())
+                            .put("event_date",date.getText().toString().trim())
+                            .put("planned_distance",distance.getText().toString().trim())
+                            .put("meeting_location",meeting.getText().toString().trim())
+                            .put("meeting_lat",meetingLat.getText().toString().trim())
+                            .put("meeting_lng",meetingLng.getText().toString().trim())
+                            .put("finish_location",finish.getText().toString().trim())
+                            .put("finish_lat",finishLat.getText().toString().trim())
+                            .put("finish_lng",finishLng.getText().toString().trim())
+                            .put("route_name",route.getText().toString().trim())
+                            .put("status",editing?event.optString("status","planned"):"planned")
+                            .put("registration_open",true)
+                            .put("description",desc.getText().toString().trim())
+                            .put("cover_image_path",editing?event.optString("cover_image_path",""):"");
+                    JSONObject saved=api.post("save_event",payload);
+                    int eventId=saved.optInt("id",editing?event.optInt("id",0):0);
+                    if(pendingEditorCoverUri!=null&&eventId>0){
+                        java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();fields.put("event_id",String.valueOf(eventId));
+                        api.postMultipart("upload_event_cover",fields,pendingEditorCoverUri,"photo","event-cover.jpg",getContentResolver().getType(pendingEditorCoverUri));
+                    }
+                    bootstrap=api.bootstrap();activeRide=bootstrap.optJSONObject("my_active_ride");pendingEditorCoverUri=null;
+                    main.post(()->{toast("برنامه ذخیره شد.");showActivities();});
+                }catch(Exception e){main.post(()->{save.setEnabled(true);showInlineMessage("ذخیره انجام نشد",e.getMessage(),RED);});}
+            });
+        });
+        PedalActionView cancel=action(PedalIconView.Icon.BACK,"انصراف",PedalActionView.Style.OUTLINE);cancel.setOnClickListener(v->showActivities());content.addView(cancel,fullActionLp(52));
+        VazirmatnLoader.apply(this,content);
     }
+
 
     private void shareEvent(JSONObject event) {
         Intent share=new Intent(Intent.ACTION_SEND);share.setType("text/plain");String text=event.optString("title","برنامه PedalPro")+"\n"+JalaliDate.format(event.optString("event_date",""),true)+"\n"+event.optString("meeting_location","")+(event.optString("description","").isBlank()?"":"\n"+event.optString("description",""));share.putExtra(Intent.EXTRA_TEXT,text);startActivity(Intent.createChooser(share,"اشتراک‌گذاری برنامه"));
@@ -2283,6 +2423,34 @@ public final class NativeMainActivity extends Activity {
     private void showLoadingState(String message){content.removeAllViews();LinearLayout box=glassCard(24);ProgressBar p=new ProgressBar(this);TextView t=text(message,13,false,MUTED);t.setGravity(Gravity.CENTER);box.setGravity(Gravity.CENTER);box.addView(p,new LinearLayout.LayoutParams(dp(42),dp(42)));box.addView(t);content.addView(box,cardLp());}
     private void showInlineMessage(String title,String message,int color){LinearLayout box=glassCard(20);TextView h=text(title,15,true,color);TextView b=text(message==null?"":message,12,false,TEXT);b.setPadding(0,dp(5),0,0);box.addView(h);box.addView(b);content.addView(box,0,cardLp());VazirmatnLoader.apply(this,box);}
     private void animatePageIn(){content.setAlpha(0f);content.setTranslationY(dp(8));content.animate().alpha(1f).translationY(0).setDuration(180).start();}
+
+    private void pickImage(int requestCode){
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("image/*");
+        startActivityForResult(i,requestCode);
+    }
+
+    private void uploadEventPhoto(android.net.Uri uri,int eventId){
+        if(uri==null||eventId<=0)return;
+        showLoadingState("در حال بارگذاری تصویر…");
+        io.execute(()->{
+            try{
+                java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();
+                fields.put("event_id",String.valueOf(eventId));fields.put("caption","");
+                api.postMultipart("upload_event_photo",fields,uri,"photo","event-photo.jpg",getContentResolver().getType(uri));
+                bootstrap=api.bootstrap();activeRide=bootstrap.optJSONObject("my_active_ride");
+                JSONObject event=findEvent(eventId);
+                main.post(()->{toast("تصویر اضافه شد.");if(event!=null)showEventDetail(event);else showActivities();});
+            }catch(Exception e){main.post(()->{showInlineMessage("بارگذاری انجام نشد",e.getMessage(),RED);});}
+        });
+    }
+
+    private JSONObject findEvent(int eventId){
+        JSONArray events=bootstrap==null?null:bootstrap.optJSONArray("events");
+        if(events!=null)for(int i=0;i<events.length();i++){JSONObject e=events.optJSONObject(i);if(e!=null&&e.optInt("id",0)==eventId)return e;}
+        return null;
+    }
 
     private boolean hasFineLocation() {
         return ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
@@ -2314,6 +2482,16 @@ public final class NativeMainActivity extends Activity {
         filter.addAction(TrackingService.ACTION_STATUS);
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(trackingReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
         else registerReceiver(trackingReceiver, filter);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;
+        android.net.Uri uri=data.getData();
+        try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Throwable ignored){}
+        if(requestCode==REQ_EVENT_COVER){pendingEditorCoverUri=uri;toast("تصویر کاور انتخاب شد.");}
+        else if(requestCode==REQ_EVENT_PHOTO){int id=pendingEventPhotoId;pendingEventPhotoId=0;uploadEventPhoto(uri,id);}
     }
 
     @Override
