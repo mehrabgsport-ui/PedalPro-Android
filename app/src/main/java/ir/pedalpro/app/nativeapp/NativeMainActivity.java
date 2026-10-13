@@ -31,7 +31,7 @@ import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.google.android.gms.location.CancellationTokenSource;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 
