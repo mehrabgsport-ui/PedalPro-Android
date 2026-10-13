@@ -65,6 +65,9 @@
         <activity android:name=".nativeapp.NativeSensorsActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSafetyActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSocialActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAdvancedActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeHeatmapActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSegmentLeaderboardActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
