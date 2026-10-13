@@ -2580,6 +2580,31 @@ public final class NativeMainActivity extends Activity {
         startActivity(i);
     }
 
+    private void showAboutGroupPage() {
+        currentPage = "about";
+        if (!signedIn()) { showLogin(); return; }
+        selectNav(null);
+        content.removeAllViews();
+        JSONObject site = bootstrap == null ? null : bootstrap.optJSONObject("site");
+        String title = site == null ? "درباره ما" : site.optString("about_title", "درباره ما");
+        String body = site == null ? "" : site.optString("about_body", "");
+        addHero(title, "");
+        LinearLayout box = glassCard(24);
+        if (!body.isBlank()) box.addView(text(body, 13, false, TEXT));
+        else box.addView(text("PedalPro", 18, true, TEXT));
+        content.addView(box, cardLp());
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
+    }
+
+    private void showSiteSettingsPage() {
+        if (!signedIn()) { showLogin(); return; }
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (!admin) { showHome(); return; }
+        Intent i = new Intent(this, NativeSiteSettingsActivity.class);
+        startActivity(i);
+    }
+
     private void showGalleryPage() {
         currentPage = "gallery";
         if (!signedIn()) { showLogin(); return; }
@@ -2642,11 +2667,25 @@ public final class NativeMainActivity extends Activity {
         box.addView(text("PedalPro Android", 18, true, TEXT));
         box.addView(text("نسخه " + ir.pedalpro.app.BuildConfig.VERSION_NAME + " · کد " + ir.pedalpro.app.BuildConfig.VERSION_CODE, 12, false, MUTED));
         PedalActionView update = action(PedalIconView.Icon.REFRESH, "بررسی بروزرسانی", PedalActionView.Style.PRIMARY);
-        update.setOnClickListener(v -> ir.pedalpro.app.StoreUpdateManager.openUpdate(this));
+        update.setOnClickListener(v -> openStoreUpdatePage());
         box.addView(update, fullActionLp(54));
         content.addView(box, cardLp());
         VazirmatnLoader.apply(this, content);
         animatePageIn();
+    }
+
+    private void openStoreUpdatePage() {
+        String channel = ir.pedalpro.app.BuildConfig.STORE_CHANNEL;
+        Uri uri = "myket".equals(channel)
+                ? Uri.parse("myket://details?id=ir.pedalpro.app")
+                : Uri.parse("bazaar://details?id=ir.pedalpro.app");
+        try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
+        catch (Exception e) {
+            Uri web = "myket".equals(channel)
+                    ? Uri.parse("https://myket.ir/app/ir.pedalpro.app")
+                    : Uri.parse("https://cafebazaar.ir/app/ir.pedalpro.app");
+            startActivity(new Intent(Intent.ACTION_VIEW, web));
+        }
     }
 
     private void showGuidePage() {
