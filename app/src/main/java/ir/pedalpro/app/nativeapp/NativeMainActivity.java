@@ -1,23 +1,20 @@
 package ir.pedalpro.app.nativeapp;
 
 import android.app.Activity;
-import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
-
-import ir.pedalpro.app.R;
 
 /**
  * PedalPro 2.0 native shell.
  * This Activity intentionally contains no WebView and never loads pedalpro.ir UI.
- * All screens will progressively move to native Android views/components.
  */
 public final class NativeMainActivity extends Activity {
     private static final int BG = Color.rgb(6, 17, 30);
@@ -27,11 +24,12 @@ public final class NativeMainActivity extends Activity {
     private static final int ACCENT = Color.rgb(38, 222, 224);
 
     private LinearLayout content;
-    private final SessionStore sessionStore bySessionStore = null;
+    private SessionStore sessionStore;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        sessionStore = new SessionStore(this);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
         renderShell();
@@ -47,30 +45,31 @@ public final class NativeMainActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         top.setPadding(dp(20), dp(18), dp(20), dp(14));
         root.addView(top, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         ScrollView scroll = new ScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(14), dp(8), dp(14), dp(18));
         scroll.addView(content);
-        LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        root.addView(scroll, scrollLp);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
         nav.setGravity(Gravity.CENTER);
         nav.setPadding(dp(8), dp(7), dp(8), dp(9));
 
-        addNav(nav, "خانه", () -> showHome());
+        addNav(nav, "خانه", this::showHome);
         addNav(nav, "فعالیت‌ها", () -> showPlaceholder("فعالیت‌ها"));
-        addNav(nav, "رکاب‌زنی", () -> showRide());
+        addNav(nav, "رکاب‌زنی", this::showRide);
         addNav(nav, "مسیرها", () -> showPlaceholder("مسیرها"));
         addNav(nav, "من", () -> showPlaceholder("حساب من"));
 
         root.addView(nav, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         setContentView(root);
         showHome();
@@ -80,18 +79,19 @@ public final class NativeMainActivity extends Activity {
         content.removeAllViews();
         addHero("PedalPro Native 2.0", "نسخه مستقل اندروید — بدون WebView");
         addMetricRow("GPS", "Native", "BLE", "Native", "Backend", "API");
-        addCard("رکاب‌زنی", "ثبت مسیر، GPS پس‌زمینه و حالت کم‌مصرف در لایه Native قرار می‌گیرد.");
+        addCard("رکاب‌زنی", "ثبت مسیر، GPS پس‌زمینه و حالت کم‌مصرف به رابط Native منتقل می‌شود.");
         addCard("رکاب‌زنی زنده", "نمایش موقعیت اعضا و مسیریابی گروهی مستقیماً از API.");
         addCard("سنسورها", "Cadence / Power / Heart Rate بدون JavaScript Bridge.");
+        addCard("Session", sessionStore.isSignedIn() ? "توکن Native موجود است." : "احراز هویت Native در مرحله بعد متصل می‌شود.");
     }
 
     private void showRide() {
         content.removeAllViews();
-        addHero("رکاب‌زنی", "هسته GPS فعلی PedalPro حفظ می‌شود و رابط WebView حذف خواهد شد.");
+        addHero("رکاب‌زنی", "TrackingService فعلی حفظ می‌شود و کنترل آن از UI Native انجام خواهد شد.");
         Button start = new Button(this);
         start.setText("آماده‌سازی GPS");
-        start.setOnClickListener(v -> Toast.makeText(this,
-                "مرحله Native GPS UI در حال مهاجرت است.", Toast.LENGTH_SHORT).show());
+        start.setOnClickListener(v -> Toast.makeText(
+                this, "Native GPS preflight در مرحله بعد متصل می‌شود.", Toast.LENGTH_SHORT).show());
         content.addView(start);
     }
 
@@ -102,10 +102,9 @@ public final class NativeMainActivity extends Activity {
 
     private void addHero(String title, String sub) {
         LinearLayout box = card();
-        TextView t = text(title, 22, true, TEXT);
+        box.addView(text(title, 22, true, TEXT));
         TextView s = text(sub, 13, false, MUTED);
         s.setPadding(0, dp(7), 0, 0);
-        box.addView(t);
         box.addView(s);
         content.addView(box, cardLp());
     }
@@ -141,7 +140,8 @@ public final class NativeMainActivity extends Activity {
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(8), dp(10), dp(8), dp(10));
         b.setOnClickListener(v -> action.run());
-        nav.addView(b, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        nav.addView(b, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
     }
 
     private LinearLayout card() {
@@ -154,7 +154,8 @@ public final class NativeMainActivity extends Activity {
 
     private LinearLayout.LayoutParams cardLp() {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, 0, dp(10));
         return lp;
     }
