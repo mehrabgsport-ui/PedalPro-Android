@@ -52,6 +52,16 @@ public final class NativeSafetyActivity extends NativeScreenBase {
         sos.addView(start);sos.addView(stop);
         content.addView(sos,cardLp());
 
+        LinearLayout beacon=card();
+        beacon.addView(text("Beacon",18,true,ORANGE));
+        beacon.addView(text("برای رکاب‌زنی فعال یک لینک ۱۲ ساعته موقعیت زنده بسازید.",12,false,MUTED));
+        Button beaconStart=primary("ساخت و اشتراک لینک Beacon");
+        beaconStart.setOnClickListener(v->startBeacon(beaconStart));
+        Button beaconStop=normal("پایان Beacon فعال");
+        beaconStop.setOnClickListener(v->stopBeacon(beaconStop));
+        beacon.addView(beaconStart);beacon.addView(beaconStop);
+        content.addView(beacon,cardLp());
+
         LinearLayout add=card();
         add.addView(text("افزودن مخاطب اضطراری",16,true,TEXT));
         EditText name=input("نام");
@@ -101,6 +111,37 @@ public final class NativeSafetyActivity extends NativeScreenBase {
                 content.addView(box,cardLp());
             }
         }
+    }
+
+    private void startBeacon(Button b){
+        b.setEnabled(false);
+        io.execute(()->{
+            try{
+                JSONObject boot=api.bootstrap();
+                JSONObject ride=boot.optJSONObject("my_active_ride");
+                int rideId=ride==null?0:ride.optInt("id",0);
+                JSONObject d=api.post("pp_beacon_create",new JSONObject().put("ride_id",rideId));
+                String url=d.optString("url","");
+                main.post(()->{
+                    b.setEnabled(true);
+                    if(url.isBlank()){toast("لینک Beacon دریافت نشد.");return;}
+                    Intent share=new Intent(Intent.ACTION_SEND);
+                    share.setType("text/plain");
+                    share.putExtra(Intent.EXTRA_TEXT,"لینک زنده Beacon پدال‌پرو:\n"+url);
+                    startActivity(Intent.createChooser(share,"اشتراک Beacon"));
+                });
+            }catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}
+        });
+    }
+
+    private void stopBeacon(Button b){
+        b.setEnabled(false);
+        io.execute(()->{
+            try{
+                api.post("pp_beacon_stop",new JSONObject());
+                main.post(()->{b.setEnabled(true);toast("Beacon پایان یافت.");});
+            }catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}
+        });
     }
 
     private void startSos(Button b){
