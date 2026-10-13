@@ -445,7 +445,16 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(navActivities);
         content.removeAllViews();
-        addHero("فعالیت‌ها", "آخرین رکاب‌زنی‌های ثبت‌شده");
+        addHero("فعالیت‌ها و برنامه‌ها", "برنامه‌های باشگاه و آخرین رکاب‌زنی‌های ثبت‌شده");
+
+        JSONArray events = bootstrap.optJSONArray("events");
+        if (events != null && events.length() > 0) {
+            addCard("برنامه‌های باشگاه", events.length() + " برنامه در دسترس");
+            for (int i = 0; i < Math.min(20, events.length()); i++) {
+                JSONObject event = events.optJSONObject(i);
+                if (event != null) addEventCard(event);
+            }
+        }
 
         JSONArray rides = bootstrap.optJSONArray("my_completed_rides");
         if (rides == null) rides = bootstrap.optJSONArray("rides");
@@ -1327,6 +1336,104 @@ public final class NativeMainActivity extends Activity {
             box.addView(nav);
         }
         content.addView(box, cardLp());
+    }
+
+
+    private void addEventCard(JSONObject event) {
+        LinearLayout box = card();
+        String title = event.optString("title", "برنامه");
+        box.addView(text(title, 16, true, TEXT));
+
+        StringBuilder meta = new StringBuilder();
+        String date = event.optString("event_date", "");
+        String meeting = event.optString("meeting_location", "");
+        String route = event.optString("route_name", "");
+        if (!date.isBlank()) meta.append(date);
+        if (!meeting.isBlank()) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(meeting);
+        }
+        if (!route.isBlank()) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(route);
+        }
+        if (event.optDouble("planned_distance", 0) > 0) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(String.format(Locale.US, "%.1f km", event.optDouble("planned_distance", 0)));
+        }
+        box.addView(text(meta.toString(), 11, false, MUTED));
+
+        String desc = event.optString("description", "");
+        if (!desc.isBlank()) box.addView(text(desc, 12, false, MUTED));
+
+        boolean registered = isRegisteredForEvent(event.optInt("id", 0));
+        if (event.optInt("registration_open", 1) == 1 && "planned".equals(event.optString("status", "planned"))) {
+            Button reg = primaryButton(registered ? "لغو ثبت‌نام" : "ثبت‌نام");
+            int eventId = event.optInt("id", 0);
+            reg.setOnClickListener(v -> toggleEventRegistration(eventId, !registered, reg));
+            box.addView(reg);
+        }
+
+        double lat = event.optDouble("meeting_lat", Double.NaN);
+        double lng = event.optDouble("meeting_lng", Double.NaN);
+        if (Double.isFinite(lat) && Double.isFinite(lng)) {
+            Button map = primaryButton("مسیریابی نشان تا محل قرار");
+            map.setOnClickListener(v -> openNeshanPoint(lat, lng));
+            box.addView(map);
+        }
+
+        content.addView(box, cardLp());
+    }
+
+    private boolean isRegisteredForEvent(int eventId) {
+        if (eventId <= 0 || bootstrap == null) return false;
+        JSONArray regs = bootstrap.optJSONArray("registrations");
+        JSONObject user = bootstrap.optJSONObject("user");
+        int uid = user == null ? 0 : user.optInt("id", 0);
+        if (regs == null || uid <= 0) return false;
+        for (int i = 0; i < regs.length(); i++) {
+            JSONObject r = regs.optJSONObject(i);
+            if (r != null && r.optInt("event_id", 0) == eventId && r.optInt("user_id", 0) == uid) return true;
+        }
+        return false;
+    }
+
+    private void toggleEventRegistration(int eventId, boolean join, Button button) {
+        if (eventId <= 0) return;
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                if (join) api.post("register_event", new JSONObject().put("event_id", eventId));
+                else api.post("unregister_event", new JSONObject().put("event_id", eventId));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    toast(join ? "ثبت‌نام انجام شد." : "ثبت‌نام لغو شد.");
+                    showActivities();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    button.setEnabled(true);
+                    toast(e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void openNeshanPoint(double lat, double lng) {
+        try {
+            Intent neshan = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://nshn.ir?lat=" + lat + "&lng=" + lng));
+            neshan.setPackage("org.rajman.neshan.traffic.tehran.navigator");
+            startActivity(neshan);
+            return;
+        } catch (Exception ignored) { }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("geo:" + lat + "," + lng + "?q=" + lat + "," + lng)));
+        } catch (Exception e) {
+            toast("مسیریاب نشان یا برنامه نقشه روی گوشی پیدا نشد.");
+        }
     }
 
     private void startGpsPreflight(TextView state, TextView accuracy, Button start, Button check) {
