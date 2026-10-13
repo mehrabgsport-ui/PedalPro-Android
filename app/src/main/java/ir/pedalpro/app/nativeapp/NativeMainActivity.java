@@ -2396,8 +2396,12 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(12), dp(12), dp(12), dp(12));
-        panel.setBackground(roundRect(Color.rgb(7, 20, 32), 0, Color.rgb(23, 40, 58)));
+        panel.setPadding(dp(12), dp(18), dp(12), dp(12));
+        GradientDrawable drawerBg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
+        drawerBg.setStroke(dp(1), Color.argb(54, 255, 255, 255));
+        panel.setBackground(drawerBg);
 
         ScrollView sc = new ScrollView(this);
         sc.setFillViewport(true);
@@ -2476,14 +2480,13 @@ public final class NativeMainActivity extends Activity {
                 }, false));
 
         body.addView(drawerSection("حساب من", PedalIconView.Icon.USER,
-                new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده", "نصب PedalPro"},
+                new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
                 new Runnable[]{
                         () -> { d.dismiss(); showProfileEditor(); },
                         () -> { d.dismiss(); showPhoneSettingsPage(); },
                         () -> { d.dismiss(); showAppVersionPage(); },
                         () -> { d.dismiss(); showAboutGroupPage(); },
-                        () -> { d.dismiss(); showGuidePage(); },
-                        () -> { d.dismiss(); showInstallPage(); }
+                        () -> { d.dismiss(); showGuidePage(); }
                 }, false));
 
         boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
@@ -2496,16 +2499,13 @@ public final class NativeMainActivity extends Activity {
                     }, false));
         }
 
-        TextView sideBottom = text("RIDE\nEXPLORE\nTOGETHER", 10, true, Color.rgb(120, 144, 170));
-        sideBottom.setGravity(Gravity.CENTER);
-        sideBottom.setPadding(0, dp(16), 0, dp(20));
-        body.addView(sideBottom);
+
 
         sc.addView(body);
         panel.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
-                Math.min(dp(320), (int) (getResources().getDisplayMetrics().widthPixels * .82f)),
+                Math.min(dp(350), (int) (getResources().getDisplayMetrics().widthPixels * .86f)),
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 Gravity.END);
         stage.addView(panel, pp);
@@ -2529,13 +2529,13 @@ public final class NativeMainActivity extends Activity {
             lp.width = WindowManager.LayoutParams.MATCH_PARENT;
             lp.height = WindowManager.LayoutParams.MATCH_PARENT;
             lp.gravity = Gravity.END;
-            lp.dimAmount = .62f;
+            lp.dimAmount = .48f;
             w.setAttributes(lp);
             w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
 
-        panel.setTranslationX(dp(320));
-        panel.animate().translationX(0).setDuration(180).start();
+        panel.setTranslationX(Math.min(dp(350), (int) (getResources().getDisplayMetrics().widthPixels * .86f)));
+        panel.animate().translationX(0).setDuration(250).start();
         VazirmatnLoader.apply(this, panel);
     }
 
@@ -2546,22 +2546,23 @@ public final class NativeMainActivity extends Activity {
         row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         row.setPadding(dp(12), 0, dp(12), 0);
         row.setBackground(roundRect(
-                active ? Color.argb(42, 46, 230, 166) : Color.TRANSPARENT,
+                active ? Color.argb(23, 32, 228, 241) : Color.TRANSPARENT,
                 14,
-                active ? Color.argb(130, 46, 230, 166) : 0));
+                0));
         row.setClickable(true);
         row.setFocusable(true);
         row.setContentDescription(label);
 
-        TextView tv = text(label, 13, true, active ? Color.rgb(46, 230, 166) : Color.rgb(220, 234, 243));
+        int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
+        TextView tv = text(label, 13, true, fg);
         row.addView(tv, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
-        PedalIconView iv = new PedalIconView(this, icon, active ? Color.rgb(46, 230, 166) : Color.rgb(220, 234, 243));
+        PedalIconView iv = new PedalIconView(this, icon, fg);
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(24), dp(24));
-        ip.setMargins(dp(9), 0, 0, 0);
+        ip.setMargins(dp(10), 0, 0, 0);
         row.addView(iv, ip);
 
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(48));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(46));
         lp.setMargins(0, dp(3), 0, 0);
         row.setLayoutParams(lp);
         row.setOnClickListener(v -> run.run());
@@ -2571,7 +2572,7 @@ public final class NativeMainActivity extends Activity {
     private View drawerSection(String title, PedalIconView.Icon icon, String[] labels, Runnable[] actions, boolean startOpen) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
-        host.setBackground(roundRect(Color.argb(10, 255, 255, 255), 15, Color.argb(18, 255, 255, 255)));
+        host.setBackground(roundRect(Color.argb(6, 255, 255, 255), 15, Color.argb(18, 255, 255, 255)));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.setMargins(0, dp(5), 0, 0);
         host.setLayoutParams(hp);
