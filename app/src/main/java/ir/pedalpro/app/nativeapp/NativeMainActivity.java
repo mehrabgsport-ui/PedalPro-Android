@@ -122,7 +122,7 @@ public final class NativeMainActivity extends Activity {
     private View navMe;
     private FrameLayout stageRoot;
     private ImageView siteBackground;
-    private LinearLayout appRoot;
+    private LinearLayout appRoot;\n    private LinearLayout webHeader;\n    private TextView rideDockLabel;
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
     private NativeRouteView activeRideRouteView;
@@ -247,7 +247,7 @@ public final class NativeMainActivity extends Activity {
         });
 
         appRoot.addView(buildWebHeader(), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -262,7 +262,7 @@ public final class NativeMainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         appRoot.addView(buildWebBottomNav(), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(108)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(116)));
 
         stageRoot.addView(appRoot, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -1989,13 +1989,34 @@ public final class NativeMainActivity extends Activity {
     }
 
 
+    private void tintBottomItem(View view, boolean active) {
+        if (view == null) return;
+        int color = active ? Color.rgb(31, 231, 242) : Color.rgb(238, 248, 255);
+        view.setAlpha(1f);
+        view.setScaleX(1f);
+        view.setScaleY(1f);
+        if (view instanceof PedalIconView) {
+            ((PedalIconView) view).setColor(color);
+        } else if (view instanceof TextView) {
+            ((TextView) view).setTextColor(color);
+        } else if (view instanceof LinearLayout) {
+            LinearLayout group = (LinearLayout) view;
+            for (int i = 0; i < group.getChildCount(); i++) tintBottomItem(group.getChildAt(i), active);
+        } else if (view instanceof FrameLayout) {
+            FrameLayout group = (FrameLayout) view;
+            for (int i = 0; i < group.getChildCount(); i++) tintBottomItem(group.getChildAt(i), active);
+        }
+    }
+
     private void selectNav(View selected) {
-        View[] all = {navHome, navActivities, navRide, navRoutes, navMe};
-        for (View v : all) {
-            if (v == null) continue;
-            v.setAlpha(v == selected ? 1f : .78f);
-            v.setScaleX(v == selected ? 1.04f : 1f);
-            v.setScaleY(v == selected ? 1.04f : 1f);
+        tintBottomItem(navHome, selected == navHome);
+        tintBottomItem(navActivities, selected == navActivities);
+        tintBottomItem(navRoutes, selected == navRoutes);
+        tintBottomItem(navMe, selected == navMe);
+        if (navRide != null) {
+            navRide.setAlpha(1f);
+            navRide.setScaleX(1f);
+            navRide.setScaleY(1f);
         }
     }
 
@@ -2077,42 +2098,43 @@ public final class NativeMainActivity extends Activity {
 
 
     private LinearLayout buildWebHeader() {
-        LinearLayout h = new LinearLayout(this);
-        h.setOrientation(LinearLayout.HORIZONTAL);
-        h.setGravity(Gravity.CENTER_VERTICAL);
-        h.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        h.setPadding(dp(10), dp(8), dp(10), dp(8));
-        h.setBackground(headerGradient());
+        webHeader = new LinearLayout(this);
+        webHeader.setOrientation(LinearLayout.HORIZONTAL);
+        webHeader.setGravity(Gravity.CENTER_VERTICAL);
+        webHeader.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        webHeader.setPadding(dp(10), dp(20), dp(10), dp(14));
+        webHeader.setMinimumHeight(dp(72));
+        webHeader.setBackground(headerGradient());
 
         ImageView logo = new ImageView(this);
         logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
-        h.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(54)));
+        webHeader.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(54)));
 
-        h.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        webHeader.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
         headerAccount = action(PedalIconView.Icon.USER, "ورود", PedalActionView.Style.OUTLINE);
         headerAccount.setOnClickListener(v -> {
             if (signedIn()) showMe();
             else showLogin();
         });
-        h.addView(headerAccount, new LinearLayout.LayoutParams(dp(105), dp(46)));
+        webHeader.addView(headerAccount, new LinearLayout.LayoutParams(dp(105), dp(46)));
 
         headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage, "تنظیمات سایت");
         headerAdminSettings.setVisibility(View.GONE);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(46), dp(46));
         sp.setMargins(dp(6), 0, 0, 0);
-        h.addView(headerAdminSettings, sp);
+        webHeader.addView(headerAdminSettings, sp);
 
         FrameLayout menu = iconSquare(PedalIconView.Icon.MENU, this::showDrawer, "منو");
         LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(46), dp(46));
         mp.setMargins(dp(6), 0, 0, 0);
-        h.addView(menu, mp);
+        webHeader.addView(menu, mp);
 
         topStatus = new TextView(this);
         topStatus.setVisibility(View.GONE);
-        return h;
+        return webHeader;
     }
 
     private LinearLayout buildWebBottomNav() {
@@ -2121,35 +2143,44 @@ public final class NativeMainActivity extends Activity {
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         nav.setClipChildren(false);
-        nav.setPadding(dp(7),dp(9),dp(7),dp(7));
+        nav.setPadding(dp(10), dp(16), dp(10), dp(10));
         nav.setBackground(bottomGradient());
 
-        navHome = bottomItem(PedalIconView.Icon.HOME,"خانه",this::showHome);
-        navActivities = bottomItem(PedalIconView.Icon.CALENDAR,"برنامه‌ها",this::showActivities);
+        navHome = bottomItem(PedalIconView.Icon.HOME, "خانه", this::showHome);
+        navActivities = bottomItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها", this::showActivities);
         navRide = centerRideItem();
-        navRoutes = bottomItem(PedalIconView.Icon.ROUTE,"مسیرها",this::showRoutes);
-        navMe = bottomItem(PedalIconView.Icon.USER,"من",this::showMe);
+        navRoutes = bottomItem(PedalIconView.Icon.ROUTE, "مسیرها", this::showRoutes);
+        navMe = bottomItem(PedalIconView.Icon.USER, "من", this::showMe);
 
-        nav.addView(navHome,bottomWeightLp(1f,70));
-        nav.addView(navActivities,bottomWeightLp(1f,70));
-        LinearLayout center = new LinearLayout(this); center.setGravity(Gravity.CENTER); center.setClipChildren(false);
-        navRide.setTranslationY(-dp(17));
-        center.addView(navRide,new LinearLayout.LayoutParams(dp(90),dp(90)));
-        nav.addView(center,new LinearLayout.LayoutParams(0,dp(96),1.28f));
-        nav.addView(navRoutes,bottomWeightLp(1f,70));
-        nav.addView(navMe,bottomWeightLp(1f,70));
+        nav.addView(navHome, bottomWeightLp(1f, 90));
+        nav.addView(navActivities, bottomWeightLp(1f, 90));
+        LinearLayout center = new LinearLayout(this);
+        center.setGravity(Gravity.CENTER);
+        center.setClipChildren(false);
+        navRide.setTranslationY(-dp(38));
+        center.addView(navRide, new LinearLayout.LayoutParams(dp(106), dp(106)));
+        nav.addView(center, new LinearLayout.LayoutParams(0, dp(106), 1.12f));
+        nav.addView(navRoutes, bottomWeightLp(1f, 90));
+        nav.addView(navMe, bottomWeightLp(1f, 90));
         return nav;
     }
 
-    private View bottomItem(PedalIconView.Icon icon,String label,Runnable run) {
+    private View bottomItem(PedalIconView.Icon icon, String label, Runnable run) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
-        host.setClickable(true); host.setFocusable(true);
-        PedalIconView iv = new PedalIconView(this, icon, TEXT);
-        TextView tv = text(label, 10, true, TEXT); tv.setGravity(Gravity.CENTER);
-        host.addView(iv,new LinearLayout.LayoutParams(dp(28),dp(28)));
-        host.addView(tv);
+        host.setClickable(true);
+        host.setFocusable(true);
+        host.setPadding(dp(6), dp(10), dp(6), dp(8));
+
+        PedalIconView iv = new PedalIconView(this, icon, Color.rgb(238, 248, 255));
+        TextView tv = text(label, 11, true, Color.rgb(238, 248, 255));
+        tv.setTextSize(11.5f);
+        tv.setGravity(Gravity.CENTER);
+        host.addView(iv, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2);
+        tlp.setMargins(0, dp(9), 0, 0);
+        host.addView(tv, tlp);
         host.setContentDescription(label);
         host.setOnClickListener(v -> run.run());
         return host;
@@ -2157,17 +2188,32 @@ public final class NativeMainActivity extends Activity {
 
     private View centerRideItem() {
         FrameLayout ring = new FrameLayout(this);
-        GradientDrawable outer = new GradientDrawable(); outer.setShape(GradientDrawable.OVAL);
-        outer.setColor(Color.argb(220,16,49,71)); outer.setStroke(dp(1),Color.argb(100,255,255,255));
-        ring.setBackground(outer); ring.setElevation(dp(12)); ring.setClickable(true); ring.setContentDescription("شروع رکاب");
-        LinearLayout inner = new LinearLayout(this); inner.setOrientation(LinearLayout.VERTICAL); inner.setGravity(Gravity.CENTER);
-        GradientDrawable cyan = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.rgb(36,239,244),Color.rgb(22,210,239),Color.rgb(43,178,255)});
-        cyan.setShape(GradientDrawable.OVAL); cyan.setStroke(dp(2),Color.rgb(116,246,250)); inner.setBackground(cyan);
-        PedalIconView bike = new PedalIconView(this,PedalIconView.Icon.RIDE,Color.rgb(2,30,39));
-        TextView label = text("شروع\nرکاب",11,true,Color.rgb(2,30,39)); label.setGravity(Gravity.CENTER);
-        inner.addView(bike,new LinearLayout.LayoutParams(dp(30),dp(30))); inner.addView(label);
-        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(74),dp(74),Gravity.CENTER); ring.addView(inner,ilp);
+        GradientDrawable outer = new GradientDrawable();
+        outer.setShape(GradientDrawable.OVAL);
+        outer.setColor(Color.argb(199, 16, 49, 71));
+        ring.setBackground(outer);
+        ring.setElevation(dp(12));
+        ring.setClickable(true);
+        ring.setFocusable(true);
+        ring.setContentDescription("شروع رکاب");
+
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setGravity(Gravity.CENTER);
+        GradientDrawable cyan = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(29, 239, 244), Color.rgb(21, 209, 238), Color.rgb(43, 178, 255)});
+        cyan.setShape(GradientDrawable.OVAL);
+        inner.setBackground(cyan);
+
+        PedalIconView bike = new PedalIconView(this, PedalIconView.Icon.RIDE, Color.rgb(6, 39, 55));
+        rideDockLabel = text("شروع\nرکاب", 15, true, Color.rgb(6, 39, 55));
+        rideDockLabel.setGravity(Gravity.CENTER);
+        inner.addView(bike, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        inner.addView(rideDockLabel);
+
+        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER);
+        ring.addView(inner, ilp);
         ring.setOnClickListener(v -> showRide());
         return ring;
     }
@@ -2183,10 +2229,17 @@ public final class NativeMainActivity extends Activity {
     }
 
     private LinearLayout glassCard(int radius) {
-        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(16),dp(15),dp(16),dp(15));
-        box.setBackground(roundRect(Color.argb(182,8,28,45),radius,Color.argb(100,245,249,252)));
-        box.setElevation(dp(3)); return box;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(15), dp(16), dp(15));
+        GradientDrawable g = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
+        g.setCornerRadius(dp(radius));
+        g.setStroke(dp(1), Color.argb(54, 255, 255, 255));
+        box.setBackground(g);
+        box.setElevation(0);
+        return box;
     }
 
     private GradientDrawable roundRect(int fill,int radius,int stroke) {
@@ -2195,16 +2248,19 @@ public final class NativeMainActivity extends Activity {
     }
     private GradientDrawable headerGradient() {
         GradientDrawable g = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{Color.argb(220, 5, 25, 38), Color.argb(220, 5, 25, 38)});
-        g.setStroke(dp(1), Color.argb(55, 225, 242, 248));
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(87, 24, 59, 82), Color.argb(107, 8, 31, 49)});
+        g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
+        g.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         return g;
     }
     private GradientDrawable bottomGradient() {
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(230,24,59,82),Color.argb(240,8,31,49)});
+        GradientDrawable g = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(102, 24, 59, 82), Color.argb(122, 8, 31, 49)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
-        g.setStroke(dp(1),Color.argb(105,245,249,252)); return g;
+        g.setStroke(dp(1), Color.argb(61, 255, 255, 255));
+        return g;
     }
     private Button plainButton(String label,int sp,int color) {
         Button b = new Button(this); b.setText(label); b.setTextSize(sp); b.setAllCaps(false); b.setTextColor(color);
