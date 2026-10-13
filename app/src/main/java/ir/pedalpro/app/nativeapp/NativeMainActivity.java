@@ -1267,11 +1267,11 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("وضعیت بدن", "وزن و شاخص‌های بدنی");
+        addHero("وضعیت بدن", "وزن و شاخص‌های بدنی · تاریخ شمسی");
 
         LinearLayout add = card();
-        EditText date = input("تاریخ YYYY-MM-DD");
-        date.setText(java.time.LocalDate.now().toString());
+        EditText date = input("تاریخ شمسی YYYY/MM/DD");
+        date.setText(JalaliDate.todayForInput());
         EditText weight = input("وزن (kg)");
         weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
         EditText fat = input("درصد چربی");
@@ -1282,49 +1282,41 @@ public final class NativeMainActivity extends Activity {
         content.addView(add, cardLp());
 
         save.setOnClickListener(v -> {
-            if (weight.getText().toString().trim().isBlank()) {
-                toast("وزن را وارد کنید.");
-                return;
-            }
+            if (weight.getText().toString().trim().isBlank()) { showInlineMessage("اطلاعات ناقص","وزن را وارد کنید.",RED); return; }
+            String gregorian=JalaliDate.toGregorianIso(date.getText().toString().trim());
+            if(gregorian.isBlank()){showInlineMessage("تاریخ نامعتبر","تاریخ را به شکل ۱۴۰۵/۰۷/۲۱ وارد کنید.",RED);return;}
             save.setEnabled(false);
             io.execute(() -> {
                 try {
                     api.post("body_metric_add", new JSONObject()
-                            .put("measured_on", date.getText().toString().trim())
-                            .put("weight_kg", weight.getText().toString().trim())
-                            .put("body_fat_pct", fat.getText().toString().trim())
+                            .put("measured_on", gregorian)
+                            .put("weight_kg", JalaliDate.en(weight.getText().toString().trim()))
+                            .put("body_fat_pct", JalaliDate.en(fat.getText().toString().trim()))
                             .put("note", note.getText().toString().trim()));
                     bootstrap = api.bootstrap();
                     activeRide = bootstrap.optJSONObject("my_active_ride");
-                    main.post(() -> {
-                        toast("وضعیت بدن ثبت شد.");
-                        showFitness();
-                    });
+                    main.post(() -> { toast("وضعیت بدن ثبت شد."); showFitness(); });
                 } catch (Exception e) {
-                    main.post(() -> {
-                        save.setEnabled(true);
-                        toast(e.getMessage());
-                    });
+                    main.post(() -> { save.setEnabled(true); showInlineMessage("ثبت انجام نشد",e.getMessage(),RED); });
                 }
             });
         });
 
         JSONArray metrics = bootstrap.optJSONArray("body_metrics");
-        if (metrics == null || metrics.length() == 0) {
-            addEmpty("هنوز داده بدنی ثبت نشده است.");
-            return;
-        }
+        if (metrics == null || metrics.length() == 0) { addEmpty("هنوز داده بدنی ثبت نشده است."); return; }
         for (int i = metrics.length() - 1; i >= 0; i--) {
             JSONObject m = metrics.optJSONObject(i);
             if (m == null) continue;
             LinearLayout box = card();
-            box.addView(text(m.optString("measured_on", ""), 11, true, MUTED));
-            box.addView(text(m.optString("weight_kg", "—") + " kg", 20, true, ACCENT));
-            if (!m.optString("body_fat_pct", "").isBlank()) box.addView(text("چربی بدن: " + m.optString("body_fat_pct") + "%", 11, false, MUTED));
+            box.addView(text(JalaliDate.format(m.optString("measured_on", ""),false), 11, true, MUTED));
+            box.addView(text(JalaliDate.fa(m.optString("weight_kg", "—")) + " kg", 20, true, Color.rgb(31,231,242)));
+            if (!m.optString("body_fat_pct", "").isBlank()) box.addView(text("چربی بدن: " + JalaliDate.fa(m.optString("body_fat_pct")) + "%", 11, false, MUTED));
             if (!m.optString("note", "").isBlank()) box.addView(text(m.optString("note"), 11, false, MUTED));
             content.addView(box, cardLp());
         }
+        VazirmatnLoader.apply(this,content);animatePageIn();
     }
+
 
     private void showMe() {
         currentPage = "me";
