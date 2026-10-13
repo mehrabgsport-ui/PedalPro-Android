@@ -120,7 +120,7 @@ public final class LowPowerRideActivity extends Activity {
         }
     }
 
-    private void register(){IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);}
+    private void register(){IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);ContextCompat.registerReceiver(this,receiver,f,ContextCompat.RECEIVER_NOT_EXPORTED);}
     private String format(long sec){return String.format(Locale.US,"%02d:%02d:%02d",sec/3600,(sec%3600)/60,sec%60);}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     @Override protected void onDestroy(){main.removeCallbacks(tick);try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onDestroy();}
