@@ -412,7 +412,8 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void showRide() {\n        currentPage = "ride";
+    private void showRide() {
+        currentPage = "ride";
         if (!signedIn()) { showLogin(); return; }
         selectNav(navRide);
         content.removeAllViews();
@@ -568,7 +569,8 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void showRoutes() {\n        currentPage = "routes";
+    private void showRoutes() {
+        currentPage = "routes";
         if (!signedIn()) { showLogin(); return; }
         selectNav(navRoutes);
         content.removeAllViews();
@@ -589,7 +591,8 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void showClub() {\n        currentPage = "club";
+    private void showClub() {
+        currentPage = "club";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -613,7 +616,8 @@ public final class NativeMainActivity extends Activity {
         }
     }
 
-    private void showChallenges() {\n        currentPage = "challenges";
+    private void showChallenges() {
+        currentPage = "challenges";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -667,7 +671,8 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void showGroupChat() {\n        currentPage = "chat";
+    private void showGroupChat() {
+        currentPage = "chat";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -784,7 +789,8 @@ public final class NativeMainActivity extends Activity {
         host.addView(box, cardLp());
     }
 
-    private void showAiAdvisor() {\n        currentPage = "ai";
+    private void showAiAdvisor() {
+        currentPage = "ai";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -876,7 +882,8 @@ public final class NativeMainActivity extends Activity {
         host.addView(box, cardLp());
     }
 
-    private void showPerformance() {\n        currentPage = "performance";
+    private void showPerformance() {
+        currentPage = "performance";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -926,7 +933,8 @@ public final class NativeMainActivity extends Activity {
         addCard("Training / Sensors", "Cadence و Power از BLE Native خوانده می‌شوند و آماده اتصال به محاسبات Training Load هستند.");
     }
 
-    private void showSensors() {\n        currentPage = "sensors";
+    private void showSensors() {
+        currentPage = "sensors";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -1086,7 +1094,8 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void showProfileEditor() {\n        currentPage = "profile";
+    private void showProfileEditor() {
+        currentPage = "profile";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -1153,7 +1162,8 @@ public final class NativeMainActivity extends Activity {
         });
     }
 
-    private void showBikes() {\n        currentPage = "bikes";
+    private void showBikes() {
+        currentPage = "bikes";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -1276,7 +1286,8 @@ public final class NativeMainActivity extends Activity {
         });
     }
 
-    private void showFitness() {\n        currentPage = "fitness";
+    private void showFitness() {
+        currentPage = "fitness";
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -1339,7 +1350,8 @@ public final class NativeMainActivity extends Activity {
         }
     }
 
-    private void showMe() {\n        currentPage = "me";
+    private void showMe() {
+        currentPage = "me";
         if (!signedIn()) { showLogin(); return; }
         selectNav(navMe);
         content.removeAllViews();
