@@ -3,7 +3,7 @@ name: Android Store Release Build
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, native/web-parity ]
   pull_request:
     branches: [ main ]
 
