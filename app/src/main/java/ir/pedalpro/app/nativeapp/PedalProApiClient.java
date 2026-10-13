@@ -1,6 +1,7 @@
 package ir.pedalpro.app.nativeapp;
 
 import android.content.Context;
+import android.net.Uri;
 
 import org.json.JSONObject;
 
@@ -8,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.DataOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -22,9 +24,11 @@ public final class PedalProApiClient {
     public static final String BASE_URL = "https://pedalpro.ir/api.php";
 
     private final SessionStore session;
+    private final Context context;
 
     public PedalProApiClient(Context context) {
-        session = new SessionStore(context.getApplicationContext());
+        this.context = context.getApplicationContext();
+        session = new SessionStore(this.context);
     }
 
     public JSONObject get(String action) throws Exception {
@@ -49,6 +53,50 @@ public final class PedalProApiClient {
 
     public JSONObject post(String action, JSONObject body) throws Exception {
         return request("POST", action, body == null ? new JSONObject() : body, true);
+    }
+
+    public JSONObject postMultipart(String action, java.util.Map<String,String> fields,
+                                    Uri fileUri, String fileField, String fileName, String mimeType) throws Exception {
+        String boundary="----PedalPro"+System.currentTimeMillis();
+        HttpURLConnection c=null;
+        try{
+            URL url=new URL(BASE_URL+"?action="+java.net.URLEncoder.encode(action,StandardCharsets.UTF_8.name()));
+            c=(HttpURLConnection)url.openConnection();
+            c.setConnectTimeout(12000);c.setReadTimeout(30000);c.setRequestMethod("POST");c.setDoOutput(true);
+            c.setRequestProperty("Accept","application/json");
+            c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
+            String cookie=session.cookie();if(!cookie.isBlank())c.setRequestProperty("Cookie",cookie);
+            String csrf=session.csrf();if(!csrf.isBlank())c.setRequestProperty("X-CSRF-Token",csrf);
+            try(DataOutputStream out=new DataOutputStream(c.getOutputStream())){
+                if(fields!=null)for(java.util.Map.Entry<String,String> e:fields.entrySet()){
+                    writeTextPart(out,boundary,e.getKey(),e.getValue()==null?"":e.getValue());
+                }
+                if(fileUri!=null){
+                    String safeName=(fileName==null||fileName.isBlank())?"image.jpg":fileName;
+                    String type=(mimeType==null||mimeType.isBlank())?"image/jpeg":mimeType;
+                    out.writeBytes("--"+boundary+"\r\n");
+                    out.writeBytes("Content-Disposition: form-data; name=\""+fileField+"\"; filename=\""+safeName.replace("\"","")+"\"\r\n");
+                    out.writeBytes("Content-Type: "+type+"\r\n\r\n");
+                    try(InputStream in=context.getContentResolver().openInputStream(fileUri)){
+                        if(in==null)throw new IllegalStateException("فایل انتخاب‌شده قابل خواندن نیست.");
+                        byte[] buf=new byte[16384];int n;while((n=in.read(buf))>0)out.write(buf,0,n);
+                    }
+                    out.writeBytes("\r\n");
+                }
+                out.writeBytes("--"+boundary+"--\r\n");out.flush();
+            }
+            int status=c.getResponseCode();captureCookies(c);
+            String raw=readBody(status>=400?c.getErrorStream():c.getInputStream());
+            JSONObject json=new JSONObject(raw==null||raw.isBlank()?"{}":raw);
+            if(status<200||status>=300||!json.optBoolean("ok",true))throw new IllegalStateException(json.optString("error","HTTP "+status));
+            return json;
+        }finally{if(c!=null)c.disconnect();}
+    }
+
+    private void writeTextPart(DataOutputStream out,String boundary,String name,String value)throws Exception{
+        out.writeBytes("--"+boundary+"\r\n");
+        out.writeBytes("Content-Disposition: form-data; name=\""+name+"\"\r\n\r\n");
+        out.write(value.getBytes(StandardCharsets.UTF_8));out.writeBytes("\r\n");
     }
 
     public JSONObject bootstrap() throws Exception {
