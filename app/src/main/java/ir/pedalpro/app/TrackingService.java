@@ -1206,6 +1206,24 @@ public class TrackingService extends Service implements LocationListener, Sensor
         return "";
     }
 
+    private String nativeSessionCookie() {
+        try {
+            String cookie = getSharedPreferences("pedalpro_native_session", MODE_PRIVATE)
+                    .getString("cookie", "");
+            return cookie == null ? "" : cookie;
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String effectiveSessionCookie() {
+        try {
+            String web = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
+            if (web != null && !web.isEmpty()) return web;
+        } catch (Throwable ignored) { }
+        return nativeSessionCookie();
+    }
+
     private static String readBody(InputStream in) throws Exception {
         if (in == null) return "";
         StringBuilder sb = new StringBuilder();
