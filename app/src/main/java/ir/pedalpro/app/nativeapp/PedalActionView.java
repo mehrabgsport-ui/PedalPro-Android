@@ -12,7 +12,7 @@ public final class PedalActionView extends LinearLayout {
     public enum Style { PRIMARY, OUTLINE, GHOST, BOTTOM }
     private final PedalIconView icon;
     private final TextView label;
-    private int accent=Color.rgb(31,231,242);
+    private int accent=Color.rgb(46,230,166);
 
     public PedalActionView(Context c, PedalIconView.Icon type, String text, Style style){
         super(c);
@@ -21,11 +21,11 @@ public final class PedalActionView extends LinearLayout {
         setLayoutDirection(LAYOUT_DIRECTION_RTL);
         int pad=dp(12);
         setPadding(pad,0,pad,0);
-        icon=new PedalIconView(c,type,style==Style.PRIMARY?Color.rgb(2,30,38):Color.WHITE);
+        icon=new PedalIconView(c,type,style==Style.PRIMARY?Color.rgb(4,36,24):Color.WHITE);
         label=new TextView(c);
         label.setText(text);
         label.setTextSize(style==Style.BOTTOM?11:13);
-        label.setTextColor(style==Style.PRIMARY?Color.rgb(2,30,38):Color.WHITE);
+        label.setTextColor(style==Style.PRIMARY?Color.rgb(4,36,24):Color.WHITE);
         label.setTypeface(Typeface.DEFAULT,style==Style.GHOST?Typeface.NORMAL:Typeface.BOLD);
         label.setGravity(Gravity.CENTER);
         LayoutParams ip=new LayoutParams(dp(style==Style.BOTTOM?24:22),dp(style==Style.BOTTOM?24:22));
@@ -43,12 +43,12 @@ public final class PedalActionView extends LinearLayout {
     private GradientDrawable background(Style style){
         GradientDrawable g;
         if(style==Style.PRIMARY){
-            g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.rgb(29,239,244),Color.rgb(21,209,238),Color.rgb(43,178,255)});
+            g=new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Color.rgb(23,201,145),Color.rgb(46,230,166)});
         } else {
-            g=new GradientDrawable(); g.setColor(style==Style.GHOST?Color.TRANSPARENT:Color.argb(112,7,39,54));
-            if(style!=Style.GHOST)g.setStroke(dp(1),Color.argb(105,242,249,255));
+            g=new GradientDrawable(); g.setColor(style==Style.GHOST?Color.TRANSPARENT:Color.rgb(16,35,56));
+            if(style!=Style.GHOST)g.setStroke(dp(1),Color.rgb(42,66,92));
         }
-        g.setCornerRadius(dp(style==Style.BOTTOM?18:17));
+        g.setCornerRadius(dp(style==Style.BOTTOM?18:12));
         return g;
     }
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
