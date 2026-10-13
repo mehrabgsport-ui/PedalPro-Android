@@ -40,7 +40,7 @@
         </provider>
 
         <activity
-            android:name=".nativeapp.NativeLauncherActivity"
+            android:name=".nativeapp.NativeMainActivity"
             android:exported="true"
             android:screenOrientation="unspecified">
             <intent-filter>
@@ -56,7 +56,8 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".nativeapp.NativeMainActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeLauncherActivity" android:exported="false" />
+        <activity android:name=".nativeapp.LowPowerRideActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".nativeapp.NativeRideDetailActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeLiveNavigationActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeClubActivity" android:exported="false" />
