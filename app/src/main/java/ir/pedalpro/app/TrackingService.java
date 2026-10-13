@@ -24,7 +24,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.webkit.CookieManager;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -1135,7 +1134,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             c.setRequestProperty("Accept", "application/json");
             c.setRequestProperty("X-CSRF-Token", prefs.getString("csrf", ""));
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
+            String cookie = NativeSessionStore.cookie(getApplicationContext());
             if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
 
             byte[] data = payload.toString().getBytes(StandardCharsets.UTF_8);
@@ -1170,7 +1169,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setConnectTimeout(10000);
             c.setReadTimeout(12000);
             c.setRequestProperty("Accept", "application/json");
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
+            String cookie = NativeSessionStore.cookie(getApplicationContext());
             if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
             int code = c.getResponseCode();
             if (code < 200 || code >= 300) return false;
@@ -1184,6 +1183,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
             if (token.isEmpty()) { e.apply(); return false; }
             e.putString("csrf", token).apply();
+            new NativeSessionStore(getApplicationContext()).setCsrf(token);
             return true;
         } catch (Exception e) { return false; }
         finally { if (c != null) c.disconnect(); }
