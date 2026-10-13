@@ -63,6 +63,8 @@
         <activity android:name=".nativeapp.NativeChatActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeAiActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSensorsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSafetyActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSocialActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
