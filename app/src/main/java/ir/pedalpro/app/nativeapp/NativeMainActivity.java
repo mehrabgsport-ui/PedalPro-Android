@@ -1012,6 +1012,358 @@ public final class NativeMainActivity extends Activity {
         return line;
     }
 
+    private View buildHomeTopRiders() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(16), dp(12), dp(16));
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(61,24,62,86),Color.argb(77,9,29,45)});
+        bg.setCornerRadius(dp(24));
+        bg.setStroke(dp(1),Color.argb(46,255,255,255));
+        box.setBackground(bg);
+
+        java.util.ArrayList<JSONObject> rows = new java.util.ArrayList<>();
+        JSONArray members = bootstrap == null ? null : bootstrap.optJSONArray("members");
+        boolean hasAnyRide = false;
+        if (members != null) {
+            for (int i=0;i<members.length();i++) {
+                JSONObject m=members.optJSONObject(i);
+                if (m==null) continue;
+                rows.add(m);
+                if (m.optDouble("total_distance_m",0)>0 || m.optInt("rides_count",0)>0) hasAnyRide=true;
+            }
+        }
+        final boolean sortByRide=hasAnyRide;
+        rows.sort((a,b)->{
+            if(sortByRide){
+                int c=Double.compare(b.optDouble("total_distance_m",0),a.optDouble("total_distance_m",0));
+                if(c!=0)return c;
+                c=Integer.compare(b.optInt("rides_count",0),a.optInt("rides_count",0));
+                if(c!=0)return c;
+            }
+            return Integer.compare(a.optInt("id",0),b.optInt("id",0));
+        });
+
+        TextView title=text("سه رکاب‌زن برتر",18,true,TEXT);
+        box.addView(title);
+        TextView subtitle=text(hasAnyRide ? "بیشترین مسافت رکاب‌زده تا این لحظه" : "تا ثبت اولین رکاب، ترتیب بر اساس زمان عضویت است",
+                12,false,MUTED);
+        subtitle.setPadding(0,dp(4),0,dp(12));
+        box.addView(subtitle);
+
+        if(rows.isEmpty()){
+            TextView empty=text("هنوز عضوی ثبت نشده است.",12,false,Color.rgb(214,230,242));
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(dp(12),dp(18),dp(12),dp(18));
+            empty.setBackground(roundRect(Color.argb(10,255,255,255),20,Color.argb(36,255,255,255)));
+            box.addView(empty);
+            return box;
+        }
+
+        int count=Math.min(3,rows.size());
+        for(int i=0;i<count;i++){
+            JSONObject m=rows.get(i);
+            View row=homeLeaderRow(m,i);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+            lp.setMargins(0,0,0,dp(10));
+            box.addView(row,lp);
+        }
+        return box;
+    }
+
+    private View homeLeaderRow(JSONObject member,int rank) {
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setPadding(dp(10),dp(10),dp(10),dp(10));
+        row.setClickable(true);
+        row.setFocusable(true);
+        GradientDrawable bg=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(20,255,255,255),Color.argb(8,255,255,255)});
+        bg.setCornerRadius(dp(22));
+        bg.setStroke(dp(1),Color.argb(26,255,255,255));
+        row.setBackground(bg);
+
+        TextView medal=text(rank==0?"🥇":rank==1?"🥈":"🥉",20,false,Color.rgb(16,32,44));
+        medal.setGravity(Gravity.CENTER);
+        GradientDrawable medalBg;
+        if(rank==0){
+            medalBg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(255,241,167),Color.rgb(249,214,79),Color.rgb(174,109,8)});
+        }else if(rank==1){
+            medalBg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.WHITE,Color.rgb(231,237,244),Color.rgb(127,139,151)});
+        }else{
+            medalBg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(255,224,187),Color.rgb(217,154,97),Color.rgb(113,64,31)});
+        }
+        medalBg.setCornerRadius(dp(16));
+        medal.setBackground(medalBg);
+        row.addView(medal,new LinearLayout.LayoutParams(dp(48),dp(48)));
+
+        String name=member.optString("display_name",member.optString("username","عضو "+member.optInt("id",0)));
+        String initial=name.trim().isEmpty()?"؟":name.trim().substring(0,1);
+        TextView avatar=text(initial,18,true,TEXT);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setBackground(roundRect(Color.argb(20,255,255,255),14,Color.argb(31,255,255,255)));
+        LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(42),dp(42));
+        avatarLp.setMargins(dp(10),0,0,0);
+        row.addView(avatar,avatarLp);
+
+        LinearLayout copy=new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        TextView who=text(name,14,true,TEXT);who.setMaxLines(1);
+        int rides=member.optInt("rides_count",0);
+        TextView meta=text(rides>0?JalaliDate.fa(rides)+" رکاب‌زنی ثبت‌شده":"هنوز رکابی ثبت نکرده",11,false,Color.rgb(207,225,238));
+        meta.setPadding(0,dp(5),0,0);
+        copy.addView(who);copy.addView(meta);
+        LinearLayout.LayoutParams copyLp=new LinearLayout.LayoutParams(0,-2,1f);
+        copyLp.setMargins(dp(10),0,0,0);
+        row.addView(copy,copyLp);
+
+        LinearLayout score=new LinearLayout(this);
+        score.setOrientation(LinearLayout.VERTICAL);
+        score.setGravity(Gravity.START);
+        double km=member.optDouble("total_distance_m",0)/1000.0;
+        String kmText=km>=100?String.format(Locale.US,"%.0f",km):String.format(Locale.US,"%.1f",km);
+        TextView kmv=text(JalaliDate.fa(kmText),18,true,TEXT);
+        TextView unit=text("کیلومتر",11,false,Color.rgb(205,224,237));unit.setPadding(0,dp(6),0,0);
+        score.addView(kmv);score.addView(unit);
+        row.addView(score,new LinearLayout.LayoutParams(dp(72),-2));
+
+        row.setOnClickListener(v->showMemberDialog(member));
+        return row;
+    }
+
+    private View buildHomeFeed() {
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18),dp(18),dp(18),dp(18));
+        GradientDrawable bg=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(46,23,54,77),Color.argb(64,8,28,45)});
+        bg.setCornerRadius(dp(30));
+        bg.setStroke(dp(1),Color.argb(46,255,255,255));
+        box.setBackground(bg);
+
+        box.addView(text("رویدادها",19,true,TEXT));
+        TextView sub=text("آخرین اتفاق‌های پدال پرو",12,false,MUTED);
+        sub.setPadding(0,dp(4),0,dp(10));
+        box.addView(sub);
+
+        JSONArray feed=bootstrap==null?null:bootstrap.optJSONArray("latest_feed");
+        int count=feed==null?0:Math.min(5,feed.length());
+        if(count==0){
+            TextView empty=text("هنوز رویدادی ثبت نشده است.",12,false,MUTED);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0,dp(16),0,dp(16));
+            box.addView(empty);
+        }else{
+            for(int i=0;i<count;i++){
+                JSONObject item=feed.optJSONObject(i);
+                if(item==null)continue;
+                View row=feedRow(item,false);
+                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
+                lp.setMargins(0,0,0,dp(10));
+                box.addView(row,lp);
+            }
+        }
+
+        Button more=normalButton("ادامه رویدادها");
+        more.setOnClickListener(v->showFeedPage());
+        LinearLayout.LayoutParams moreLp=new LinearLayout.LayoutParams(-1,dp(48));
+        moreLp.setMargins(0,dp(2),0,0);
+        box.addView(more,moreLp);
+        return box;
+    }
+
+    private View feedRow(JSONObject item, boolean full) {
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setPadding(dp(13),dp(12),dp(13),dp(12));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setAlpha(item.optInt("hidden",0)==1?.52f:1f);
+        row.setBackground(roundRect(Color.argb(14,255,255,255),18,Color.argb(23,255,255,255)));
+
+        View dot=new View(this);
+        GradientDrawable dotBg=new GradientDrawable();dotBg.setShape(GradientDrawable.OVAL);dotBg.setColor(Color.rgb(33,227,239));dot.setBackground(dotBg);
+        row.addView(dot,new LinearLayout.LayoutParams(dp(10),dp(10)));
+
+        LinearLayout copy=new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        String title=item.optString("title","رویداد");
+        String detail=item.optString("detail","");
+        if(detail.isBlank())detail=feedTypeLabel(item.optString("event_type",""));
+        if(full)detail=detail+" · "+feedTypeLabel(item.optString("event_type",""));
+        copy.addView(text(title,14,true,TEXT));
+        TextView d=text(detail,11,false,Color.rgb(203,220,232));d.setPadding(0,dp(4),0,0);d.setLineSpacing(0,1.7f);copy.addView(d);
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1f);cp.setMargins(dp(11),0,dp(11),0);row.addView(copy,cp);
+
+        TextView time=text(JalaliDate.format(item.optString("created_at",""),true),10,false,Color.rgb(184,202,215));
+        row.addView(time);
+        row.setOnClickListener(v->showFeedDetail(item));
+        return row;
+    }
+
+    private String feedTypeLabel(String type){
+        switch(type){
+            case "member_joined": return "عضویت";
+            case "event_registered": return "ثبت‌نام برنامه";
+            case "challenge_joined": return "چالش";
+            case "ride_completed": return "رکاب‌زنی";
+            case "event_completed": return "برنامه برگزارشده";
+            default: return "رویداد";
+        }
+    }
+
+    private void showFeedPage(){
+        currentPage="feed";
+        selectNav(null);
+        content.removeAllViews();
+
+        LinearLayout head=glassCard(26);
+        head.addView(text("رویدادها",22,true,TEXT));
+        head.addView(text("تاریخچه فعالیت‌های سایت از ابتدای ثبت داده‌ها",12,false,MUTED));
+        PedalActionView refresh=action(PedalIconView.Icon.REFRESH,"↻ بروزرسانی",PedalActionView.Style.OUTLINE);
+        head.addView(refresh,fullActionLp(48));
+        content.addView(head,cardLp());
+
+        LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
+        TextView loading=text("در حال بارگذاری...",13,false,MUTED);loading.setGravity(Gravity.CENTER);list.addView(loading);
+        content.addView(list,cardLp());
+        Runnable load=()->{
+            list.removeAllViews();
+            list.addView(text("در حال بارگذاری...",13,false,MUTED));
+            io.execute(()->{
+                try{
+                    java.util.HashMap<String,Object> q=new java.util.HashMap<>();
+                    q.put("limit",5000);
+                    boolean admin=bootstrap!=null&&(bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1);
+                    if(admin)q.put("include_hidden",1);
+                    JSONObject data=api.get("site_feed_list",q);
+                    JSONArray items=data.optJSONArray("items");
+                    main.post(()->{
+                        list.removeAllViews();
+                        if(items==null||items.length()==0){
+                            TextView empty=text("رویدادی ثبت نشده است.",13,false,MUTED);empty.setGravity(Gravity.CENTER);list.addView(empty);return;
+                        }
+                        for(int i=0;i<items.length();i++){
+                            JSONObject item=items.optJSONObject(i);if(item==null)continue;
+                            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(0,0,0,dp(10));
+                            list.addView(feedRow(item,true),lp);
+                        }
+                        VazirmatnLoader.apply(this,list);
+                    });
+                }catch(Exception e){
+                    main.post(()->{list.removeAllViews();TextView err=text(e.getMessage(),13,false,RED);err.setGravity(Gravity.CENTER);list.addView(err);});
+                }
+            });
+        };
+        refresh.setOnClickListener(v->load.run());
+        load.run();
+        VazirmatnLoader.apply(this,content);
+        animatePageIn();
+    }
+
+    private void showFeedDetail(JSONObject item){
+        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout box=glassCard(22);box.setPadding(dp(16),dp(16),dp(16),dp(16));
+        box.addView(text(item.optString("title","رویداد"),20,true,TEXT));
+        String body=(item.optString("detail",""))+"\nزمان: "+JalaliDate.format(item.optString("created_at",""),true)+"\nنوع: "+feedTypeLabel(item.optString("event_type",""));
+        TextView copy=text(body,12,false,Color.rgb(212,229,239));copy.setPadding(0,dp(10),0,0);copy.setLineSpacing(0,1.8f);box.addView(copy);
+
+        String entity=item.optString("entity_type","");
+        int entityId=item.optInt("entity_id",0);
+        if(entityId>0){
+            String label="";
+            if("event".equals(entity))label="مشاهده برنامه";
+            else if("challenge".equals(entity))label="مشاهده چالش";
+            else if("ride".equals(entity))label="مشاهده رکاب‌زنی";
+            else if("user".equals(entity))label="مشاهده عضو";
+            if(!label.isBlank()){
+                Button go=normalButton(label);
+                go.setOnClickListener(v->{
+                    d.dismiss();
+                    if("event".equals(entity)){JSONObject e=findEvent(entityId);if(e!=null)showEventDetail(e);else showActivities();}
+                    else if("challenge".equals(entity))showChallenges();
+                    else if("ride".equals(entity)){Intent i=new Intent(this,NativeRideDetailActivity.class);i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,entityId);startActivity(i);}
+                    else if("user".equals(entity)){JSONObject m=findMember(entityId);if(m!=null)showMemberDialog(m);else showClub();}
+                });
+                box.addView(go,fullActionLp(48));
+            }
+        }
+
+        boolean admin=bootstrap!=null&&(bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1);
+        if(admin){
+            Button hide=normalButton(item.optInt("hidden",0)==1?"نمایش دوباره":"مخفی کردن این رویداد");
+            hide.setOnClickListener(v->{
+                hide.setEnabled(false);
+                io.execute(()->{
+                    try{
+                        api.post("site_feed_hide",new JSONObject().put("id",item.optInt("id",0)).put("hidden",item.optInt("hidden",0)!=1));
+                        bootstrap=api.bootstrap();
+                        main.post(()->{d.dismiss();toast(item.optInt("hidden",0)==1?"رویداد دوباره نمایش داده شد":"رویداد مخفی شد");showFeedPage();});
+                    }catch(Exception e){main.post(()->{hide.setEnabled(true);toast(e.getMessage());});}
+                });
+            });
+            box.addView(hide,fullActionLp(48));
+        }
+
+        d.setContentView(box);d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=Math.min(dp(760),getResources().getDisplayMetrics().widthPixels-dp(16));lp.height=-2;lp.gravity=Gravity.CENTER;lp.dimAmount=.72f;w.setAttributes(lp);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);}VazirmatnLoader.apply(this,box);
+    }
+
+    private JSONObject findMember(int id){
+        JSONArray members=bootstrap==null?null:bootstrap.optJSONArray("members");
+        if(members!=null)for(int i=0;i<members.length();i++){JSONObject m=members.optJSONObject(i);if(m!=null&&m.optInt("id",0)==id)return m;}
+        return null;
+    }
+
+    private void showMemberDialog(JSONObject member){
+        if(member==null)return;
+        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        ScrollView sc=new ScrollView(this);
+        LinearLayout box=glassCard(24);box.setPadding(dp(16),dp(16),dp(16),dp(16));
+
+        String name=member.optString("display_name",member.optString("username","عضو"));
+        LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView avatar=text(name.trim().isEmpty()?"؟":name.trim().substring(0,1),20,true,TEXT);avatar.setGravity(Gravity.CENTER);avatar.setBackground(roundRect(Color.argb(20,255,255,255),16,Color.argb(31,255,255,255)));top.addView(avatar,new LinearLayout.LayoutParams(dp(56),dp(56)));
+        LinearLayout who=new LinearLayout(this);who.setOrientation(LinearLayout.VERTICAL);who.setGravity(Gravity.END);who.addView(text(name,16,true,TEXT));TextView role=text(member.optString("role","member"),11,false,MUTED);role.setPadding(0,dp(4),0,0);who.addView(role);LinearLayout.LayoutParams whoLp=new LinearLayout.LayoutParams(0,-2,1f);whoLp.setMargins(dp(14),0,0,0);top.addView(who,whoLp);box.addView(top);
+
+        LinearLayout stats=new LinearLayout(this);stats.setOrientation(LinearLayout.HORIZONTAL);stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);stats.setGravity(Gravity.CENTER);
+        stats.addView(memberStat("مسافت",String.format(Locale.US,"%.1f km",member.optDouble("total_distance_m",0)/1000d)),new LinearLayout.LayoutParams(0,-2,1f));
+        stats.addView(memberStat("رکاب‌زنی",JalaliDate.fa(member.optInt("rides_count",0))),new LinearLayout.LayoutParams(0,-2,1f));
+        stats.addView(memberStat("چالش",JalaliDate.fa(member.optInt("challenges_count",0))),new LinearLayout.LayoutParams(0,-2,1f));
+        LinearLayout.LayoutParams statLp=new LinearLayout.LayoutParams(-1,-2);statLp.setMargins(0,dp(14),0,0);box.addView(stats,statLp);
+
+        String bike="🚲 "+member.optString("bike_brand_model","مدل ثبت نشده")+"\nنوع: "+member.optString("bike_type","—")+" · سایز: "+member.optString("bike_size","—")+" · رنگ: "+member.optString("bike_color","—");
+        TextView bikeView=text(bike,12,false,Color.rgb(212,229,239));bikeView.setPadding(dp(12),dp(10),dp(12),dp(10));bikeView.setLineSpacing(0,1.8f);bikeView.setBackground(roundRect(Color.argb(14,255,255,255),16,Color.argb(31,255,255,255)));box.addView(bikeView,fullWrapLp(10));
+
+        box.addView(text("چالش‌های این عضو",16,true,TEXT),fullWrapLp(12));
+        JSONArray challenges=bootstrap==null?null:bootstrap.optJSONArray("challenges");int cc=0;
+        if(challenges!=null)for(int i=0;i<challenges.length()&&cc<6;i++){JSONObject c=challenges.optJSONObject(i);if(c==null||c.optInt("creator_user_id",0)!=member.optInt("id",0)||!"public".equals(c.optString("visibility")))continue;Button b=normalButton(c.optString("title","چالش"));b.setOnClickListener(v->{d.dismiss();showChallenges();});box.addView(b,fullActionLp(44));cc++;}
+        if(cc==0)box.addView(text("چالش عمومی ندارد.",11,false,MUTED));
+
+        box.addView(text("رکاب‌زنی‌های اخیر",16,true,TEXT),fullWrapLp(12));
+        JSONArray rides=bootstrap==null?null:bootstrap.optJSONArray("rides");int rc=0;
+        if(rides!=null)for(int i=0;i<rides.length()&&rc<6;i++){JSONObject r=rides.optJSONObject(i);if(r==null||r.optInt("owner_user_id",0)!=member.optInt("id",0)||!"completed".equals(r.optString("status")))continue;int rideId=r.optInt("id",0);Button b=normalButton(r.optString("title","رکاب‌زنی")+" · "+String.format(Locale.US,"%.1f km",r.optDouble("distance_km",0)));b.setOnClickListener(v->{d.dismiss();Intent x=new Intent(this,NativeRideDetailActivity.class);x.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,rideId);startActivity(x);});box.addView(b,fullActionLp(44));rc++;}
+        if(rc==0)box.addView(text("رکاب‌زنی عمومی ثبت‌شده‌ای ندارد.",11,false,MUTED));
+
+        sc.addView(box);
+        d.setContentView(sc);d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=Math.min(dp(760),getResources().getDisplayMetrics().widthPixels-dp(16));lp.height=Math.min(dp(760),Math.round(getResources().getDisplayMetrics().heightPixels*.84f));lp.gravity=Gravity.CENTER;lp.dimAmount=.72f;w.setAttributes(lp);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);}VazirmatnLoader.apply(this,box);
+    }
+
+    private View memberStat(String label,String value){
+        LinearLayout x=new LinearLayout(this);x.setOrientation(LinearLayout.VERTICAL);x.setGravity(Gravity.CENTER);x.setPadding(dp(6),dp(9),dp(6),dp(9));x.setBackground(roundRect(Color.argb(14,255,255,255),15,Color.argb(31,255,255,255)));TextView l=text(label,10,false,MUTED);l.setGravity(Gravity.CENTER);TextView v=text(value,14,true,TEXT);v.setGravity(Gravity.CENTER);v.setPadding(0,dp(5),0,0);x.addView(l);x.addView(v);return x;
+    }
+
     private void showHome() {
         currentPage = "dashboard";
         selectNav(navHome);
@@ -1066,6 +1418,8 @@ public final class NativeMainActivity extends Activity {
         loadWeather(false);
 
         content.addView(buildHomeReport(), fullWrapLp(2));
+        content.addView(buildHomeTopRiders(), fullWrapLp(0));
+        content.addView(buildHomeFeed(), fullWrapLp(0));
 
         VazirmatnLoader.apply(this, content);
         animatePageIn();
