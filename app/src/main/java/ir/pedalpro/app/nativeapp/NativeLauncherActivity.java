@@ -7,6 +7,10 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.app.Dialog;
+import android.view.Window;
+import android.view.WindowManager;
+import android.graphics.drawable.ColorDrawable;
 import android.location.Location;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -147,23 +151,47 @@ public final class NativeLauncherActivity extends Activity {
     private LinearLayout buildBottomNav(){
         LinearLayout nav=new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        nav.setPadding(dp(8),dp(8),dp(8),dp(8));
+        nav.setPadding(dp(6),dp(6),dp(6),dp(7));
         nav.setBackground(bottomGradient());
 
         navHome=bottom("⌂\nخانه",this::home);
         navActivities=bottom("▣\nبرنامه‌ها",this::activities);
-        navRide=bottom("شروع\nرکاب",this::ride);
+        navRide=centerRideButton();
+        navRide.setOnClickListener(v->ride());
         navRoutes=bottom("⌖\nمسیرها",this::routes);
         navMe=bottom("●\nمن",this::me);
 
-        nav.addView(navHome,bottomLp(1f,64));
-        nav.addView(navActivities,bottomLp(1f,64));
-        nav.addView(navRide,bottomLp(1.35f,78));
-        nav.addView(navRoutes,bottomLp(1f,64));
-        nav.addView(navMe,bottomLp(1f,64));
+        nav.addView(navHome,bottomLp(1f,60));
+        nav.addView(navActivities,bottomLp(1f,60));
+
+        LinearLayout centerWrap=new LinearLayout(this);
+        centerWrap.setGravity(Gravity.CENTER);
+        centerWrap.addView(navRide,new LinearLayout.LayoutParams(dp(88),dp(88)));
+        nav.addView(centerWrap,new LinearLayout.LayoutParams(0,dp(88),1.35f));
+
+        nav.addView(navRoutes,bottomLp(1f,60));
+        nav.addView(navMe,bottomLp(1f,60));
         return nav;
+    }
+
+    private Button centerRideButton(){
+        Button b=new Button(this);
+        b.setText("🚴\nشروع\nرکاب");
+        b.setTextSize(12);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        b.setTextColor(Color.rgb(2,34,42));
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable g=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(34,238,239),Color.rgb(33,178,237)});
+        g.setShape(GradientDrawable.OVAL);
+        g.setStroke(dp(2),Color.rgb(93,237,244));
+        b.setBackground(g);
+        b.setElevation(dp(8));
+        return b;
     }
 
     private void load(boolean first){
@@ -360,25 +388,123 @@ public final class NativeLauncherActivity extends Activity {
     }
 
     private void menu(){
-        select(null);content.removeAllViews();
-        LinearLayout panel=glassCard();
-        ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.pedalpro_app_icon);logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        panel.addView(logo,new LinearLayout.LayoutParams(-1,dp(150)));
-        panel.addView(menuRow("⌂  صفحه اصلی",this::home));
-        panel.addView(menuRow("▣  فعالیت‌ها و برنامه‌ها",this::activities));
-        panel.addView(menuRow("⌖  مسیرهای GPS",this::routes));
-        panel.addView(menuRow("🚴  رکاب‌زنی",this::ride));
-        panel.addView(menuRow("◉  مسیرها و اکتشاف",()->open(NativeAdvancedActivity.class)));
-        panel.addView(menuRow("👥  باشگاه",()->open(NativeClubActivity.class)));
-        panel.addView(menuRow("●  ارتباطات",()->open(NativeChatActivity.class)));
-        panel.addView(menuRow("▥  عملکرد من",()->open(NativePerformanceActivity.class)));
-        panel.addView(menuRow("◈  ایمنی و حریم خصوصی",()->open(NativeSafetyActivity.class)));
-        panel.addView(menuRow("👤  حساب من",this::me));
-        content.addView(panel,cardLp());
+        final Dialog d=new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout shell=new LinearLayout(this);
+        shell.setOrientation(LinearLayout.HORIZONTAL);
+        shell.setGravity(Gravity.END);
+        shell.setBackgroundColor(Color.TRANSPARENT);
+        shell.setPadding(dp(8),dp(8),dp(8),dp(8));
+
+        LinearLayout panel=new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(16),dp(14),dp(16),dp(14));
+        panel.setBackground(round(Color.rgb(6,35,49),28,Color.rgb(50,94,111)));
+        panel.setElevation(dp(12));
+
+        ImageView logo=new ImageView(this);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        panel.addView(logo,new LinearLayout.LayoutParams(-1,dp(138)));
+
+        panel.addView(drawerRow("⌂  صفحه اصلی",()->{d.dismiss();home();},false));
+        panel.addView(drawerRow("▣  فعالیت‌ها و برنامه‌ها",()->{d.dismiss();activities();},true));
+        panel.addView(drawerRow("⌖  مسیرهای GPS",()->{d.dismiss();routes();},false));
+        panel.addView(drawerRow("🚴  رکاب‌زنی",()->{d.dismiss();ride();},false));
+
+        panel.addView(drawerSection("🧭  مسیرها و اکتشاف"));
+        panel.addView(drawerSub("Heatmap و Segments",()->{d.dismiss();open(NativeAdvancedActivity.class);}));
+        panel.addView(drawerSub("مسیرهای پیشنهادی",()->{d.dismiss();open(NativeSocialActivity.class);}));
+
+        panel.addView(drawerSection("👥  باشگاه"));
+        panel.addView(drawerSub("باشگاه و اعضا",()->{d.dismiss();open(NativeClubActivity.class);}));
+        panel.addView(drawerSub("چالش‌ها",()->{d.dismiss();open(NativeClubActivity.class);}));
+
+        panel.addView(drawerSection("💬  ارتباطات"));
+        panel.addView(drawerSub("چت گروهی",()->{d.dismiss();open(NativeChatActivity.class);}));
+        panel.addView(drawerSub("مشاور هوش مصنوعی",()->{d.dismiss();open(NativeAiActivity.class);}));
+
+        panel.addView(drawerSection("📈  عملکرد من"));
+        panel.addView(drawerSub("عملکرد و تمرین",()->{d.dismiss();open(NativePerformanceActivity.class);}));
+        panel.addView(drawerSub("سنسورها",()->{d.dismiss();open(NativeSensorsActivity.class);}));
+
+        panel.addView(drawerSection("🛡  ایمنی و حریم خصوصی"));
+        panel.addView(drawerSub("SOS / Beacon / Privacy",()->{d.dismiss();open(NativeSafetyActivity.class);}));
+
+        panel.addView(drawerRow("👤  حساب من",()->{d.dismiss();me();},false));
+        panel.addView(drawerRow("⚙  مدیریت",()->{d.dismiss();me();},false));
+
+        LinearLayout server=new LinearLayout(this);
+        server.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+        TextView dot=txt("●",16,true,GREEN);
+        TextView st=txt("متصل به سرور",11,false,TEXT);
+        server.addView(st);
+        LinearLayout.LayoutParams dotLp=new LinearLayout.LayoutParams(-2,-2);dotLp.setMargins(dp(8),0,0,0);
+        server.addView(dot,dotLp);
+        server.setPadding(dp(10),dp(12),dp(10),dp(4));
+        panel.addView(server);
+
+        shell.addView(panel,new LinearLayout.LayoutParams(dp(360),-1));
+        d.setContentView(shell);
+
+        Window w=d.getWindow();
+        if(w!=null){
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width=WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height=WindowManager.LayoutParams.MATCH_PARENT;
+            lp.gravity=Gravity.END;
+            lp.dimAmount=.72f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        d.show();
     }
 
-    private View menuRow(String label,Runnable action){
-        Button b=outline(label);b.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);b.setTextSize(16);b.setOnClickListener(v->action.run());return b;
+    private View drawerRow(String label,Runnable action,boolean active){
+        Button b=new Button(this);
+        b.setText(label);
+        b.setTextSize(15);
+        b.setAllCaps(false);
+        b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        b.setTextColor(active?CYAN:TEXT);
+        b.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+        b.setPadding(dp(14),0,dp(14),0);
+        b.setBackground(round(active?Color.rgb(7,71,86):PANEL2,16,active?CYAN:STROKE));
+        b.setOnClickListener(v->action.run());
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(58));
+        lp.setMargins(0,dp(4),0,0);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private View drawerSection(String label){
+        TextView t=txt(label,16,true,TEXT);
+        t.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);
+        t.setPadding(dp(14),0,dp(14),0);
+        t.setBackground(round(PANEL2,16,STROKE));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(58));
+        lp.setMargins(0,dp(4),0,0);
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    private View drawerSub(String label,Runnable action){
+        Button b=new Button(this);
+        b.setText("‹   "+label);
+        b.setTextSize(13);
+        b.setAllCaps(false);
+        b.setTextColor(TEXT);
+        b.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+        b.setPadding(dp(20),0,dp(20),0);
+        b.setBackground(round(Color.rgb(8,42,57),13,Color.rgb(38,74,91)));
+        b.setOnClickListener(v->action.run());
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
+        lp.setMargins(dp(10),dp(3),dp(10),0);
+        b.setLayoutParams(lp);
+        return b;
     }
 
     private JSONObject firstUpcoming(){
