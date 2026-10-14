@@ -1,5 +1,5 @@
 # PedalPro — Native Neshan / Web 4.7.46 parity audit
-**Review date:** 2026-10-14 · **Android branch:** `native/web-parity` · **Release candidate:** `2.0.0-native-rc2` (`versionCode 46`)
+**Review date:** 2026-10-14 · **Android branch:** `native/web-parity` · **Release candidate:** `2.0.0-native-rc3` (`versionCode 47`)
 
 ## Key finding
 
@@ -29,13 +29,34 @@ gradle :app:assembleBazaarRelease :app:assembleMyketRelease -PpedalproNeshanAndr
 
 Default store CI (without `-PpedalproNeshanAndroidSdk=true`) builds the native XYZ fallback. It **does not imply** the Neshan SDK is active. The opt-in signed Neshan build **has not been validated** without the licence.
 
+## Direction services activation — RC3 (2026-10-14)
+
+The owner enabled Neshan service API permissions **no-traffic routing**, **traffic-aware routing**, and **point-to-road map matching**. This alone does not transfer a secret key into the Android app.
+
+### Implemented RC3
+
+- `NeshanDirectionsClient`: Neshan `GET https://api.neshan.org/v2/direction` road route using the `Api-Key` request header, bounded response/timeouts, decoded encoded `overview_polyline.points`, route length and first available instruction. API syntax is supported by the public V2 examples, but **the newly issued key has not yet been tested live**.
+- `NativeRouteView.setNavigationRoute`: a separate **gold road route** distinct from the original raw GPS ride track and yellow straight-line target. Recorded GPS, TrackingService, distance and speed remain unmodified.
+- `NativeLiveNavigationActivity`: optional explicit road-route mode, 45-second minimum request interval, re-request after user/group target moves over 80 metres, safe fallback to straight distance on invalid key/network error. No uncontrolled per-3-second Neshan calls.
+- `NeshanServiceCredentials`: service API key entered **locally in the app**, encrypted with Android Keystore (AES/GCM), never checked into git or injected into signed BuildConfig. Navigation offers save/clear. Users can continue to navigate in direct-line mode with no configured key.
+- **Caution:** Neshan V2 street directions may represent **motor-vehicle roads**, not cycling-legal routes. The app explicitly describes them as a suggestion for cars, does **not** display vehicle ETA as cycling ETA, and never silently promises bicycle safety.
+- **Security:** an on-device service key is a stopgap for controlled testing only. A shared production service key should live on the PedalPro **server-side proxy**, using an explicitly authorized backend endpoint, server-side quota and origin auth. No backend endpoint was invented or changed in RC3.
+- **Provider distinction:** Web map key, Mobile map key, native SDK licence, Neshan `service` key and Android release signing certificate are different credentials. The previously requested `neshan.licence` is still not available, so **default RC3 does not display actual Neshan SDK map**.
+
+### QA not yet demonstrated
+
+1. Android SDK enabled build with real signed `neshan.licence`; default build succeeds without it.
+2. On-device live API response using the **newly created** Neshan Services key, including any IP/domain allowlist restrictions (a mobile device's public IP changes).
+3. Road route/screen equivalence with Web 4.7.46, especially bicycle access, rerouting, route snapping, map-matching and dynamic moving-group ETA.
+4. Visual pixel comparison against the original Web reference and actual device tap/pinch map functionality.
+
 ## Remaining website differences — code/screenshot findings
 
 | Area | Native difference against Web 4.7.46 requirements | Status |
 |---|---|---|
 | **Neshan map imagery** | Default APK still uses XYZ fallback, not Neshan styles/POI/traffic | SDK wired, **licence and device verification pending** |
-| **Street navigation to rider/group** | `NativeLiveNavigationActivity` still computes geodesic distance and bearing, and draws a straight yellow line; no street-route engine/turn-by-turn matching the Web routing | **Outstanding — requires service key and matching Web API contract** |
-| **Moving group route** | Target refresh every 3 sec is native; road snapping, turn instructions, moving ETA and reroute parity unverified | **Outstanding** |
+| **Street navigation to rider/group** | `NativeLiveNavigationActivity` now supports optional Neshan V2 road suggestion and keeps direct geodesic fallback; cycling-safe engine/true turn-by-turn and Web parity remain unverified | **Partially implemented; live key and device QA needed** |
+| **Moving group route** | Target refresh every 3 sec remains native; optional road recalculation every 45s / 80m is in RC3; cycling ETA and road snapping parity unverified | **Partially implemented** |
 | **Map touch/zoom** | Native gestures and CTA controls are implemented but may differ from SDK/Web pinch inertia, map layers and auto-follow behavior | **Device acceptance pending** |
 | **Ride CTA** | Circular dock was clipped by negative translation in main and secondary shells | **Code fixed**; visual device acceptance pending |
 | **Ride forms** | Android `Spinner`, checkbox rows and camera/GPS preflight layouts still differ from Web native-styled controls and compact sizing | **Outstanding UI parity** |
