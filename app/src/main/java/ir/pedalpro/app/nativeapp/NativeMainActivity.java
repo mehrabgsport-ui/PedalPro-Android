@@ -123,6 +123,7 @@ public final class NativeMainActivity extends Activity {
     private View navRoutes;
     private View navMe;
     private FrameLayout stageRoot;
+    private FrameLayout splashOverlay;
     private ImageView siteBackground;
     private LinearLayout appRoot;
     private LinearLayout webHeader;
@@ -346,6 +347,7 @@ public final class NativeMainActivity extends Activity {
 
         stageRoot.addView(appRoot, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        installNativeSplash();
         setContentView(stageRoot);
         VazirmatnLoader.apply(this, stageRoot);
     }
@@ -409,6 +411,53 @@ public final class NativeMainActivity extends Activity {
         }
     }
 
+    private void installNativeSplash(){
+        splashOverlay=new FrameLayout(this);
+        splashOverlay.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.rgb(3,17,29),Color.rgb(10,56,59),Color.rgb(3,17,29)}));
+        LinearLayout contentSplash=new LinearLayout(this);
+        contentSplash.setOrientation(LinearLayout.VERTICAL);
+        contentSplash.setGravity(Gravity.CENTER);
+        contentSplash.setPadding(dp(24),dp(20),dp(24),dp(20));
+        ImageView logo=new ImageView(this);
+        // Use the project's existing official artwork asset; never recreate the brand.
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        contentSplash.addView(logo,new LinearLayout.LayoutParams(dp(200),dp(200)));
+        TextView motto=text("مسیرت را ثبت کن، پیشرفتت را ببین، قوی‌تر رکاب بزن",13,false,
+                Color.rgb(204,230,235));
+        motto.setGravity(Gravity.CENTER);
+        motto.setPadding(0,dp(12),0,dp(16));
+        contentSplash.addView(motto,new LinearLayout.LayoutParams(-1,-2));
+        ProgressBar loader=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        loader.setIndeterminate(true);loader.setIndeterminateTintList(
+                android.content.res.ColorStateList.valueOf(Color.rgb(23,213,227)));
+        contentSplash.addView(loader,new LinearLayout.LayoutParams(-1,dp(5)));
+        TextView enter=text("ورود به صفحه اصلی",15,true,Color.WHITE);
+        enter.setGravity(Gravity.CENTER);
+        enter.setPadding(dp(15),dp(12),dp(15),dp(12));
+        enter.setBackground(roundRect(Color.rgb(13,49,64),16,Color.rgb(54,90,104)));
+        LinearLayout.LayoutParams elp=new LinearLayout.LayoutParams(-2,dp(52));
+        elp.topMargin=dp(25);
+        contentSplash.addView(enter,elp);
+        enter.setOnClickListener(v->{
+            if(bootstrap!=null)dismissNativeSplash();
+            else toast("در حال دریافت اطلاعات از سرور…");
+        });
+        splashOverlay.addView(contentSplash,new FrameLayout.LayoutParams(-1,-1));
+        stageRoot.addView(splashOverlay,new FrameLayout.LayoutParams(-1,-1));
+    }
+
+    private void dismissNativeSplash(){
+        if(splashOverlay==null)return;
+        FrameLayout old=splashOverlay;splashOverlay=null;
+        old.animate().alpha(0).setDuration(170).withEndAction(()->{
+            if(old.getParent() instanceof android.view.ViewGroup)
+                ((android.view.ViewGroup)old.getParent()).removeView(old);
+        }).start();
+    }
+
     private void refreshBootstrap(boolean firstLaunch) {
         setTopStatus("در حال دریافت اطلاعات…", MUTED);
         io.execute(() -> {
@@ -427,14 +476,19 @@ public final class NativeMainActivity extends Activity {
                     } else {
                         setTopStatus("متصل · " + user.optString("display_name", user.optString("username", "PedalPro")), GREEN);
                     }
-                    if (firstLaunch) handleLaunchPage();
-                    else refreshVisibleScreen();
+                    if (firstLaunch){
+                        handleLaunchPage();
+                        dismissNativeSplash();
+                    }else refreshVisibleScreen();
                 });
             } catch (Exception e) {
                 main.post(() -> {
                     serverOnline = false;
                     setTopStatus("خطا در اتصال به سرور", RED);
-                    if (firstLaunch) showError("ارتباط با PedalPro برقرار نشد.", e.getMessage(), () -> refreshBootstrap(true));
+                    if (firstLaunch){
+                        dismissNativeSplash();
+                        showError("ارتباط با PedalPro برقرار نشد.",e.getMessage(),()->refreshBootstrap(true));
+                    }
                 });
             }
         });
