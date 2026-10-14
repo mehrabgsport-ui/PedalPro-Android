@@ -30,7 +30,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private long lastPointId=0;
     private double targetLat=Double.NaN,targetLng=Double.NaN;
     private double currentLat=Double.NaN,currentLng=Double.NaN;
-    private NativeRouteView routeView;
+    private PedalNeshanMapSurface routeView;
     private TextView distance,bearing,status;
     private PedalIconView arrow;
     private boolean busy=false;
@@ -63,7 +63,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         hud.addView(distance);hud.addView(bearing);hud.addView(status);
         content.addView(hud,cardLp());
 
-        routeView=new NativeRouteView(this);
+        routeView=new PedalNeshanMapSurface(this);
         content.addView(routeView,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(360)));
 
         addCard("راهنما","خط زرد فاصله مستقیم شما تا موقعیت زنده هدف را نشان می‌دهد. موقعیت هدف هر ۳ ثانیه بروزرسانی می‌شود.");
