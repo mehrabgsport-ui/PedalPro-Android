@@ -115,6 +115,7 @@ public final class NativeChatActivity extends NativeScreenBase {
     }
 
     private void openGroup(){
+        privateRequestGeneration++; // Cancel any pending private-chat navigation.
         JSONObject group=boot==null?null:boot.optJSONObject("group");
         roomGeneration++;
         roomId=group==null?0:group.optInt("id",0);mode="group";lastId=0;messages=new JSONArray();
