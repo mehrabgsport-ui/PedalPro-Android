@@ -285,7 +285,8 @@ public final class NativeMainActivity extends Activity {
         mainScroll.setBackgroundColor(Color.TRANSPARENT);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(12), dp(16), dp(32));
+        // Allow the last form fields and buttons to scroll above the raised ride dock.
+        content.setPadding(dp(16), dp(12), dp(16), dp(124));
         content.setClipChildren(false);
         mainScroll.addView(content);
         appRoot.addView(mainScroll, new LinearLayout.LayoutParams(
