@@ -83,6 +83,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         content.addView(hud,cardLp());
 
         routeView=new PedalNeshanMapSurface(this);
+        routeView.setNavigationMode(true);
         content.addView(routeView,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(360)));
 
         LinearLayout routing=card();
@@ -106,13 +107,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
             }
         });
         routing.addView(roadToggle);
-        Button credential=normal("تنظیمات نشان و کلیدهای API");
-        credential.setOnClickListener(v->{
-            Intent i=new Intent(this,NativeAppSettingsActivity.class);
-            i.putExtra(NativeAppSettingsActivity.EXTRA_SECTION,NativeAppSettingsActivity.SECTION_MAP);
-            startActivity(i);
-        });
-        routing.addView(credential);
+        // Admin map credentials live only behind the account-adjacent settings gear.
         content.addView(routing,cardLp());
         if(!NeshanServiceCredentials.hasKey(this))
             roadStatus.setText("برای مسیریابی خیابانی، کلید «سرویس‌ها»ی نشان را روی این دستگاه وارد کنید. مسیر مستقیم همچنان فعال است.");
@@ -132,7 +127,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         if(roadToggle!=null)roadToggle.setText(roadEnabled?
                 "غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
         if(roadStatus!=null&&!NeshanServiceCredentials.hasKey(this))
-            roadStatus.setText("کلید مسیریابی نشان در تنظیمات اپ وارد نشده است.");
+            roadStatus.setText("کلید مسیریابی نشان در تنظیمات مدیر ثبت نشده است.");
         main.removeCallbacks(tick);
         main.post(tick);
         if(roadEnabled)maybeFetchDirections();
@@ -207,6 +202,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     if(loc==null)return;
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
                     routeView.setCurrent(currentLat,currentLng);
+                    if(loc.hasBearing() && loc.hasSpeed() && loc.getSpeed()>1.3f)
+                        routeView.setHeadingDegrees(loc.getBearing());
                     updateHud();
                     maybeFetchDirections();
                 });
