@@ -41,6 +41,8 @@ public final class NativeRouteView extends View {
     private P targetPoint;
     private boolean showTargetLine = false;
     private boolean navigationMode;
+    private boolean headingUpEnabled = true;
+    private int navigationZoom = 16;
     private float navigationBearing;
     private boolean hasNavigationBearing;
     private int cameraZoom = 15;
@@ -138,6 +140,14 @@ public final class NativeRouteView extends View {
                 if (e.getPointerCount() == 1 && (scaleDetector == null || !scaleDetector.isInProgress())) {
                     float dx = e.getX() - lastTouchX, dy = e.getY() - lastTouchY;
                     if (Math.abs(dx) + Math.abs(dy) > dp(1)) {
+                        // Inverse of the display-only bearing/pitch transform.
+                        // Do not feed these camera offsets into GPS tracking.
+                        if (navigationMode && headingUpEnabled && hasNavigationBearing && !externalBasemap) {
+                            double angle = Math.toRadians(navigationBearing);
+                            float originalDx = dx, originalDy = dy;
+                            dx = (float)(Math.cos(angle)*originalDx - Math.sin(angle)*originalDy);
+                            dy = (float)((Math.sin(angle)*originalDx + Math.cos(angle)*originalDy)/.86);
+                        }
                         ensureUserCamera();
                         if (userCamera) {
                             double wx = PedalMapTiles.worldX(userLng, userZoom) - dx;
@@ -246,6 +256,11 @@ public final class NativeRouteView extends View {
     public void setCameraListener(CameraListener listener) { cameraListener = listener; }
 
     public void zoomBy(int amount) {
+        if(navigationMode && !userCamera) {
+            navigationZoom = Math.max(3, Math.min(18, navigationZoom + amount));
+            invalidate();
+            return;
+        }
         ensureUserCamera();
         if (userCamera) { userZoom = Math.max(3, Math.min(18, userZoom + amount)); invalidate(); }
     }
@@ -260,6 +275,14 @@ public final class NativeRouteView extends View {
     }
 
     public boolean isNavigationMode() { return navigationMode; }
+
+    /** Switch North-Up / Heading-Up without disabling rider following. */
+    public void setHeadingUpEnabled(boolean enabled) {
+        headingUpEnabled = enabled;
+        invalidate();
+    }
+
+    public boolean isHeadingUpEnabled() { return headingUpEnabled; }
 
     /** Android Location bearing: 0=north, 90=east. Ignore invalid/unknown fixes. */
     public void setHeadingDegrees(float bearing) {
@@ -295,10 +318,20 @@ public final class NativeRouteView extends View {
             if (spanX <= w - pad * 2 && spanY <= h - pad * 2) break;
         }
         if (navigationMode && currentPoint != null && !userCamera) {
-            // Fixed navigation zoom follows the rider, not the entire recorded track.
-            cameraLat=currentPoint.lat;
-            cameraLng=currentPoint.lng;
-            cameraZoom=16;
+            // Screen-space look-ahead: the rider is below center so the road ahead
+            // remains visible. Shift the Mercator camera, not the canvas/tiles:
+            // avoids expensive overscan and keeps track/road overlays aligned.
+            cameraZoom=navigationZoom;
+            boolean rotate=headingUpEnabled && hasNavigationBearing && !externalBasemap;
+            double angle=rotate?Math.toRadians(navigationBearing):0d;
+            double ahead=h*.18d;
+            double centerX=PedalMapTiles.worldX(currentPoint.lng,cameraZoom)+Math.sin(angle)*ahead;
+            double centerY=PedalMapTiles.worldY(currentPoint.lat,cameraZoom)
+                    -Math.cos(angle)*ahead/(rotate?.86d:1d);
+            double world=PedalMapTiles.TILE*(double)(1<<cameraZoom);
+            cameraLng=centerX/world*360d-180d;
+            double mercator=Math.PI*(1d-2d*Math.max(0d,Math.min(world,centerY))/world);
+            cameraLat=Math.toDegrees(Math.atan(Math.sinh(mercator)));
         }
         if (userCamera) {
             cameraLat = userLat;
@@ -308,7 +341,7 @@ public final class NativeRouteView extends View {
         // The XYZ fallback has a lightweight visual 2.5D pitch; the external SDK
         // supplies its own transform and must not be distorted by Canvas rotation.
         int mapSave=canvas.save();
-        boolean headingUp=navigationMode && !userCamera && !externalBasemap;
+        boolean headingUp=navigationMode && headingUpEnabled && hasNavigationBearing && !externalBasemap;
         if(headingUp){
             canvas.rotate(-navigationBearing,w*.5f,h*.5f);
             canvas.scale(1f,.86f,w*.5f,h*.5f);
@@ -349,7 +382,7 @@ public final class NativeRouteView extends View {
                     live);
         }
 
-        if (currentPoint != null) {
+        if (currentPoint != null && (!navigationMode || userCamera)) {
             canvas.drawCircle(projectX(currentPoint.lng, b, w, pad),
                     projectY(currentPoint.lat, b, h, pad), dp(7), current);
         }
@@ -364,20 +397,26 @@ public final class NativeRouteView extends View {
         }
 
         canvas.restoreToCount(mapSave);
-        if(navigationMode && !userCamera && currentPoint!=null) {
-            // Rider remains upright while the street background turns underneath.
+        if(navigationMode && !userCamera && currentPoint!=null && !externalBasemap) {
+            // The marker stays upright in Heading-Up and reflects travel direction
+            // in North-Up. No fake heading is shown before a valid bearing arrives.
+            float riderX=w*.5f, riderY=h*.68f;
             Paint bike=new Paint(Paint.ANTI_ALIAS_FLAG);
             bike.setColor(Color.rgb(9,46,66));
-            bike.setStyle(Paint.Style.FILL);
-            canvas.drawCircle(w*.5f,h*.5f,dp(18),bike);
+            canvas.drawCircle(riderX,riderY,dp(18),bike);
             bike.setColor(Color.rgb(21,227,239));
-            Path heading=new Path();
-            heading.moveTo(w*.5f,h*.5f-dp(18));
-            heading.lineTo(w*.5f-dp(10),h*.5f+dp(12));
-            heading.lineTo(w*.5f,h*.5f+dp(6));
-            heading.lineTo(w*.5f+dp(10),h*.5f+dp(12));
-            heading.close();
-            canvas.drawPath(heading,bike);
+            if(hasNavigationBearing) {
+                int markerSave=canvas.save();
+                if(!headingUpEnabled)canvas.rotate(navigationBearing,riderX,riderY);
+                Path heading=new Path();
+                heading.moveTo(riderX,riderY-dp(18));
+                heading.lineTo(riderX-dp(10),riderY+dp(12));
+                heading.lineTo(riderX,riderY+dp(6));
+                heading.lineTo(riderX+dp(10),riderY+dp(12));
+                heading.close();
+                canvas.drawPath(heading,bike);
+                canvas.restoreToCount(markerSave);
+            } else canvas.drawCircle(riderX,riderY,dp(7),bike);
         }
         canvas.drawText(points.size() + " نقطه GPS", dp(10), h - dp(10), text);
     }
