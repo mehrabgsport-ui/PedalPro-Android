@@ -300,6 +300,8 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         Button create=primary("ساخت سگمنت از این رکاب‌زنی");
         create.setOnClickListener(v->{
             int rideId=rideId(ride);
+            if(rideId<=0){toast("ابتدا یک رکاب‌زنی معتبر انتخاب کنید.");return;}
+            if(name.getText().toString().trim().isEmpty()){toast("نام سگمنت را وارد کنید.");return;}
             JSONObject p=new JSONObject();
             try{p.put("ride_id",rideId);p.put("name",name.getText().toString().trim());}catch(Exception ignored){}
             post("pp_segment_create_from_ride",p,create,"سگمنت ساخته شد",this::rerenderCurrent);
@@ -588,7 +590,9 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         paint.run();
 
         save.setOnClickListener(v->{
-            int id=rideId(ride);save.setEnabled(false);
+            int id=rideId(ride);
+            if(id<=0){toast("برای ذخیره، ابتدا یک مسیر معتبر انتخاب کنید.");return;}
+            save.setEnabled(false);
             io.execute(()->{
                 try{
                     Map<String,Object> q=new HashMap<>();q.put("ride_id",id);
@@ -600,7 +604,19 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
                 }catch(Exception e){main.post(()->{save.setEnabled(true);toast(e.getMessage());});}
             });
         });
-        clear.setOnClickListener(v->{prefs.edit().clear().apply();paint.run();});
+        clear.setOnClickListener(v->{
+            if(prefs.getAll().isEmpty()){toast("مسیر آفلاینی برای پاک‌کردن وجود ندارد.");return;}
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("حذف مسیرهای آفلاین")
+                    .setMessage("همه مسیرهای ذخیره‌شده روی همین گوشی پاک شوند؟ این کار اطلاعات رکاب‌زنی روی سرور را حذف نمی‌کند.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("حذف از گوشی",(dialog,which)->{
+                        prefs.edit().clear().apply();
+                        paint.run();
+                        toast("مسیرهای آفلاین از گوشی حذف شدند.");
+                    })
+                    .show();
+        });
         TextView note=text("داده مسیر بدون اینترنت باقی می‌ماند. نمایش پس‌زمینه نقشه به Tileهای قبلاً Cache‌شده دستگاه وابسته است.",11,false,MUTED);
         content.addView(note,cardLp());
     }
