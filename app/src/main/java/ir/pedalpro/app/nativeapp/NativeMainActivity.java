@@ -2115,6 +2115,7 @@ public final class NativeMainActivity extends Activity {
         bottom.addView(stats,new LinearLayout.LayoutParams(-1,dp(92)));
         immersive.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
         stageRoot.addView(immersive,new FrameLayout.LayoutParams(-1,-1));
+        ViewCompat.requestApplyInsets(immersive);
         VazirmatnLoader.apply(this,immersive);
     }
 
@@ -7595,6 +7596,15 @@ public final class NativeMainActivity extends Activity {
                 toast("برای اتصال سنسورها اجازه Bluetooth لازم است.");
             }
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (activeRideImmersiveOverlay != null && "ride".equals(currentPage)) {
+            showHome();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override
