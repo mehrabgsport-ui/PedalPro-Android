@@ -2,12 +2,20 @@ plugins {
     id 'com.android.application'
 }
 
+// The Android Neshan SDK is license-bound; keep default builds fully usable without a license.
+def neshanEnabled = providers.gradleProperty('pedalproNeshanAndroidSdk')
+        .map { it.equalsIgnoreCase('true') }.orElse(false).get()
+if (neshanEnabled && !file('src/main/res/raw/neshan.licence').exists()) {
+    throw new GradleException('Neshan Android SDK requires app/src/main/res/raw/neshan.licence (not committed)')
+}
+
 android {
     namespace 'ir.pedalpro.app'
     compileSdk 36
     buildFeatures { buildConfig true }
 
     defaultConfig {
+        buildConfigField 'boolean', 'PEDALPRO_NESHAN_ANDROID_ENABLED', neshanEnabled.toString()
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
@@ -54,4 +62,9 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'com.google.firebase:firebase-messaging:24.1.2'
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+    if (neshanEnabled) {
+        implementation 'neshan-android-sdk:mobile-sdk:1.0.1'
+        implementation 'neshan-android-sdk:services-sdk:1.0.0'
+        implementation 'neshan-android-sdk:common-sdk:0.0.2'
+    }
 }
