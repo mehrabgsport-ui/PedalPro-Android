@@ -1499,6 +1499,7 @@ public final class NativeMainActivity extends Activity {
         }
         if(rc==0)box.addView(text("رکاب‌زنی عمومی ثبت‌شده‌ای ندارد.",11,false,MUTED));
 
+        addMemberMedals(box,member);
         addMemberSocialLinks(box,member);
 
         sc.addView(box);
@@ -1594,6 +1595,35 @@ public final class NativeMainActivity extends Activity {
         return parts.isEmpty()?"دوچرخه بدون مشخصات":android.text.TextUtils.join(" · ",parts);
     }
 
+    private void addMemberMedals(LinearLayout box,JSONObject member){
+        JSONArray defs=bootstrap==null?null:bootstrap.optJSONArray("medal_definitions");
+        JSONArray awards=bootstrap==null?null:bootstrap.optJSONArray("medal_awards");
+        if(defs==null||defs.length()==0)return;
+        box.addView(text("مدال‌های این عضو",16,true,TEXT),fullWrapLp(12));
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        for(int i=0;i<Math.min(4,defs.length());i++){
+            JSONObject medal=defs.optJSONObject(i);if(medal==null)continue;
+            boolean earned=medalAwardFor(member.optInt("id",0),
+                    medal.optInt("id",0),awards)!=null;
+            LinearLayout cell=new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);cell.setGravity(Gravity.CENTER);
+            ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            RemoteImageLoader.load(this,image,medal.optString("image_path",""),
+                    R.drawable.pedalpro_app_icon);
+            if(!earned){
+                image.setColorFilter(Color.GRAY,android.graphics.PorterDuff.Mode.SRC_IN);
+                image.setAlpha(.50f);
+            }
+            cell.addView(image,new LinearLayout.LayoutParams(dp(49),dp(49)));
+            TextView label=text(medal.optString("title","مدال"),10,false,
+                    earned?TEXT:MUTED);
+            label.setGravity(Gravity.CENTER);label.setMaxLines(2);cell.addView(label);
+            row.addView(cell,new LinearLayout.LayoutParams(0,dp(84),1f));
+        }
+        box.addView(row);
+    }
+
     private void addMemberSocialLinks(LinearLayout box,JSONObject member) {
         String[][] links={
                 {"Instagram",member.optString("instagram_profile","")},
@@ -1603,16 +1633,28 @@ public final class NativeMainActivity extends Activity {
                 {"Strava",member.optString("strava_profile","")},
                 {"Relive",member.optString("relive_profile","")}
         };
-        boolean any=false;
-        for(String[] row:links)if(row[1]!=null&&!row[1].trim().isBlank()){any=true;break;}
-        if(!any)return;
         box.addView(text("شبکه‌های اجتماعی و حساب‌های ورزشی",16,true,TEXT),fullWrapLp(12));
         for(String[] row:links){
-            String value=row[1]==null?"":row[1].trim();if(value.isBlank())continue;
-            Button b=normalButton(row[0]);
-            String url=socialProfileUrl(row[0],value);
-            b.setOnClickListener(v->openExternalUrl(url));
-            box.addView(b,fullActionLp(44));
+            String value=row[1]==null?"":row[1].trim();
+            boolean connected=!value.isBlank()&&!"null".equalsIgnoreCase(value);
+            LinearLayout socialRow=new LinearLayout(this);
+            socialRow.setOrientation(LinearLayout.HORIZONTAL);
+            socialRow.setGravity(Gravity.CENTER_VERTICAL);
+            socialRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            PedalIconView symbol=new PedalIconView(this,PedalIconView.Icon.CHAT,
+                    connected?Color.rgb(34,222,233):Color.rgb(115,126,139));
+            socialRow.addView(symbol,new LinearLayout.LayoutParams(dp(25),dp(25)));
+            TextView title=text(row[0],14,true,connected?TEXT:Color.rgb(133,148,163));
+            LinearLayout.LayoutParams labelLp=new LinearLayout.LayoutParams(0,dp(47),1f);
+            labelLp.setMargins(dp(12),0,0,0);
+            title.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+            socialRow.addView(title,labelLp);
+            if(connected){
+                String url=socialProfileUrl(row[0],value);
+                socialRow.setOnClickListener(v->openExternalUrl(url));
+                socialRow.setClickable(true);
+            }else socialRow.setContentDescription(row[0]+" ثبت نشده");
+            box.addView(socialRow,fullWrapLp(4));
         }
     }
 
@@ -1663,9 +1705,12 @@ public final class NativeMainActivity extends Activity {
         tagline.setPadding(0, dp(16), 0, dp(4));
         hero.addView(tagline);
 
-        PedalActionView register = action(PedalIconView.Icon.CALENDAR,
-                uiString("home_primary_button_text", "ثبت نام برنامه"), PedalActionView.Style.PRIMARY);
-        register.setOnClickListener(v -> homeRegisterNextEventNative());
+        PedalActionView register = action(PedalIconView.Icon.USER,
+                "عضویت در پدال پرو", PedalActionView.Style.PRIMARY);
+        register.setOnClickListener(v -> {
+            if(signedIn())showProfileEditor();
+            else showAuthDialog("signup");
+        });
         LinearLayout.LayoutParams registerLp = fullActionLp(70);
         registerLp.setMargins(0, dp(16), 0, 0);
         hero.addView(register, registerLp);
@@ -4584,8 +4629,23 @@ public final class NativeMainActivity extends Activity {
         content.addView(profile,cardLp());
 
         PedalActionView edit=action(PedalIconView.Icon.EDIT,"ویرایش پروفایل و شماره تماس",PedalActionView.Style.PRIMARY);edit.setOnClickListener(v->showProfileEditor());content.addView(edit,fullActionLp(54));
-        PedalActionView bikes=action(PedalIconView.Icon.RIDE,"دوچرخه‌های من",PedalActionView.Style.OUTLINE);bikes.setOnClickListener(v->showBikes());content.addView(bikes,fullActionLp(52));
-        PedalActionView fitness=action(PedalIconView.Icon.CHART,"وضعیت بدن",PedalActionView.Style.OUTLINE);fitness.setOnClickListener(v->showFitness());content.addView(fitness,fullActionLp(52));
+        LinearLayout baleInfo=glassCard(20);
+        baleInfo.addView(text("اتصال به ربات بله",17,true,TEXT));
+        baleInfo.addView(text("اعلان برنامه‌ها، رکوردها و مدال‌ها از طریق ربات بله ارسال می‌شود.",11,false,MUTED));
+        PedalActionView baleButton=action(PedalIconView.Icon.CHAT,"مدیریت اتصال به ربات بله",PedalActionView.Style.OUTLINE);
+        baleButton.setOnClickListener(v->showProfileEditor());
+        baleInfo.addView(baleButton,fullActionLp(48));
+        content.addView(baleInfo,cardLp());
+        LinearLayout accountGrid=new LinearLayout(this);
+        accountGrid.setOrientation(LinearLayout.HORIZONTAL);
+        accountGrid.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalActionView bikes=action(PedalIconView.Icon.RIDE,"دوچرخه‌های من",PedalActionView.Style.OUTLINE);
+        bikes.setOnClickListener(v->showBikes());
+        PedalActionView fitness=action(PedalIconView.Icon.CHART,"وضعیت بدن",PedalActionView.Style.OUTLINE);
+        fitness.setOnClickListener(v->showFitness());
+        accountGrid.addView(bikes,new LinearLayout.LayoutParams(0,dp(55),1f));
+        accountGrid.addView(fitness,new LinearLayout.LayoutParams(0,dp(55),1f));
+        content.addView(accountGrid,cardLp());
         PedalActionView safety=action(PedalIconView.Icon.SHIELD,"ایمنی و حریم خصوصی",PedalActionView.Style.OUTLINE);safety.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(safety,fullActionLp(52));
         PedalActionView refresh=action(PedalIconView.Icon.REFRESH,"بروزرسانی اطلاعات",PedalActionView.Style.OUTLINE);refresh.setOnClickListener(v->refreshAndRender(this::showMe));content.addView(refresh,fullActionLp(50));
         PedalActionView logout=action(PedalIconView.Icon.CLOSE,"خروج از حساب",PedalActionView.Style.OUTLINE);logout.setAccent(RED);logout.setOnClickListener(v->io.execute(()->{try{api.logout();}catch(Exception ignored){session.clear();}main.post(()->{bootstrap=null;activeRide=null;showLogin();});}));content.addView(logout,fullActionLp(50));
@@ -5709,7 +5769,11 @@ public final class NativeMainActivity extends Activity {
         info.addView(text(event.optString("title","برنامه"),20,true,TEXT));
         String route=safeEventValue(event, "route_name", safeEventValue(event, "meeting_location", "مسیر گروهی"));
         String desc=event.optString("description","");
-        TextView d=text(route+(desc.isBlank()?"":"، "+desc),12,false,TEXT);d.setMaxLines(3);d.setPadding(0,dp(5),0,dp(5));info.addView(d);
+        TextView d=text(route+(desc.isBlank()?"":"، "+desc),12,false,TEXT);
+        d.setMaxLines(5);d.setGravity(Gravity.RIGHT);d.setTextDirection(View.TEXT_DIRECTION_RTL);
+        if(android.os.Build.VERSION.SDK_INT>=26)
+            d.setJustificationMode(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD);
+        d.setPadding(dp(12),dp(9),dp(12),dp(12));info.addView(d);
         LinearLayout r1=new LinearLayout(this);r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.addView(metaTile(PedalIconView.Icon.DISTANCE,event.optDouble("planned_distance",0)>0?JalaliDate.fa(Math.round(event.optDouble("planned_distance",0)))+" کیلومتر":"مسافت آزاد"),rowWeightLp());
         r1.addView(metaTile(PedalIconView.Icon.LOCATION,safeEventValue(event,"meeting_location","محل قرار")),rowWeightLp());info.addView(r1);
@@ -5717,7 +5781,17 @@ public final class NativeMainActivity extends Activity {
         r2.addView(metaTile(PedalIconView.Icon.ROUTE,safeEventValue(event,"finish_location","پایان اختیاری")),rowWeightLp());
         r2.addView(metaTile(PedalIconView.Icon.CLOCK,JalaliDate.format(event.optString("event_date",""),true)),rowWeightLp());info.addView(r2);
         row.addView(info,new LinearLayout.LayoutParams(0,-2,1f));outer.addView(row);
-        outer.setClickable(true);outer.setOnClickListener(v->showEventDetail(event));return outer;
+        if(event.optInt("registration_open",1)==1 &&
+                ("planned".equals(event.optString("status","planned"))||
+                 "published".equals(event.optString("status","")))){
+            PedalActionView join=action(PedalIconView.Icon.CALENDAR,
+                    "ثبت‌نام در برنامه",PedalActionView.Style.PRIMARY);
+            join.setOnClickListener(v->homeRegisterNextEventNative());
+            LinearLayout.LayoutParams joinLp=fullActionLp(50);
+            joinLp.setMargins(dp(8),dp(12),dp(8),dp(3));
+            outer.addView(join,joinLp);
+        }
+        row.setOnClickListener(v->showEventDetail(event));return outer;
     }
 
     private String safeEventValue(JSONObject event, String key, String fallback) {
