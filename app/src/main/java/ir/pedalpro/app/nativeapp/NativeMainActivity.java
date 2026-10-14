@@ -3241,9 +3241,10 @@ public final class NativeMainActivity extends Activity {
         LinearLayout status = card();
         sensorStatus = text("آماده جستجوی سنسور", 12, true, MUTED);
         status.addView(sensorStatus);
-        Button scan = primaryButton("جستجوی Cadence / Power / Heart Rate");
+        PedalActionView scan = action(PedalIconView.Icon.SENSOR,
+                "جستجوی Cadence / Power / Heart Rate", PedalActionView.Style.PRIMARY);
         scan.setOnClickListener(v -> startSensorScan());
-        status.addView(scan);
+        status.addView(scan, fullActionLp(50));
         content.addView(status, cardLp());
 
         sensorDeviceList = new LinearLayout(this);
@@ -3314,13 +3315,14 @@ public final class NativeMainActivity extends Activity {
         LinearLayout box = card();
         box.addView(text(name == null || name.isBlank() ? type : name, 14, true, TEXT));
         box.addView(text(type + (address.isBlank() ? "" : " · " + address), 10, false, MUTED));
-        Button connect = primaryButton("اتصال");
+        PedalActionView connect = action(PedalIconView.Icon.SENSOR,
+                "اتصال", PedalActionView.Style.PRIMARY);
         connect.setOnClickListener(v -> {
             if (cycling) cyclingSensors.connect(address);
             else heartRateSensors.connect(address);
             if (sensorStatus != null) sensorStatus.setText("در حال اتصال…");
         });
-        box.addView(connect);
+        box.addView(connect, fullActionLp(48));
         sensorDeviceList.addView(box, cardLp());
     }
 
