@@ -1879,7 +1879,17 @@ public final class NativeMainActivity extends Activity {
         addHero("رکاب‌زنی فعال", activeRide.optString("title", "PedalPro"));
 
         LinearLayout statusCard = glassCard(24);
-        statusCard.addView(text("🚴 " + activeRide.optString("title", "رکاب‌زنی من"), 17, true, TEXT));
+        LinearLayout rideHead = new LinearLayout(this);
+        rideHead.setOrientation(LinearLayout.HORIZONTAL);
+        rideHead.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        rideHead.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalIconView rideHeadIcon = new PedalIconView(this, PedalIconView.Icon.RIDE, Color.rgb(31,231,242));
+        rideHead.addView(rideHeadIcon, new LinearLayout.LayoutParams(dp(26), dp(26)));
+        TextView rideHeadTitle = text(activeRide.optString("title", "رکاب‌زنی من"), 17, true, TEXT);
+        LinearLayout.LayoutParams rideHeadTitleLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        rideHeadTitleLp.setMargins(dp(8), 0, 0, 0);
+        rideHead.addView(rideHeadTitle, rideHeadTitleLp);
+        statusCard.addView(rideHead);
         boolean publicLive = activeRide.optInt("public_tracking", 0) == 1 || activeRide.optBoolean("public_tracking", false);
         String statusLine = "انتشار زنده: " + (publicLive ? "روشن" : "خاموش");
         double calories = activeRide.optDouble("estimated_calories", 0);
