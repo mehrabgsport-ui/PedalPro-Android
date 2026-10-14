@@ -112,6 +112,19 @@ jobs:
         run: |
           gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             -PpedalproNeshanAndroidSdk="$PEDALPRO_NESHAN_SDK" --stacktrace
 
+      # Compile the optional licensed Java bridge even when the real Neshan
+      # licence is not configured. A dummy resource is NEVER signed or published.
+      - name: Compile native Neshan SDK adapter (no production licence)
+        if: env.PEDALPRO_NESHAN_SDK == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/res/raw
+          trap 'rm -f app/src/main/res/raw/neshan.licence' EXIT
+          printf 'INVALID-CI-COMPILE-ONLY' > app/src/main/res/raw/neshan.licence
+          gradle :app:compileBazaarReleaseJavaWithJavac \
+            -PpedalproNeshanAndroidSdk=true --stacktrace
+
       - name: APK manifest smoke checks
         shell: bash
         run: |
