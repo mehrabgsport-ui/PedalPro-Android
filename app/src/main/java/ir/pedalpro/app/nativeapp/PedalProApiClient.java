@@ -93,6 +93,80 @@ public final class PedalProApiClient {
         }finally{if(c!=null)c.disconnect();}
     }
 
+    public JSONObject postMultipartChunk(
+            String action,
+            java.util.Map<String,String> fields,
+            Uri fileUri,
+            String fileField,
+            String fileName,
+            String mimeType,
+            long offset,
+            long length) throws Exception {
+        String boundary="----PedalProChunk"+System.currentTimeMillis();
+        HttpURLConnection c=null;
+        try{
+            URL url=new URL(BASE_URL+"?action="+java.net.URLEncoder.encode(action,StandardCharsets.UTF_8.name()));
+            c=(HttpURLConnection)url.openConnection();
+            c.setConnectTimeout(12000);
+            c.setReadTimeout(45000);
+            c.setRequestMethod("POST");
+            c.setDoOutput(true);
+            c.setChunkedStreamingMode(64*1024);
+            c.setRequestProperty("Accept","application/json");
+            c.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
+            String cookie=session.cookie();if(!cookie.isBlank())c.setRequestProperty("Cookie",cookie);
+            String csrf=session.csrf();if(!csrf.isBlank())c.setRequestProperty("X-CSRF-Token",csrf);
+
+            try(DataOutputStream out=new DataOutputStream(c.getOutputStream())){
+                if(fields!=null)for(java.util.Map.Entry<String,String> e:fields.entrySet()){
+                    writeTextPart(out,boundary,e.getKey(),e.getValue()==null?"":e.getValue());
+                }
+
+                String safeName=(fileName==null||fileName.isBlank())?"chunk.part":fileName.replace(""","");
+                String type=(mimeType==null||mimeType.isBlank())?"application/octet-stream":mimeType;
+                out.writeBytes("--"+boundary+"\r\n");
+                out.writeBytes("Content-Disposition: form-data; name=\""+fileField+"\"; filename=\""+safeName+"\"\r\n");
+                out.writeBytes("Content-Type: "+type+"\r\n\r\n");
+
+                try(InputStream in=context.getContentResolver().openInputStream(fileUri)){
+                    if(in==null)throw new IllegalStateException("فایل انتخاب‌شده قابل خواندن نیست.");
+                    long skipped=0;
+                    while(skipped<offset){
+                        long n=in.skip(offset-skipped);
+                        if(n>0){skipped+=n;continue;}
+                        if(in.read()==-1)throw new IllegalStateException("بخش فایل قابل خواندن نیست.");
+                        skipped++;
+                    }
+                    byte[] buf=new byte[64*1024];
+                    long remaining=Math.max(0,length);
+                    while(remaining>0){
+                        int n=in.read(buf,0,(int)Math.min(buf.length,remaining));
+                        if(n<0)break;
+                        out.write(buf,0,n);
+                        remaining-=n;
+                    }
+                    if(remaining>0)throw new IllegalStateException("بخش فایل ناقص خوانده شد.");
+                }
+
+                out.writeBytes("\r\n--"+boundary+"--\r\n");
+                out.flush();
+            }
+
+            int status=c.getResponseCode();
+            captureCookies(c);
+            String raw=readBody(status>=400?c.getErrorStream():c.getInputStream());
+            JSONObject json=new JSONObject(raw==null||raw.isBlank()?"{}":raw);
+            String csrf=json.optString("csrf","");
+            if(!csrf.isBlank())session.saveCsrf(csrf);
+            if(status<200||status>=300||!json.optBoolean("ok",true)){
+                throw new IllegalStateException(json.optString("error","HTTP "+status));
+            }
+            return json;
+        }finally{
+            if(c!=null)c.disconnect();
+        }
+    }
+
     private void writeTextPart(DataOutputStream out,String boundary,String name,String value)throws Exception{
         out.writeBytes("--"+boundary+"\r\n");
         out.writeBytes("Content-Disposition: form-data; name=\""+name+"\"\r\n\r\n");
