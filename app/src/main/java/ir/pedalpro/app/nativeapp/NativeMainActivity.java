@@ -4412,6 +4412,7 @@ public final class NativeMainActivity extends Activity {
         PedalActionView bikes=action(PedalIconView.Icon.RIDE,"دوچرخه‌های من",PedalActionView.Style.OUTLINE);bikes.setOnClickListener(v->showBikes());content.addView(bikes,fullActionLp(52));
         PedalActionView fitness=action(PedalIconView.Icon.CHART,"وضعیت بدن",PedalActionView.Style.OUTLINE);fitness.setOnClickListener(v->showFitness());content.addView(fitness,fullActionLp(52));
         PedalActionView safety=action(PedalIconView.Icon.SHIELD,"ایمنی و حریم خصوصی",PedalActionView.Style.OUTLINE);safety.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(safety,fullActionLp(52));
+        PedalActionView settings=action(PedalIconView.Icon.SETTINGS,"تنظیمات اپلیکیشن و کلیدهای نشان",PedalActionView.Style.OUTLINE);settings.setOnClickListener(v->openNativeAppSettings());content.addView(settings,fullActionLp(52));
         PedalActionView refresh=action(PedalIconView.Icon.REFRESH,"بروزرسانی اطلاعات",PedalActionView.Style.OUTLINE);refresh.setOnClickListener(v->refreshAndRender(this::showMe));content.addView(refresh,fullActionLp(50));
         PedalActionView logout=action(PedalIconView.Icon.CLOSE,"خروج از حساب",PedalActionView.Style.OUTLINE);logout.setAccent(RED);logout.setOnClickListener(v->io.execute(()->{try{api.logout();}catch(Exception ignored){session.clear();}main.post(()->{bootstrap=null;activeRide=null;showLogin();});}));content.addView(logout,fullActionLp(50));
         VazirmatnLoader.apply(this,content);animatePageIn();
@@ -5718,10 +5719,11 @@ public final class NativeMainActivity extends Activity {
 
         if (signedIn()) {
             body.addView(drawerSection("حساب من", "👤",
-                    new String[]{"👤", "⚙", "⬆", "ⓘ", "📘"},
-                    new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
+                    new String[]{"👤", "⚙", "⚙", "⬆", "ⓘ", "📘"},
+                    new String[]{"پروفایل من", "تنظیمات اپلیکیشن و نشان", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
                     new Runnable[]{
                             () -> { d.dismiss(); showProfileEditor(); },
+                            () -> { d.dismiss(); openNativeAppSettings(); },
                             () -> { d.dismiss(); showPhoneSettingsPage(); },
                             () -> { d.dismiss(); showAppVersionPage(); },
                             () -> { d.dismiss(); showAboutGroupPage(); },
@@ -6358,6 +6360,10 @@ public final class NativeMainActivity extends Activity {
         });
     }
 
+    private void openNativeAppSettings(){
+        startActivity(new Intent(this,NativeAppSettingsActivity.class));
+    }
+
     private void showPhoneSettingsPage() {
         currentPage = "phone-settings";
         if (!signedIn()) { showAuthDialog("login"); return; }
@@ -6433,9 +6439,12 @@ public final class NativeMainActivity extends Activity {
         autostart.setOnClickListener(v -> openAutostartSettingsNative());
         shell.addView(autostart, fullActionLp(50));
 
-        PedalActionView app = action(PedalIconView.Icon.SETTINGS, "تنظیمات PedalPro", PedalActionView.Style.OUTLINE);
+        PedalActionView app = action(PedalIconView.Icon.SETTINGS, "مجوزهای Android برای PedalPro", PedalActionView.Style.OUTLINE);
         app.setOnClickListener(v -> openAppSettingsNative());
         shell.addView(app, fullActionLp(50));
+        PedalActionView appInside = action(PedalIconView.Icon.SETTINGS,"تنظیمات داخل اپ و نشان",PedalActionView.Style.PRIMARY);
+        appInside.setOnClickListener(v->openNativeAppSettings());
+        shell.addView(appInside,fullActionLp(52));
 
         LinearLayout notice = new LinearLayout(this);
         notice.setOrientation(LinearLayout.VERTICAL);
