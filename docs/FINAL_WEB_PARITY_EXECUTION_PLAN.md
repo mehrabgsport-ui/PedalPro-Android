@@ -43,7 +43,7 @@ Status: IN PROGRESS
 - Current batch complete: mobile single-column home report, corrected guide PDF target, member cards linked to native member detail.
 
 ## Phase 4 — Account and personal data
-Status: IN PROGRESS
+Status: DONE
 - Login/signup/reset modal parity.
 - Profile editor.
 - Phone verification and admin manual phone.
@@ -53,9 +53,12 @@ Status: IN PROGRESS
 - Bikes.
 - Body/Fitness data.
 - App/version and phone settings.
+- Profile summary/edit flow, phone verification, social links, medals/challenges and account actions aligned.
+- Bikes list/editor, member bike details, body metrics summary/history/chart and store-channel update page aligned.
+- Native RC QA and Android Store Release Build verified successful at phase close.
 
 ## Phase 5 — Ride and live-operation screens
-Status: PENDING
+Status: IN PROGRESS
 - Ride start/pause/resume/finish UI.
 - Low-power OLED screen.
 - Live rider detail and live navigation.
