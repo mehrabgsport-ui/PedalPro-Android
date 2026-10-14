@@ -297,7 +297,8 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         boolean any=false;
 
         if(canEdit){
-            Button privacy=normal("🔒 ویرایش انتشار و حریم مسیر");
+            PedalActionView privacy=new PedalActionView(this,PedalIconView.Icon.SHIELD,
+                    "ویرایش انتشار و حریم مسیر",PedalActionView.Style.OUTLINE);
             privacy.setOnClickListener(v->NativeRidePrivacyDialog.show(
                     this,api,io,ride,boot,
                     isPublic->load(false)));
@@ -305,7 +306,8 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
             any=true;
         }
         if(active&&!owner){
-            Button nav=primary("🟡 مسیریابی دوچرخه تا این رکاب‌زن");
+            PedalActionView nav=new PedalActionView(this,PedalIconView.Icon.ROUTE,
+                    "مسیریابی دوچرخه تا این رکاب‌زن",PedalActionView.Style.PRIMARY);
             nav.setOnClickListener(v->{
                 Intent i=new Intent(this,NativeLiveNavigationActivity.class);
                 i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"live");
