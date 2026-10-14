@@ -191,6 +191,15 @@ Status: IN PROGRESS
 - **Known gaps:** entering the MOBILE key does not independently activate the license-bound Neshan Android MapView; precise pixel parity and provider maps still need physical-device testing and signed SDK license, true cycling route matching and shared backend safety gates. More web-only admin/bot contract fields must be discovered from actual server sources; no arbitrary API actions were invented.
 - CI and store artifact status for latest RC4 HEAD must be verified before declaring the build ready; `main` stays untouched.
 
+### Phase 5/7/8 — Unified admin settings and navigation camera RC5 (2026-10-14)
+- One admin-only site-settings entry beside the account in `NativeMainActivity`; remove duplicate admin drawer, profile Neshan key, ride-tool settings and phone-settings shortcuts.
+- Native settings tabs consolidated: General, SEO/Robots, Neshan, Bale bot, Appearance, Medals, Users/Roles, SMS, App Release/Notifications, Push/FCM, System, and an audited view of extra site/UI fields.
+- `NativeSiteSettingsActivity.renderNeshan`: separate MOBILE/Routing credentials encrypted locally in Android Keystore. Existing `NativeAppSettingsActivity` now redirects authorized admins; ordinary members cannot access private keys.
+- `NativeSiteSettingsActivity.renderBale`: **read-only, masked** display of actual Bale bot fields only when returned by the existing authorized site bootstrap. No guessed endpoint or bot-token save. Web 4.7.46 source/authenticated settings were not accessible; exact Bale field and action parity is **NOT VERIFIED**. See `docs/BALE_SITE_SETTINGS_PARITY.md`.
+- `NativeRouteView`: optional rider-follow, heading-up 2.5D visual map with buffered XYZ tiles; `NativeMainActivity` receives bearing from unchanged TrackingService updates and applies it only to presentation while moving. **Not genuine Neshan 3D tilt** and not a change to stored GPS.
+- RC5 `versionCode 49`; release CI/Android device testing remain a hard gate. Genuine Neshan Android SDK still requires the licensed MapView build and device-level camera alignment. Do not claim 100% web parity.
+- Keep `main` unchanged; no marketplace publication before approval.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
