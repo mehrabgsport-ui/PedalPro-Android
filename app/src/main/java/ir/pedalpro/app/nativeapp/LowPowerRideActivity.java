@@ -6,7 +6,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,6 +27,10 @@ import java.util.Locale;
 
 import ir.pedalpro.app.TrackingService;
 
+/**
+ * OLED low-power ride surface.
+ * Presentation only: tracking, GPS filtering and distance computation remain owned by TrackingService/server.
+ */
 public final class LowPowerRideActivity extends Activity {
     public static final String EXTRA_RIDE_ID="ride_id";
     public static final String EXTRA_BASE_SECONDS="base_seconds";
@@ -39,29 +42,40 @@ public final class LowPowerRideActivity extends Activity {
     private long anchor;
     private double distanceKm;
     private boolean paused;
-    private TextView time,speed,distance,pauseLabel;
+    private TextView time;
+    private TextView speed;
+    private TextView distance;
+    private PedalIconView pauseIcon;
     private SessionStore session;
 
     private final Runnable tick=new Runnable(){
         @Override public void run(){
             long sec=baseSeconds;
-            if(!paused&&anchor>0)sec+=Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L);
-            time.setText(format(sec));
-            main.postDelayed(this,1000);
+            if(!paused&&anchor>0){
+                sec+=Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L);
+            }
+            if(time!=null)time.setText(format(sec));
+            main.postDelayed(this,1000L);
         }
     };
 
     private final BroadcastReceiver receiver=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
             if(i==null||!TrackingService.ACTION_UPDATE.equals(i.getAction()))return;
-            String p=i.getStringExtra(TrackingService.EXTRA_PAYLOAD);if(p==null)return;
+            String payload=i.getStringExtra(TrackingService.EXTRA_PAYLOAD);
+            if(payload==null)return;
             try{
-                JSONObject j=new JSONObject(p);
-                speed.setText(String.format(Locale.US,"%.1f",Math.max(0,j.optDouble("speed_mps",0)*3.6)));
+                JSONObject j=new JSONObject(payload);
+                if(!paused&&speed!=null){
+                    speed.setText(String.format(Locale.US,"%.1f",Math.max(0,j.optDouble("speed_mps",0)*3.6)));
+                }
                 String response=j.optString("response","");
                 if(!response.isBlank()){
                     JSONObject r=new JSONObject(response).optJSONObject("ride");
-                    if(r!=null){distanceKm=r.optDouble("distance_km",distanceKm);distance.setText(String.format(Locale.US,"%.2f",distanceKm));}
+                    if(r!=null){
+                        distanceKm=r.optDouble("distance_km",distanceKm);
+                        if(distance!=null)distance.setText(String.format(Locale.US,"%.2f",distanceKm));
+                    }
                 }
             }catch(Exception ignored){}
         }
@@ -71,57 +85,150 @@ public final class LowPowerRideActivity extends Activity {
         super.onCreate(state);
         session=new SessionStore(this);
         rideId=getIntent().getIntExtra(EXTRA_RIDE_ID,0);
-        baseSeconds=getIntent().getLongExtra(EXTRA_BASE_SECONDS,0);
-        distanceKm=getIntent().getDoubleExtra(EXTRA_DISTANCE_KM,0);
+        baseSeconds=Math.max(0,getIntent().getLongExtra(EXTRA_BASE_SECONDS,0));
+        distanceKm=Math.max(0,getIntent().getDoubleExtra(EXTRA_DISTANCE_KM,0));
         anchor=SystemClock.elapsedRealtime();
+
         WindowCompat.setDecorFitsSystemWindows(getWindow(),false);
-        getWindow().setStatusBarColor(Color.BLACK);getWindow().setNavigationBarColor(Color.BLACK);
+        getWindow().setStatusBarColor(Color.BLACK);
+        getWindow().setNavigationBarColor(Color.BLACK);
+
         build();
         register();
         main.post(tick);
     }
 
     private void build(){
-        FrameLayout root=new FrameLayout(this);root.setBackgroundColor(Color.BLACK);
-        ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{androidx.core.graphics.Insets b=insets.getInsets(WindowInsetsCompat.Type.systemBars());v.setPadding(0,b.top,0,b.bottom);return insets;});
+        FrameLayout root=new FrameLayout(this);
+        root.setBackgroundColor(Color.BLACK);
+        root.setKeepScreenOn(true);
 
-        LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setGravity(Gravity.CENTER);body.setPadding(dp(22),dp(30),dp(22),dp(30));
-        TextView low=new TextView(this);low.setText("حالت کم‌مصرف");low.setTextColor(Color.rgb(115,130,135));low.setTextSize(12);low.setGravity(Gravity.CENTER);body.addView(low);
+        ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{
+            androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(0,bars.top,0,bars.bottom);
+            return insets;
+        });
 
-        time=metric("00:00:00",54);speed=metric("0.0",76);distance=metric(String.format(Locale.US,"%.2f",distanceKm),58);
-        body.addView(label("زمان"));body.addView(time);
-        body.addView(label("سرعت  km/h"));body.addView(speed);
-        body.addView(label("مسافت  km"));body.addView(distance);
+        TextView back=new TextView(this);
+        back.setText("↩");
+        back.setTextColor(Color.WHITE);
+        back.setTextSize(32);
+        back.setGravity(Gravity.CENTER);
+        back.setIncludeFontPadding(false);
+        back.setBackgroundColor(Color.TRANSPARENT);
+        back.setContentDescription("بازگشت");
+        back.setClickable(true);
+        back.setFocusable(true);
+        back.setOnClickListener(v->finish());
+        FrameLayout.LayoutParams backLp=new FrameLayout.LayoutParams(dp(58),dp(58),Gravity.TOP|Gravity.END);
+        backLp.setMargins(0,dp(8),dp(10),0);
+        root.addView(back,backLp);
 
-        LinearLayout controls=new LinearLayout(this);controls.setOrientation(LinearLayout.HORIZONTAL);controls.setGravity(Gravity.CENTER);controls.setPadding(0,dp(28),0,0);
-        LinearLayout pause=control(PedalIconView.Icon.PAUSE,"توقف");pauseLabel=(TextView)pause.getChildAt(1);pause.setOnClickListener(v->togglePause());
-        LinearLayout back=control(PedalIconView.Icon.BACK,"بازگشت");back.setOnClickListener(v->finish());
-        controls.addView(pause,new LinearLayout.LayoutParams(dp(118),dp(82)));LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(118),dp(82));bp.setMargins(dp(24),0,0,0);controls.addView(back,bp);
-        body.addView(controls);
+        LinearLayout metrics=new LinearLayout(this);
+        metrics.setOrientation(LinearLayout.VERTICAL);
+        metrics.setGravity(Gravity.CENTER_HORIZONTAL);
+        metrics.setPadding(dp(18),0,dp(18),0);
 
-        root.addView(body,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
-        DisplayFontLoader.applyAnton(this,time,speed,distance);VazirmatnLoader.apply(this,root);
+        metrics.addView(metricLabel("زمان"));
+        time=metric("00:00:00",58);
+        metrics.addView(time,new LinearLayout.LayoutParams(-1,dp(82)));
+
+        metrics.addView(metricLabel("سرعت  km/h"));
+        speed=metric("0.0",86);
+        metrics.addView(speed,new LinearLayout.LayoutParams(-1,dp(110)));
+
+        metrics.addView(metricLabel("مسافت  km"));
+        distance=metric(String.format(Locale.US,"%.2f",distanceKm),66);
+        metrics.addView(distance,new LinearLayout.LayoutParams(-1,dp(94)));
+
+        FrameLayout.LayoutParams metricsLp=new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER);
+        metricsLp.topMargin=dp(70);
+        root.addView(metrics,metricsLp);
+
+        FrameLayout pause=new FrameLayout(this);
+        pause.setBackgroundColor(Color.TRANSPARENT);
+        pause.setClickable(true);
+        pause.setFocusable(true);
+        pause.setContentDescription("توقف");
+        pauseIcon=new PedalIconView(this,PedalIconView.Icon.PAUSE,Color.WHITE);
+        pause.addView(pauseIcon,new FrameLayout.LayoutParams(dp(46),dp(46),Gravity.CENTER));
+        pause.setOnClickListener(v->togglePause());
+        FrameLayout.LayoutParams pauseLp=new FrameLayout.LayoutParams(dp(86),dp(72),Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM);
+        pauseLp.bottomMargin=dp(28);
+        root.addView(pause,pauseLp);
+
+        setContentView(root);
+        DisplayFontLoader.applyAnton(this,time,speed,distance);
     }
 
-    private TextView metric(String value,int sp){TextView t=new TextView(this);t.setText(value);t.setTextColor(Color.WHITE);t.setTextSize(sp);t.setGravity(Gravity.CENTER);t.setIncludeFontPadding(false);return t;}
-    private TextView label(String s){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.rgb(132,148,152));t.setTextSize(11);t.setGravity(Gravity.CENTER);t.setPadding(0,dp(16),0,0);return t;}
-    private LinearLayout control(PedalIconView.Icon icon,String title){LinearLayout h=new LinearLayout(this);h.setOrientation(LinearLayout.VERTICAL);h.setGravity(Gravity.CENTER);PedalIconView i=new PedalIconView(this,icon,Color.WHITE);TextView l=label(title);l.setPadding(0,dp(2),0,0);h.addView(i,new LinearLayout.LayoutParams(dp(38),dp(38)));h.addView(l);h.setClickable(true);h.setContentDescription(title);return h;}
+    private TextView metric(String value,int sp){
+        TextView t=new TextView(this);
+        t.setText(value);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(sp);
+        t.setGravity(Gravity.CENTER);
+        t.setIncludeFontPadding(false);
+        t.setLetterSpacing(.01f);
+        return t;
+    }
+
+    private TextView metricLabel(String value){
+        TextView t=new TextView(this);
+        t.setText(value);
+        t.setTextColor(Color.rgb(142,150,154));
+        t.setTextSize(12);
+        t.setGravity(Gravity.CENTER);
+        t.setIncludeFontPadding(false);
+        return t;
+    }
 
     private void togglePause(){
         if(rideId<=0)return;
+
         if(!paused){
-            Intent stop=new Intent(this,TrackingService.class);stop.setAction(TrackingService.ACTION_STOP);startService(stop);
-            long elapsed=anchor>0?Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L):0;baseSeconds+=elapsed;anchor=0;paused=true;speed.setText("0.0");
-            PedalIconView icon=(PedalIconView)((LinearLayout)pauseLabel.getParent()).getChildAt(0);icon.setIcon(PedalIconView.Icon.PLAY);pauseLabel.setText("ادامه");
+            Intent stop=new Intent(this,TrackingService.class);
+            stop.setAction(TrackingService.ACTION_STOP);
+            startService(stop);
+
+            long elapsed=anchor>0?Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L):0;
+            baseSeconds+=elapsed;
+            anchor=0;
+            paused=true;
+            speed.setText("0.0");
+            pauseIcon.setIcon(PedalIconView.Icon.PLAY);
+            pauseIcon.setContentDescription("ادامه");
         }else{
-            Intent start=new Intent(this,TrackingService.class);start.setAction(TrackingService.ACTION_START);start.putExtra("ride_id",rideId);start.putExtra("csrf",session.csrf());start.putExtra("max_accuracy",25d);start.putExtra("max_speed_kmh",100d);
-            ContextCompat.startForegroundService(this,start);paused=false;anchor=SystemClock.elapsedRealtime();
-            PedalIconView icon=(PedalIconView)((LinearLayout)pauseLabel.getParent()).getChildAt(0);icon.setIcon(PedalIconView.Icon.PAUSE);pauseLabel.setText("توقف");
+            Intent start=new Intent(this,TrackingService.class);
+            start.setAction(TrackingService.ACTION_START);
+            start.putExtra("ride_id",rideId);
+            start.putExtra("csrf",session.csrf());
+            start.putExtra("max_accuracy",25d);
+            start.putExtra("max_speed_kmh",100d);
+            ContextCompat.startForegroundService(this,start);
+
+            paused=false;
+            anchor=SystemClock.elapsedRealtime();
+            pauseIcon.setIcon(PedalIconView.Icon.PAUSE);
+            pauseIcon.setContentDescription("توقف");
         }
     }
 
-    private void register(){IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);ContextCompat.registerReceiver(this,receiver,f,ContextCompat.RECEIVER_NOT_EXPORTED);}
-    private String format(long sec){return String.format(Locale.US,"%02d:%02d:%02d",sec/3600,(sec%3600)/60,sec%60);}
-    private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
-    @Override protected void onDestroy(){main.removeCallbacks(tick);try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onDestroy();}
+    private void register(){
+        IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);
+        ContextCompat.registerReceiver(this,receiver,f,ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+
+    private String format(long sec){
+        return String.format(Locale.US,"%02d:%02d:%02d",sec/3600,(sec%3600)/60,sec%60);
+    }
+
+    private int dp(int v){
+        return Math.round(v*getResources().getDisplayMetrics().density);
+    }
+
+    @Override protected void onDestroy(){
+        main.removeCallbacks(tick);
+        try{unregisterReceiver(receiver);}catch(Exception ignored){}
+        super.onDestroy();
+    }
 }
