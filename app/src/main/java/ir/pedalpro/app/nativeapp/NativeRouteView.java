@@ -285,6 +285,9 @@ public final class NativeRouteView extends View {
 
     public boolean isHeadingUpEnabled() { return headingUpEnabled; }
 
+    public boolean hasHeadingDegrees(){return hasNavigationBearing;}
+    public float getHeadingDegrees(){return navigationBearing;}
+
     /** Android Location bearing: 0=north, 90=east. Ignore invalid/unknown fixes. */
     public void setHeadingDegrees(float bearing) {
         if(!Float.isFinite(bearing))return;
