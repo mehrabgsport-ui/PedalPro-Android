@@ -5883,15 +5883,156 @@ public final class NativeMainActivity extends Activity {
         selectNav(null);
         content.removeAllViews();
         addHero("نسخه اپلیکیشن", "");
+
         LinearLayout box = glassCard(24);
-        box.addView(text("PedalPro Android", 18, true, TEXT));
-        box.addView(text("نسخه " + ir.pedalpro.app.BuildConfig.VERSION_NAME + " · کد " + ir.pedalpro.app.BuildConfig.VERSION_CODE, 12, false, MUTED));
-        PedalActionView update = action(PedalIconView.Icon.REFRESH, "بررسی بروزرسانی", PedalActionView.Style.PRIMARY);
-        update.setOnClickListener(v -> openStoreUpdatePage());
-        box.addView(update, fullActionLp(54));
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        titleRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        titleRow.addView(text("نسخه اپلیکیشن PedalPro", 18, true, TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView badge = text("نسخه اندروید", 10, true, Color.rgb(22, 228, 239));
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(9), dp(6), dp(9), dp(6));
+        badge.setBackground(roundRect(Color.argb(24, 22, 228, 239), 14, Color.argb(76, 22, 228, 239)));
+        titleRow.addView(badge);
+        box.addView(titleRow);
+
+        TextView subtitle = text("بررسی نسخه و دریافت بروزرسانی از مارکت رسمی همین نسخه", 11, false, MUTED);
+        subtitle.setPadding(0, dp(5), 0, dp(10));
+        box.addView(subtitle);
+
+        LinearLayout stats = new LinearLayout(this);
+        stats.setOrientation(LinearLayout.VERTICAL);
+        TextView installed = text(ir.pedalpro.app.BuildConfig.VERSION_NAME, 15, true, TEXT);
+        TextView latest = text("در حال بررسی…", 15, true, TEXT);
+        TextView status = text("در حال بررسی…", 15, true, MUTED);
+
+        LinearLayout first = new LinearLayout(this);
+        first.setOrientation(LinearLayout.HORIZONTAL);
+        first.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        first.addView(versionStat("نسخه نصب‌شده", installed), new LinearLayout.LayoutParams(0, -2, 1f));
+        first.addView(versionStat("آخرین نسخه منتشرشده", latest), new LinearLayout.LayoutParams(0, -2, 1f));
+        stats.addView(first);
+
+        LinearLayout second = new LinearLayout(this);
+        second.setOrientation(LinearLayout.HORIZONTAL);
+        second.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        second.addView(versionStat("وضعیت", status), new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView code = text(JalaliDate.fa(ir.pedalpro.app.BuildConfig.VERSION_CODE), 15, true, TEXT);
+        second.addView(versionStat("Version Code", code), new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams secondLp = new LinearLayout.LayoutParams(-1, -2);
+        secondLp.setMargins(0, dp(8), 0, 0);
+        stats.addView(second, secondLp);
+        box.addView(stats);
+
+        TextView releaseNotes = text("در حال دریافت توضیحات نسخه…", 11, false, MUTED);
+        releaseNotes.setPadding(dp(12), dp(11), dp(12), dp(11));
+        releaseNotes.setBackground(roundRect(Color.argb(9, 255, 255, 255), 15, Color.argb(30, 255, 255, 255)));
+        LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, -2);
+        noteLp.setMargins(0, dp(12), 0, 0);
+        box.addView(releaseNotes, noteLp);
+
+        String channel = ir.pedalpro.app.BuildConfig.STORE_CHANNEL;
+        String marketName = "bazaar".equals(channel) ? "کافه‌بازار" : "مایکت";
+        TextView marketHint = text("نصب و بروزرسانی این نسخه فقط از " + marketName + " انجام می‌شود. نسخه‌های مارکت پس از بررسی و انتشار قابل دریافت هستند.", 11, false, MUTED);
+        marketHint.setPadding(0, dp(10), 0, 0);
+        box.addView(marketHint);
+
+        PedalActionView check = action(PedalIconView.Icon.REFRESH, "بررسی نسخه و بروزرسانی", PedalActionView.Style.PRIMARY);
+        PedalActionView market = action(PedalIconView.Icon.DETAILS,
+                "باز کردن " + marketName, PedalActionView.Style.OUTLINE);
+        market.setOnClickListener(v -> openStoreUpdatePage());
+        box.addView(check, fullActionLp(54));
+        box.addView(market, fullActionLp(50));
+
         content.addView(box, cardLp());
+
+        Runnable load = () -> loadAppReleaseStatus(latest, status, releaseNotes, check);
+        check.setOnClickListener(v -> {
+            check.setEnabled(false);
+            load.run();
+        });
+        load.run();
+
         VazirmatnLoader.apply(this, content);
         animatePageIn();
+    }
+
+    private View versionStat(String label, TextView value) {
+        LinearLayout stat = new LinearLayout(this);
+        stat.setOrientation(LinearLayout.VERTICAL);
+        stat.setGravity(Gravity.CENTER);
+        stat.setPadding(dp(10), dp(10), dp(10), dp(10));
+        stat.setBackground(roundRect(Color.argb(10, 255, 255, 255), 14, Color.argb(31, 255, 255, 255)));
+        TextView name = text(label, 10, false, MUTED);
+        name.setGravity(Gravity.CENTER);
+        value.setGravity(Gravity.CENTER);
+        stat.addView(name);
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(-1, -2);
+        vlp.setMargins(0, dp(5), 0, 0);
+        stat.addView(value, vlp);
+        return stat;
+    }
+
+    private void loadAppReleaseStatus(TextView latest, TextView status, TextView notes, PedalActionView button) {
+        latest.setText("در حال بررسی…");
+        status.setText("در حال بررسی…");
+        status.setTextColor(MUTED);
+        io.execute(() -> {
+            try {
+                JSONObject d = api.get("app_latest_release");
+                JSONObject release = d.optJSONObject("release");
+                String latestName = release == null ? "—" : release.optString("version_name", "—");
+                int latestCode = release == null ? 0 : release.optInt("version_code", 0);
+                String releaseText = release == null ? "" : release.optString("release_notes", "");
+                int byName = compareVersionNames(latestName, ir.pedalpro.app.BuildConfig.VERSION_NAME);
+                boolean newer = byName > 0 || (byName == 0 && latestCode > ir.pedalpro.app.BuildConfig.VERSION_CODE);
+                boolean same = byName == 0 && (latestCode <= 0 || latestCode == ir.pedalpro.app.BuildConfig.VERSION_CODE);
+                main.post(() -> {
+                    latest.setText(latestName);
+                    if (newer) {
+                        status.setText("بروزرسانی موجود است");
+                        status.setTextColor(ORANGE);
+                    } else if (same) {
+                        status.setText("به‌روز هستید");
+                        status.setTextColor(GREEN);
+                    } else {
+                        status.setText("نسخه نصب‌شده جدیدتر است");
+                        status.setTextColor(Color.rgb(22, 228, 239));
+                    }
+                    notes.setText(releaseText.isBlank() ? "برای این نسخه توضیحی ثبت نشده است." : releaseText);
+                    button.setEnabled(true);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    latest.setText("—");
+                    status.setText("خطا در بررسی");
+                    status.setTextColor(RED);
+                    notes.setText(e.getMessage() == null ? "خطا در دریافت نسخه" : e.getMessage());
+                    button.setEnabled(true);
+                });
+            }
+        });
+    }
+
+    private int compareVersionNames(String a, String b) {
+        String[] aa = (a == null ? "" : a).replaceFirst("^[vV]", "").split("[.+\\-]");
+        String[] bb = (b == null ? "" : b).replaceFirst("^[vV]", "").split("[.+\\-]");
+        int n = Math.max(3, Math.max(aa.length, bb.length));
+        for (int i = 0; i < n; i++) {
+            int av = i < aa.length ? firstVersionNumber(aa[i]) : 0;
+            int bv = i < bb.length ? firstVersionNumber(bb[i]) : 0;
+            if (av != bv) return av > bv ? 1 : -1;
+        }
+        return 0;
+    }
+
+    private int firstVersionNumber(String value) {
+        if (value == null) return 0;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(value);
+        if (!m.find()) return 0;
+        try { return Integer.parseInt(m.group()); }
+        catch (Exception ignored) { return 0; }
     }
 
     private void openStoreUpdatePage() {
