@@ -156,8 +156,8 @@ public final class PedalProApiClient {
             captureCookies(c);
             String raw=readBody(status>=400?c.getErrorStream():c.getInputStream());
             JSONObject json=new JSONObject(raw==null||raw.isBlank()?"{}":raw);
-            String csrf=json.optString("csrf","");
-            if(!csrf.isBlank())session.saveCsrf(csrf);
+            String responseCsrf=json.optString("csrf","");
+            if(!responseCsrf.isBlank())session.saveCsrf(responseCsrf);
             if(status<200||status>=300||!json.optBoolean("ok",true)){
                 throw new IllegalStateException(json.optString("error","HTTP "+status));
             }
