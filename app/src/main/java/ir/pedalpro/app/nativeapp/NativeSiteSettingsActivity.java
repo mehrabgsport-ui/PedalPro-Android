@@ -6,9 +6,12 @@ import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.text.InputType;
+import android.content.SharedPreferences;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -43,6 +46,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         switch (tab) {
             case "general": case "seo": case "appearance": case "medals":
             case "users": case "sms": case "appmanager": case "push": case "system":
+            case "neshan": case "bale": case "other":
                 return true;
             default: return false;
         }
@@ -78,6 +82,9 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         setSubtitle("مدیریت PedalPro", GREEN);
         renderTabs();
         switch (activeTab) {
+            case "neshan": renderNeshan(); break;
+            case "bale": renderBale(); break;
+            case "other": renderUnmirroredSiteSettings(); break;
             case "seo": renderSeo(); break;
             case "appearance": renderAppearance(); break;
             case "medals": renderMedals(); break;
@@ -101,6 +108,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
 
         addTab(row, "general", "عمومی");
         addTab(row, "seo", "SEO / Robots");
+        addTab(row, "neshan", "نقشه نشان");
+        addTab(row, "bale", "ربات بله");
         addTab(row, "appearance", "ظاهر سایت و اپ");
         addTab(row, "medals", "مدال‌ها");
         addTab(row, "users", "کاربران");
@@ -108,6 +117,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         addTab(row, "appmanager", "اپلیکیشن و اعلان‌ها");
         addTab(row, "push", "Push");
         addTab(row, "system", "سیستم");
+        addTab(row, "other", "سایر تنظیمات سایت");
 
         hsv.addView(row);
         content.addView(hsv, new LinearLayout.LayoutParams(-1, dp(58)));
