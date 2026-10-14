@@ -137,6 +137,24 @@ Status: IN PROGRESS
 - Exact 4.7.46 PPUP and reference screenshots were not found in accessible sources. Pixel parity and all seven guest/member/admin/device acceptance matrices remain outstanding.
 - Phase 8 stays PENDING for final sign-off until preceding stages pass independent release/device verification.
 
+### Phase 6 — Pro/communications hardening batch 6B (2026-10-14)
+- `653abc911e88`: fixed actual Replay playback cursor stall; cancel offscreen Replay/Flyover animation and discard stale async tab responses.
+- `234b2eaf682d`: Replay and Flyover playback controls use native vector Play/Pause icons and state labels.
+- `eae61fe6f5e6`: dedicated Native AI activity prevents duplicate sends and late history response erasure; preserves unsent prompt when network fails.
+- `63485d647aaa`, `59163db1d458`: group/private chat room IDs are captured before asynchronous calls; late responses cannot render private messages in another room; polling pauses offscreen.
+- `0eb83687effa`: primary NativeMainActivity AI advisor also ignores late history, supports both existing history envelope keys, and restores pending text after failures.
+- Outstanding: on-device chat/privacy verification, animation timing and Web 4.7.46 reference screenshots. No GPS, Tracking or map calculation changes.
+
+### Phase 7 — FCM form-state hardening batch 7B (2026-10-14)
+- `3df0d5a9de4b`: snapshot FCM form fields and service credentials on the main thread before remote save/clear actions; clear in-memory credentials on UI thread after server confirmation.
+- Outstanding: Firebase service-account test, APK publishing/signature verification, backend contract verification for bulk/pattern SMS and release rollback.
+
+### Phase 8 — Expanded regression contracts batch 8B (2026-10-14)
+- `a491c761fd3d`: added 12 UI invariant guards covering replay progress, stale AI/chat responses, offscreen polling, Firebase snapshot and Kudos state.
+- Source-level review of six changed Java classes reported balanced braces/parentheses/brackets, and 34 source contract predicates were found in their current committed files; **these are static checks only**.
+- Native RC QA and Android Store Release Build remain UNVERIFIED for current HEAD. No device validation, production-signing certificate verification or final signed APK delivery.
+- Full visual parity continues to require the exact PedalPro Web 4.7.46 reference archive/screenshots.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
