@@ -16,7 +16,7 @@ Status: DONE
 - Android Store Release Build: success.
 
 ## Phase 2 — Global shell parity
-Status: IN PROGRESS
+Status: DONE
 - Header geometry, logo, account/admin/menu controls.
 - Drawer grouping, order, guest/member/admin visibility.
 - Exact Native install-policy behavior: hide web install links.
@@ -24,9 +24,10 @@ Status: IN PROGRESS
 - Server-status placement.
 - Replace temporary emoji/glyph icons with source-equivalent native vectors where source paths are available.
 - Align common card/input/button tokens.
+- Final source glyph treatment, signed-in account state, admin group styling and common input skin aligned.
 
 ## Phase 3 — Core public pages
-Status: PENDING
+Status: IN PROGRESS
 - Home hero, quick cards, live rides, upcoming activity, site feed, report, top riders.
 - Activities/events list/detail/register/gallery.
 - Routes list/detail.
@@ -34,6 +35,7 @@ Status: PENDING
 - Gallery.
 - About.
 - Full user guide and PDF target.
+- Current batch complete: mobile single-column home report, corrected guide PDF target, member cards linked to native member detail.
 
 ## Phase 4 — Account and personal data
 Status: PENDING
