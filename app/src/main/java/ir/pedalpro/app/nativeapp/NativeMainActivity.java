@@ -1013,11 +1013,10 @@ public final class NativeMainActivity extends Activity {
         }
 
         LinearLayout report = new LinearLayout(this);
-        report.setOrientation(LinearLayout.HORIZONTAL);
+        report.setOrientation(LinearLayout.VERTICAL);
         report.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         report.setGravity(Gravity.CENTER_VERTICAL);
-        report.setMinimumHeight(dp(124));
-        report.setPadding(dp(8), dp(14), dp(8), dp(14));
+        report.setPadding(dp(8), dp(10), dp(8), dp(10));
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{Color.argb(184, 16, 61, 84), Color.argb(184, 10, 43, 64)});
@@ -1026,13 +1025,13 @@ public final class NativeMainActivity extends Activity {
         report.setBackground(bg);
 
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_PROGRAMS,
-                JalaliDate.fa(programs), "برنامه برگزار شده"), new LinearLayout.LayoutParams(0, -1, 1f));
-        report.addView(homeReportSeparator());
+                JalaliDate.fa(programs), "برنامه برگزار شده"), new LinearLayout.LayoutParams(-1, dp(82)));
+        report.addView(homeReportMobileSeparator());
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_MEMBERS,
-                JalaliDate.fa(memberCount), "عضو فعال"), new LinearLayout.LayoutParams(0, -1, 1f));
-        report.addView(homeReportSeparator());
+                JalaliDate.fa(memberCount), "عضو فعال"), new LinearLayout.LayoutParams(-1, dp(82)));
+        report.addView(homeReportMobileSeparator());
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_DISTANCE,
-                JalaliDate.fa(Math.round(totalKm)), "کیلومتر رکاب زده"), new LinearLayout.LayoutParams(0, -1, 1f));
+                JalaliDate.fa(Math.round(totalKm)), "کیلومتر رکاب زده"), new LinearLayout.LayoutParams(-1, dp(82)));
         return report;
     }
 
@@ -1069,6 +1068,15 @@ public final class NativeMainActivity extends Activity {
         View line = new View(this);
         line.setBackgroundColor(Color.argb(43, 255, 255, 255));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(1), dp(72));
+        line.setLayoutParams(lp);
+        return line;
+    }
+
+    private View homeReportMobileSeparator() {
+        View line = new View(this);
+        line.setBackgroundColor(Color.argb(43, 255, 255, 255));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
+        lp.setMargins(dp(12), 0, dp(12), 0);
         line.setLayoutParams(lp);
         return line;
     }
@@ -1683,11 +1691,29 @@ public final class NativeMainActivity extends Activity {
             JSONObject m = members.optJSONObject(i);
             if (m == null) continue;
             LinearLayout box = card();
+            box.setClickable(true);
+            box.setFocusable(true);
             String name = m.optString("display_name", m.optString("username", "عضو"));
             box.addView(text(name, 15, true, TEXT));
             String username = m.optString("username", "");
             String role = m.optString("role", "");
             box.addView(text((username.isBlank() ? "" : "@" + username) + (role.isBlank() ? "" : " · " + role), 11, false, MUTED));
+
+            LinearLayout stats = new LinearLayout(this);
+            stats.setOrientation(LinearLayout.HORIZONTAL);
+            stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            stats.setGravity(Gravity.CENTER);
+            stats.addView(memberStat("مسافت", String.format(Locale.US, "%.1f km", m.optDouble("total_distance_m", 0) / 1000d)), new LinearLayout.LayoutParams(0, -2, 1f));
+            stats.addView(memberStat("رکاب‌زنی", JalaliDate.fa(m.optInt("rides_count", 0))), new LinearLayout.LayoutParams(0, -2, 1f));
+            stats.addView(memberStat("چالش", JalaliDate.fa(m.optInt("challenges_count", 0))), new LinearLayout.LayoutParams(0, -2, 1f));
+            LinearLayout.LayoutParams statsLp = new LinearLayout.LayoutParams(-1, -2);
+            statsLp.setMargins(0, dp(10), 0, 0);
+            box.addView(stats, statsLp);
+
+            TextView open = text("مشاهده پروفایل و فعالیت‌ها ‹", 11, true, Color.rgb(22, 228, 239));
+            open.setPadding(0, dp(10), 0, 0);
+            box.addView(open);
+            box.setOnClickListener(v -> showMemberDialog(m));
             content.addView(box, cardLp());
         }
     }
@@ -5302,7 +5328,7 @@ public final class NativeMainActivity extends Activity {
         PedalActionView pdf = action(PedalIconView.Icon.DETAILS, "دانلود راهنمای PDF", PedalActionView.Style.PRIMARY);
         pdf.setOnClickListener(v -> {
             try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://pedalpro.ir/docs/PedalPro_User_Guide_4.7.40.pdf")));
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://pedalpro.ir/assets/PedalPro-Catalog-User-Guide-4.7.40.pdf")));
             } catch (Exception e) {
                 toast(e.getMessage());
             }
