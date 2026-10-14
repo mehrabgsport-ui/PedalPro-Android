@@ -129,6 +129,45 @@ public final class NativeMainActivity extends Activity {
     private TextView rideDockLabel;
     private ScrollView mainScroll;
     private String currentPage = "dashboard";
+    private final java.util.ArrayDeque<PagePosition> backHistory=new java.util.ArrayDeque<>();
+    private boolean replayingBack;
+    private static final class PagePosition {
+        final String page;
+        final int scrollY;
+        PagePosition(String page,int scrollY){this.page=page;this.scrollY=scrollY;}
+    }
+    private void enterPage(String next){
+        if(!replayingBack && currentPage!=null && !currentPage.equals(next)){
+            if(backHistory.size()>=30)backHistory.removeFirst();
+            backHistory.addLast(new PagePosition(currentPage,
+                    mainScroll==null?0:mainScroll.getScrollY()));
+        }
+        currentPage=next;
+    }
+    private void restorePage(String page){
+        switch(page){
+            case "ride":showRide();break;
+            case "activities":showActivities();break;
+            case "routes":showRoutes();break;
+            case "club":showClub();break;
+            case "challenges":showChallenges();break;
+            case "chat":showGroupChat();break;
+            case "ai":showAiAdvisor();break;
+            case "performance":showPerformance();break;
+            case "sensors":showSensors();break;
+            case "profile":showProfileEditor();break;
+            case "bikes":showBikes();break;
+            case "fitness":showFitness();break;
+            case "me":showMe();break;
+            case "about":showAboutGroupPage();break;
+            case "gallery":showGalleryPage();break;
+            case "phone-settings":showPhoneSettingsPage();break;
+            case "app":showAppVersionPage();break;
+            case "guide":showGuidePage();break;
+            case "install":showInstallPage();break;
+            default:showHome();break;
+        }
+    }
     private boolean manualPaused = false;
     private boolean serverOnline = false;
     private String launchPage = "";
@@ -1674,7 +1713,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showHome() {
-        currentPage = "dashboard";
+        enterPage("dashboard");
         selectNav(navHome);
         content.removeAllViews();
 
@@ -1745,7 +1784,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showRide() {
-        currentPage = "ride";
+        enterPage("ride");
         if (!signedIn()) { showLogin(); return; }
         // Refreshes must not discard an already rendered/loaded map: doing so
         // disconnected in-flight tile callbacks and caused the blank screen in RC6.
@@ -2198,7 +2237,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showActivities() {
-        currentPage = "activities";
+        enterPage("activities");
         selectNav(navActivities);
         content.removeAllViews();
 
@@ -2271,7 +2310,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showRoutes() {
-        currentPage = "routes";
+        enterPage("routes");
         selectNav(navRoutes);
         content.removeAllViews();
         addHero("مسیرهای GPS", "");
@@ -2361,7 +2400,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showClub() {
-        currentPage = "club";
+        enterPage("club");
         selectNav(null);
         content.removeAllViews();
         addHero("اعضا", "");
@@ -2422,7 +2461,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showChallenges() {
-        currentPage = "challenges";
+        enterPage("challenges");
         selectNav(null);
         content.removeAllViews();
         addHero("چالش‌ها", "");
@@ -3114,7 +3153,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showGroupChat() {
-        currentPage = "chat";
+        enterPage("chat");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -3232,7 +3271,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showAiAdvisor() {
-        currentPage = "ai";
+        enterPage("ai");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -3334,7 +3373,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showPerformance() {
-        currentPage = "performance";
+        enterPage("performance");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         showLoadingState("در حال محاسبه عملکرد…");
@@ -3455,7 +3494,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showSensors() {
-        currentPage = "sensors";
+        enterPage("sensors");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -3618,7 +3657,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showProfileEditor() {
-        currentPage = "profile";
+        enterPage("profile");
         if (!signedIn()) { showAuthDialog("login"); return; }
         selectNav(null);
         content.removeAllViews();
@@ -4240,7 +4279,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showBikes() {
-        currentPage = "bikes";
+        enterPage("bikes");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -4461,7 +4500,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showFitness() {
-        currentPage = "fitness";
+        enterPage("fitness");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -4612,7 +4651,7 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showMe() {
-        currentPage = "me";
+        enterPage("me");
         if (!signedIn()) { showLogin(); return; }
         selectNav(navMe);
         content.removeAllViews();
@@ -6385,7 +6424,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showAboutGroupPage() {
-        currentPage = "about";
+        enterPage("about");
         selectNav(null);
         content.removeAllViews();
 
@@ -6429,7 +6468,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showGalleryPage() {
-        currentPage = "gallery";
+        enterPage("gallery");
         selectNav(null);
         content.removeAllViews();
         addHero("گالری", "");
@@ -6628,7 +6667,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showPhoneSettingsPage() {
-        currentPage = "phone-settings";
+        enterPage("phone-settings");
         if (!signedIn()) { showAuthDialog("login"); return; }
         selectNav(null);
         content.removeAllViews();
@@ -6723,7 +6762,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showAppVersionPage() {
-        currentPage = "app";
+        enterPage("app");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -6961,7 +7000,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showGuidePage() {
-        currentPage = "guide";
+        enterPage("guide");
         selectNav(null);
         content.removeAllViews();
 
@@ -7096,7 +7135,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showInstallPage() {
-        currentPage = "install";
+        enterPage("install");
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
@@ -7701,11 +7740,25 @@ public final class NativeMainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (activeRideImmersiveOverlay != null && "ride".equals(currentPage)) {
-            showHome();
+        // Leave tracking untouched: back is UI navigation, not stop/finish ride.
+        if(activeRideImmersiveOverlay!=null&&"ride".equals(currentPage)){
+            hideImmersiveRideOverlay();
             return;
         }
-        super.onBackPressed();
+        if(!backHistory.isEmpty()){
+            PagePosition previous=backHistory.removeLast();
+            replayingBack=true;
+            try{restorePage(previous.page);}finally{replayingBack=false;}
+            if(mainScroll!=null)mainScroll.post(()->mainScroll.scrollTo(0,previous.scrollY));
+            return;
+        }
+        if(!"dashboard".equals(currentPage)){showHome();return;}
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("خروج از PedalPro")
+                .setMessage("از برنامه خارج می‌شوید؟ ثبت رکاب‌زنی فعال در پس‌زمینه ادامه پیدا می‌کند.")
+                .setNegativeButton("ماندن",null)
+                .setPositiveButton("خروج",(d,w)->finish())
+                .show();
     }
 
     @Override
