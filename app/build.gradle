@@ -22,8 +22,8 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 59
-        versionName '2.0.0-native-rc15'
+        versionCode 60
+        versionName '2.0.0-native-rc16'
         // Override with -PpedalproMapTileTemplate='https://licensed-host/{z}/{x}/{y}.png'
         // OSM tiles are a development fallback; production must respect provider terms.
         def mapTemplate = providers.gradleProperty('pedalproMapTileTemplate')

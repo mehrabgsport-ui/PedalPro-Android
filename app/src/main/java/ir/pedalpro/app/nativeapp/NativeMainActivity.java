@@ -175,6 +175,9 @@ public final class NativeMainActivity extends Activity {
     private int launchEventId = 0;
     private PedalNeshanMapSurface activeRideRouteView;
     private int activeRideMapRideId;
+    private long lastLiveTrackPointTime;
+    private int lastLiveTrackRideId;
+    private long liveTrackRevision;
     private long rideRouteLastFetchElapsed;
     private int rideRouteLastFetchId;
     private FrameLayout activeRideImmersiveOverlay;
@@ -241,12 +244,32 @@ public final class NativeMainActivity extends Activity {
                         rideGps.setTextColor(error.isBlank() ? MUTED : RED);
                     }
                 } else if (TrackingService.ACTION_UPDATE.equals(intent.getAction())) {
+                    int incomingRideId = j.optInt("ride_id", 0);
+                    int currentRideId = activeRide == null ? 0 : activeRide.optInt("id", 0);
+                    if (incomingRideId <= 0 || incomingRideId != currentRideId) return;
                     double mps = j.optDouble("speed_mps", 0);
                     double acc = j.optDouble("accuracy", -1);
                     if (rideSpeed != null) rideSpeed.setText(String.format(Locale.US, "%.1f", Math.max(0, mps * 3.6)));
                     if (activeRideRouteView != null) {
                         double lat = j.optDouble("lat", Double.NaN), lng = j.optDouble("lng", Double.NaN);
-                        if (Double.isFinite(lat) && Double.isFinite(lng)) activeRideRouteView.setCurrent(lat, lng);
+                        if (Double.isFinite(lat) && Double.isFinite(lng)
+                                && Math.abs(lat) <= 85.0 && Math.abs(lng) <= 180.0) {
+                            activeRideRouteView.setCurrent(lat, lng);
+                            // Stationary sensor-fusion markers do not become recorded path points.
+                            if (j.optBoolean("recorded", false)) {
+                                long timestamp = j.optLong("timestamp", 0L);
+                                if (lastLiveTrackRideId != incomingRideId) {
+                                    lastLiveTrackRideId = incomingRideId;
+                                    lastLiveTrackPointTime = 0L;
+                                }
+                                if (timestamp > lastLiveTrackPointTime) {
+                                    lastLiveTrackPointTime = timestamp;
+                                    liveTrackRevision++;
+                                    activeRideRouteView.appendPoints(new JSONArray().put(
+                                            new JSONObject().put("lat", lat).put("lng", lng)));
+                                }
+                            }
+                        }
                         // Location bearing is received from TrackingService, not recalculated
                         // from noisy pixel positions or fed back into GPS recording.
                         double course=j.optDouble("bearing",Double.NaN);
@@ -254,7 +277,10 @@ public final class NativeMainActivity extends Activity {
                             activeRideRouteView.setHeadingDegrees((float)course);
                     }
                     if (rideGps != null) {
-                        rideGps.setText(acc > 0 ? "GPS فعال · دقت ±" + Math.round(acc) + " متر" : "GPS فعال");
+                        String sync = j.optBoolean("recorded", false)
+                                ? (j.has("response") ? "ثبت نقطه در سرور" : "نقطه در صف ارسال")
+                                : "GPS فعال";
+                        rideGps.setText(sync + (acc > 0 ? " · دقت ±" + Math.round(acc) + " متر" : ""));
                         rideGps.setTextColor(GREEN);
                     }
                     String response = j.optString("response", "");
@@ -5217,6 +5243,7 @@ public final class NativeMainActivity extends Activity {
         rideRouteLastFetchElapsed=now;
         rideRouteLastFetchId=id;
         final PedalNeshanMapSurface view=activeRideRouteView;
+        final long revisionAtRequest=liveTrackRevision;
         io.execute(()->{
             try{
                 java.util.LinkedHashMap<String,Object> q=new java.util.LinkedHashMap<>();
@@ -5226,7 +5253,8 @@ public final class NativeMainActivity extends Activity {
                 JSONArray pts=r==null?null:r.optJSONArray("points");
                 main.post(()->{
                     if(activeRideRouteView==view&&activeRide!=null
-                            &&activeRide.optInt("id",0)==id&&pts!=null)
+                            &&activeRide.optInt("id",0)==id&&pts!=null
+                            &&liveTrackRevision==revisionAtRequest)
                         view.setPoints(pts);
                 });
             }catch(Exception ignored){}

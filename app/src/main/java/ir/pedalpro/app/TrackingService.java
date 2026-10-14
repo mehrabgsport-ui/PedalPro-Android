@@ -24,7 +24,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.webkit.CookieManager;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -126,6 +125,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private long lastRawFixAt = 0L;
     private long trackingStartedAt = 0L;
     private long lastGapFallbackAt = 0L;
+    private long lastPendingRetryAt = 0L;
     private Location lastAcceptedLocation;
     // One-fix quarantine: a point is persisted only after the following fix confirms
     // that it was not an isolated GNSS teleport. This intentionally adds ~1s latency.
@@ -146,6 +146,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
                 long reference = lastRawFixAt > 0L ? lastRawFixAt : trackingStartedAt;
                 long gap = reference > 0L ? now - reference : 0L;
 
+                // Retry unsent points even if no more position fixes are produced.
+                if (now - lastPendingRetryAt >= 15000L) {
+                    lastPendingRetryAt = now;
+                    String queued = prefs.getString("pending", "[]");
+                    if (queued != null && queued.length() > 2) flushPending();
+                }
                 if (usingFused && gap >= 6000L && !legacyFallbackStarted &&
                         now - lastGapFallbackAt >= 10000L) {
                     lastGapFallbackAt = now;
@@ -687,7 +693,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         Location frozen = new Location(lastAcceptedLocation);
         frozen.setTime(candidate.getTime());
         frozen.setSpeed(0f);
-        try { broadcastPoint(locationJson(frozen), null); } catch (Exception ignored) { }
+        try { broadcastPoint(locationJson(frozen), null, false); } catch (Exception ignored) { }
         if (receivedAt - lastFilterStatusAt >= 3500L) {
             lastFilterStatusAt = receivedAt;
             broadcastStatus(status, false);
@@ -854,7 +860,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
                 p.put("road_match_confidence", Math.round(confidence * 1000.0) / 1000.0);
             }
             appendPending(p);
-            broadcastPoint(p, null);
+            broadcastPoint(p, null, true);
             flushPending();
         } catch (Exception ignored) { }
     }
@@ -1120,7 +1126,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     long pointTs = p.optLong("timestamp", 0L);
                     long currentTs = lastAcceptedLocation == null ? 0L : lastAcceptedLocation.getTime();
                     if (pointTs > 0L && currentTs > 0L && pointTs >= currentTs - 1800L) {
-                        broadcastPoint(p, result.body);
+                        broadcastPoint(p, result.body, true);
                     }
                 }
             } finally {
@@ -1156,7 +1162,18 @@ public class TrackingService extends Service implements LocationListener, Sensor
             String body = readBody(code >= 400 ? c.getErrorStream() : c.getInputStream());
 
             if (code == 419 && !retried && refreshCsrf()) return sendPoint(point, true);
-            if (code >= 200 && code < 300) return new SendResult(true, body);
+            // An HTTP 2xx with {"ok":false} is NOT a stored GPS point.
+            if (code >= 200 && code < 300) {
+                try {
+                    JSONObject answer = new JSONObject(body);
+                    if (answer.optBoolean("ok", true)) return new SendResult(true, body);
+                    broadcastStatus(answer.optString("error", "سرور ثبت نقطه GPS را رد کرد"), true);
+                    return new SendResult(false, body);
+                } catch (org.json.JSONException malformed) {
+                    broadcastStatus("پاسخ نامعتبر سرور؛ نقاط GPS روی گوشی باقی ماندند", true);
+                    return new SendResult(false, body);
+                }
+            }
 
             String msg = "ارسال GPS به سرور ناموفق بود (" + code + ")";
             try {
@@ -1180,7 +1197,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setConnectTimeout(10000);
             c.setReadTimeout(12000);
             c.setRequestProperty("Accept", "application/json");
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
+            String cookie = effectiveSessionCookie();
             if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
             int code = c.getResponseCode();
             if (code < 200 || code >= 300) return false;
@@ -1227,10 +1244,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private String effectiveSessionCookie() {
-        try {
-            String web = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-            if (web != null && !web.isEmpty()) return web;
-        } catch (Throwable ignored) { }
+        // Match PedalProApiClient's authenticated native PHP session, never a stale browser cookie.
         return nativeSessionCookie();
     }
 
@@ -1243,9 +1257,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
         return sb.toString();
     }
 
-    private void broadcastPoint(JSONObject p, String response) {
+    private void broadcastPoint(JSONObject p, String response, boolean recorded) {
         try {
             JSONObject out = new JSONObject();
+            out.put("ride_id", prefs.getInt("ride_id", 0));
+            out.put("recorded", recorded);
             out.put("lat", p.optDouble("lat"));
             out.put("lng", p.optDouble("lng"));
             out.put("altitude", p.has("altitude") ? p.opt("altitude") : JSONObject.NULL);

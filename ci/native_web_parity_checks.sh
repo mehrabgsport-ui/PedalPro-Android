@@ -193,6 +193,26 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC16: native GPS authentication, server-rejection persistence, and recorded track drawing.
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'return nativeSessionCookie();' "GPS uses same Native PHP session as API client"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'answer.optBoolean("ok", true)' "HTTP 200 rejection cannot drop queued GPS points"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'lastPendingRetryAt >= 15000L' "GPS pending queue retries even when rider stops"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'out.put("recorded", recorded);' "Accepted and stationary GPS fixes are distinguishable"
+expect "$NATIVE/NativeMainActivity.java" 'activeRideRouteView.appendPoints(new JSONArray().put(' "Accepted live path draws on map"
+expect "$NATIVE/NativeMainActivity.java" 'liveTrackRevision==revisionAtRequest' "Stale server snapshot never erases live track"
+python3 - "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" "$NATIVE/NativeMainActivity.java" <<'PY'
+import pathlib, sys
+service, activity = (pathlib.Path(p).read_text() for p in sys.argv[1:])
+assert 'import android.webkit.CookieManager;' not in service
+assert 'getCookie("https://pedalpro.ir/")' not in service
+assert 'broadcastPoint(p, null, true)' in service
+assert 'broadcastPoint(locationJson(frozen), null, false)' in service
+assert 'if (answer.optBoolean("ok", true)) return new SendResult(true, body);' in service
+assert 'if (incomingRideId <= 0 || incomingRideId != currentRideId) return;' in activity
+assert 'if (timestamp > lastLiveTrackPointTime)' in activity
+print('PASS RC16 accepted recorded points append; stale cookie and discarded rejected points barred')
+PY
+
 # RC15: changing chat rooms must discard reply/edit IDs and stale compose state.
 expect "$NATIVE/NativeChatActivity.java" 'private void resetComposition()' "Room-scoped chat composer reset exists"
 python3 - "$NATIVE/NativeChatActivity.java" <<'PY'
