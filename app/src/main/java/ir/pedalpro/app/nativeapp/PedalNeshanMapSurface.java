@@ -26,6 +26,8 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private static final String TAG = "PedalNeshanMap";
     private final NativeRouteView overlay;
     private View neshanMap;
+    private NeshanMapBridge sdkBridge;
+    private TextView providerStatus;
     private LinearLayout mapControls;
     private TextView navigationControl;
     private double lastLat = Double.NaN, lastLng = Double.NaN;
@@ -48,36 +50,41 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         }
         overlay = new NativeRouteView(context);
         if (neshanMap != null) {
+            // Let the authentic Neshan SDK render roads AND route geometry.
+            // The custom Canvas overlay would capture native pan/pinch and cannot
+            // project its vectors onto an independently pitched Neshan camera.
             overlay.setExternalBasemap(true);
-            overlay.setCameraListener(this::syncCamera);
+            overlay.setVisibility(View.GONE);
         }
         addView(overlay, new FrameLayout.LayoutParams(-1,-1));
         buildControls(context);
+        if(neshanMap==null) {
+            providerStatus=new TextView(context);
+            providerStatus.setText("نقشه موقت · SDK نشان نیازمند لایسنس");
+            providerStatus.setTextSize(10f);
+            providerStatus.setTextColor(Color.WHITE);
+            providerStatus.setGravity(Gravity.CENTER);
+            providerStatus.setBackground(panelBackground());
+            FrameLayout.LayoutParams badge=new FrameLayout.LayoutParams(-2,dp(30),
+                    Gravity.CENTER_HORIZONTAL|Gravity.TOP);
+            badge.topMargin=dp(12);
+            addView(providerStatus,badge);
+        }
     }
 
     private View createNeshanSdk(Context context) {
         try {
-            Class<?> clazz = Class.forName("org.neshan.mapsdk.MapView");
-            Object raw = null;
-            for (Constructor<?> ctor : clazz.getConstructors()) {
-                Class<?>[] types = ctor.getParameterTypes();
-                if (types.length == 1 && Context.class.isAssignableFrom(types[0])) {
-                    raw = ctor.newInstance(context);
-                    break;
-                }
-                if (types.length == 2 && Context.class.isAssignableFrom(types[0])
-                        && android.util.AttributeSet.class.isAssignableFrom(types[1])) {
-                    raw = ctor.newInstance(context,null);
-                    break;
-                }
-            }
-            if (!(raw instanceof View)) throw new IllegalStateException("Neshan MapView unavailable");
-            View view = (View) raw;
-            invoke(view, "setTrafficEnabled", trafficEnabled);
-            updateMapStyle(view, nightStyle);
-            return view;
-        } catch (Throwable e) {
-            Log.w(TAG, "Neshan Android SDK unavailable; using built-in native map tiles", e);
+            // Neshan's licensed implementation is compiled into the APK ONLY
+            // when NESHAN_ANDROID_LICENCE_BASE64 is supplied to release CI.
+            Class.forName("org.neshan.mapsdk.MapView");
+            Class<?> clazz=Class.forName(
+                    "ir.pedalpro.app.nativeapp.LicensedNeshanMapBridge");
+            sdkBridge=(NeshanMapBridge)clazz.getConstructor(Context.class).newInstance(context);
+            sdkBridge.setNight(nightStyle);
+            return sdkBridge.view();
+        } catch(Throwable e) {
+            Log.w(TAG,"Licensed Neshan renderer unavailable: "+e.getClass().getSimpleName());
+            sdkBridge=null;
             return null;
         }
     }
@@ -115,8 +122,10 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         View old=neshanMap;
         if(old==null)return;
         neshanMap=null;
+        sdkBridge=null;
         overlay.setCameraListener(null);
         overlay.setExternalBasemap(false);
+        overlay.setVisibility(View.VISIBLE);
         removeView(old);
         overlay.invalidate();
     }
@@ -188,19 +197,19 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         controls.setPadding(dp(5),dp(5),dp(5),dp(5));
         controls.setBackground(panelBackground());
         mapControls=controls;
-        controls.addView(control("+","بزرگ‌نمایی نقشه",()->overlay.zoomBy(1)));
-        controls.addView(control("−","کوچک‌نمایی نقشه",()->overlay.zoomBy(-1)));
-        controls.addView(control("◎","بازگشت به موقعیت رکاب‌زن",overlay::recenter));
+        controls.addView(control("+","بزرگ‌نمایی نقشه",()->zoomBy(1)));
+        controls.addView(control("−","کوچک‌نمایی نقشه",()->zoomBy(-1)));
+        controls.addView(control("◎","بازگشت به موقعیت رکاب‌زن",this::recenter));
         navigationControl=(TextView)control("↗","تغییر حالت نقشه ناویگیشن",this::toggleOrientation);
         controls.addView(navigationControl);
         if (neshanMap != null) {
             controls.addView(control("☾","تغییر حالت روز و شب نشان",()->{
                 nightStyle=!nightStyle;
-                updateMapStyle(neshanMap,nightStyle);
+                if(sdkBridge!=null)sdkBridge.setNight(nightStyle);
             }));
             controls.addView(control("≋","نمایش یا مخفی‌کردن ترافیک نشان",()->{
                 trafficEnabled=!trafficEnabled;
-                invoke(neshanMap,"setTrafficEnabled",trafficEnabled);
+                if(sdkBridge!=null)sdkBridge.setTraffic(trafficEnabled);
             }));
         }
         FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(dp(44),-2,Gravity.TOP|Gravity.END);
@@ -254,6 +263,18 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         applySdkNavigationCamera();
     }
 
+    private void zoomBy(int amount) {
+        if(sdkBridge!=null)sdkBridge.zoomBy(amount);
+        else overlay.zoomBy(amount);
+    }
+
+    private void recenter() {
+        overlay.recenter();
+        if(!overlay.isNavigationMode())overlay.setNavigationMode(true);
+        if(sdkBridge!=null)sdkBridge.recenter();
+        refreshOrientationLabel();
+    }
+
     private void refreshOrientationLabel() {
         if(navigationControl==null)return;
         boolean follow=overlay.isNavigationMode();
@@ -269,7 +290,9 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     public void setNavigationMode(boolean enabled) {
         overlay.setNavigationMode(enabled);
         refreshOrientationLabel();
-        applySdkNavigationCamera();
+        if(sdkBridge!=null)sdkBridge.setNavigation(enabled,overlay.isHeadingUpEnabled(),
+                overlay.getHeadingDegrees(),overlay.hasHeadingDegrees());
+        else applySdkNavigationCamera();
     }
 
     public void setHeadingDegrees(float bearing){
@@ -277,13 +300,34 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         if(neshanMap!=null)applySdkNavigationCamera();
     }
 
-    public boolean isNeshanEnabled(){return neshanMap!=null;}
-    public void setPoints(JSONArray rows){overlay.setPoints(rows);}
-    public void appendPoints(JSONArray rows){overlay.appendPoints(rows);}
-    public void setCurrent(double lat,double lng){overlay.setCurrent(lat,lng);}
-    public void setTarget(double lat,double lng){overlay.setTarget(lat,lng);}
-    public void setNavigationRoute(JSONArray rows){overlay.setNavigationRoute(rows);}
-    public void clearNavigationRoute(){overlay.clearNavigationRoute();}
-    public void clearTarget(){overlay.clearTarget();}
+    public boolean isNeshanEnabled(){return sdkBridge!=null;}
+    public void setPoints(JSONArray rows){
+        overlay.setPoints(rows);
+        if(sdkBridge!=null)sdkBridge.setRecordedTrack(rows);
+    }
+    public void appendPoints(JSONArray rows){
+        overlay.appendPoints(rows);
+        if(sdkBridge!=null)sdkBridge.setRecordedTrack(overlay.exportPoints());
+    }
+    public void setCurrent(double lat,double lng){
+        overlay.setCurrent(lat,lng);
+        if(sdkBridge!=null)sdkBridge.setCurrent(lat,lng);
+    }
+    public void setTarget(double lat,double lng){
+        overlay.setTarget(lat,lng);
+        if(sdkBridge!=null)sdkBridge.setTarget(lat,lng);
+    }
+    public void setNavigationRoute(JSONArray rows){
+        overlay.setNavigationRoute(rows);
+        if(sdkBridge!=null)sdkBridge.setSuggestedRoute(rows);
+    }
+    public void clearNavigationRoute(){
+        overlay.clearNavigationRoute();
+        if(sdkBridge!=null)sdkBridge.setSuggestedRoute(null);
+    }
+    public void clearTarget(){
+        overlay.clearTarget();
+        if(sdkBridge!=null)sdkBridge.clearTarget();
+    }
     public int pointCount(){return overlay.pointCount();}
 }
