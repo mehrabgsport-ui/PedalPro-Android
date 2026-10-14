@@ -179,6 +179,18 @@ Status: IN PROGRESS
 - Neshan `neshan.licence` (for actual Android SDK map imagery) still unavailable; the default signed APK uses XYZ tiles and no Neshan SDK. Service key must be entered locally for V2 road suggestions, or connected through a future authorized server-side proxy. No backend endpoint was invented.
 - **Open hard gates:** live Neshan API test with newly created key, Android licence-enabled SDK build, true bicycle-safe directions, real-device validation, exact Web 4.7.46 screenshot parity, owner approval before merge.
 
+### Phase 5/7/8 — RC4 Neshan settings and full-screen ride UI (2026-10-14)
+- `aedf94d5616c`: Android Keystore encrypted **MOBILE** token slot added alongside separate Services key (no token included in source).
+- `a3f50aefef18`, `3de0ed258d6b`: full `NativeAppSettingsActivity` with distinct map keys, privacy, default road guidance preference, Android settings shortcut, and admin-only site tab links.
+- `62933abdb96a`: native site-settings direct deep-link routing to all 9 sections, including SEO/Robots. `seo_robots` is the *search crawler* setting; not an invented bot-manager API.
+- `73cdae2e251c`, `98cf0b06c330`: app-settings navigation exposed from profile, drawer, phone preferences and live navigation; route preferences and key access centralized.
+- `c42147f822f9`, `33f2e8dc86e`, `f9e395fcaf85`: active ride map moved from a 280dp scroll card to an immersive native full-screen map with floating title/state/actions, on-map zoom controls, bottom telemetry HUD and system-back behavior. Original pause, stop, sharing, OLED and GPS hooks retained, not reimplemented.
+- `c7d7c52e67a0`: new static CI source contracts for app settings/security, admin tabs and immersive native ride rendering.
+- `113f3ca67577`, `aa402914b5ba`: RC4 `2.0.0-native-rc4` / code 48 build and CI version enforcement.
+- `3eda7126ab11`: developer/QA trace in `docs/RC4_APP_SETTINGS_AND_RIDE_UI.md`.
+- **Known gaps:** entering the MOBILE key does not independently activate the license-bound Neshan Android MapView; precise pixel parity and provider maps still need physical-device testing and signed SDK license, true cycling route matching and shared backend safety gates. More web-only admin/bot contract fields must be discovered from actual server sources; no arbitrary API actions were invented.
+- CI and store artifact status for latest RC4 HEAD must be verified before declaring the build ready; `main` stays untouched.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
