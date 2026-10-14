@@ -5,6 +5,9 @@ import android.content.pm.PackageManager;
 import android.content.Intent;
 import android.location.Location;
 import android.os.SystemClock;
+import android.os.Build;
+import androidx.core.content.ContextCompat;
+import ir.pedalpro.app.TrackingService;
 import android.text.InputType;
 import android.widget.Button;
 import android.widget.EditText;
@@ -45,6 +48,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private boolean busy=false;
     private boolean groupArrivalNotified;
     private float currentAccuracy=Float.MAX_VALUE;
+    private Location recentFix;
+    private boolean startingGroupTracking;
     private boolean screenVisible;
     private TextView roadStatus;
     private Button roadToggle;
@@ -99,7 +104,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 finish();
             });
             content.addView(cancel,cardLp());
-            addCard("ثبت رکاب‌زنی","GPS رکاب‌زنی فعال مستقل از این صفحه ادامه دارد؛ برای ثبت حرکت باید رکاب‌زنی را قبلاً در PedalPro شروع کرده باشید.");
+            Button tracking=primary("شروع / بررسی ثبت GPS هنگام رسیدن به گروه");
+            tracking.setOnClickListener(v->beginGroupRideIfNeeded(tracking));
+            content.addView(tracking,cardLp());
+            addCard("ثبت رکاب‌زنی","اگر رکاب‌زنی فعال داشته باشید همان رکورد ادامه می‌یابد. در غیر این صورت، با دکمه بالا ثبت GPS جدید شروع می‌شود؛ خروج از مسیریابی آن را متوقف نمی‌کند.");
         }
 
         LinearLayout routing=card();
@@ -218,12 +226,78 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     if(loc==null)return;
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
                     currentAccuracy=loc.hasAccuracy()?loc.getAccuracy():Float.MAX_VALUE;
+                    recentFix=loc;
                     routeView.setCurrent(currentLat,currentLng);
                     if(loc.hasBearing() && loc.hasSpeed() && loc.getSpeed()>1.3f)
                         routeView.setHeadingDegrees(loc.getBearing());
                     updateHud();
                     maybeFetchDirections();
                 });
+    }
+
+    private void beginGroupRideIfNeeded(Button button){
+        if(startingGroupTracking)return;
+        if(getSharedPreferences(TrackingService.PREFS,MODE_PRIVATE).getBoolean("active",false)){
+            Toast.makeText(this,"ثبت GPS فعلی فعال است و ادامه خواهد یافت.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        Location fix=recentFix;
+        long age=fix==null?Long.MAX_VALUE:
+                Math.max(0L,System.currentTimeMillis()-fix.getTime());
+        if(fix==null||age>12000L||!fix.hasAccuracy()||fix.getAccuracy()>35f){
+            status.setText("برای شروع ثبت رکاب‌زنی، GPS تازه با دقت ±۳۵ متر یا بهتر لازم است.");
+            updateCurrentLocation();
+            return;
+        }
+        startingGroupTracking=true;button.setEnabled(false);
+        status.setText("در حال شروع رکاب‌زنی برای رسیدن به گروه…");
+        io.execute(()->{
+            try{
+                JSONObject b=api.bootstrap();
+                JSONObject active=b.optJSONObject("my_active_ride");
+                if(active!=null&&active.optInt("id",0)>0){
+                    main.post(()->{
+                        startingGroupTracking=false;button.setEnabled(true);
+                        status.setText("رکاب‌زنی قبلی شما هنوز فعال است؛ ادامه یا توقف آن را در صفحه رکاب‌زنی مدیریت کنید.");
+                    });
+                    return;
+                }
+                JSONObject created=api.post("start_ride",new JSONObject()
+                        .put("title","رسیدن به گروه")
+                        .put("event_id",0)
+                        .put("challenge_id",0)
+                        .put("bike_id",0)
+                        .put("public_tracking",false)
+                        .put("viewer_user_ids",new JSONArray()));
+                int id=created.optInt("ride_id",0);
+                if(id<=0)throw new IllegalStateException("شناسه معتبر از سرور دریافت نشد");
+                try{
+                    api.post("track_point",new JSONObject().put("ride_id",id)
+                        .put("lat",fix.getLatitude()).put("lng",fix.getLongitude())
+                        .put("altitude",fix.hasAltitude()?fix.getAltitude():JSONObject.NULL)
+                        .put("speed_kmh",fix.hasSpeed()?fix.getSpeed()*3.6d:0d)
+                        .put("accuracy",fix.getAccuracy())
+                        .put("timestamp",System.currentTimeMillis()));
+                }catch(Exception ignored){}
+                Intent start=new Intent(this,TrackingService.class);
+                start.setAction(TrackingService.ACTION_START);
+                start.putExtra("ride_id",id);
+                start.putExtra("csrf",session.csrf());
+                start.putExtra("max_accuracy",25d);
+                start.putExtra("max_speed_kmh",100d);
+                if(Build.VERSION.SDK_INT>=26)ContextCompat.startForegroundService(this,start);
+                else startService(start);
+                main.post(()->{
+                    startingGroupTracking=false;button.setEnabled(true);
+                    status.setText("ثبت رکاب‌زنی GPS فعال شد؛ مسیریابی گروهی ادامه دارد.");
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    startingGroupTracking=false;button.setEnabled(true);
+                    status.setText("شروع GPS انجام نشد: "+e.getMessage());
+                });
+            }
+        });
     }
 
     private void applyTarget(double lat,double lng,String name,JSONArray pts){
