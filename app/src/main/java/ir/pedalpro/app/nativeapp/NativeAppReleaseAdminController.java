@@ -204,6 +204,7 @@ final class NativeAppReleaseAdminController {
         int code=number(versionCode,0);
         if(name.isBlank()||code<=0){activity.toast("شماره نسخه و Version Code را وارد کنید.");return;}
         if(!apkName.toLowerCase(Locale.ROOT).endsWith(".apk")){activity.toast("فایل باید APK باشد.");return;}
+        if(apkSize<=0){activity.toast("فایل APK انتخاب‌شده خالی یا غیرقابل خواندن است.");return;}
         if(apkSize>150L*1024L*1024L){activity.toast("حجم APK بیش از ۱۵۰ مگابایت است.");return;}
 
         new android.app.AlertDialog.Builder(activity)
@@ -214,23 +215,29 @@ final class NativeAppReleaseAdminController {
     }
 
     private void doPublish(String name,int code){
+        // Capture all UI values before entering the upload worker thread.
+        final Uri selectedUri=apkUri;
+        final String selectedName=apkName;
+        final long selectedSize=apkSize;
+        final String notes=releaseNotes.getText().toString();
+        final boolean required=mandatory.getSelectedItemPosition()==1;
         publish.setEnabled(false);
         final long chunk=512L*1024L;
-        final int total=(int)Math.ceil(apkSize/(double)chunk);
+        final int total=(int)Math.ceil(selectedSize/(double)chunk);
         final String uploadId=UUID.randomUUID().toString().replace("-","");
         io.execute(()->{
             try{
                 for(int i=0;i<total;i++){
                     final int index=i;
                     long offset=i*chunk;
-                    long length=Math.min(chunk,apkSize-offset);
+                    long length=Math.min(chunk,selectedSize-offset);
                     Map<String,String> fields=new HashMap<>();
                     fields.put("upload_id",uploadId);
                     fields.put("chunk_index",String.valueOf(i));
                     fields.put("total_chunks",String.valueOf(total));
                     activity.runOnUiThread(()->publish.setText("در حال آپلود… "+Math.round(index/(double)total*100)+"٪"));
                     api.postMultipartChunk(
-                            "app_release_upload_chunk",fields,apkUri,
+                            "app_release_upload_chunk",fields,selectedUri,
                             "chunk","chunk-"+i+".part","application/octet-stream",offset,length);
                 }
 
@@ -238,18 +245,19 @@ final class NativeAppReleaseAdminController {
                 JSONObject payload=new JSONObject()
                         .put("upload_id",uploadId)
                         .put("total_chunks",total)
-                        .put("original_name",apkName)
+                        .put("original_name",selectedName)
                         .put("version_name",name)
                         .put("version_code",code)
-                        .put("release_notes",releaseNotes.getText().toString())
-                        .put("is_mandatory",mandatory.getSelectedItemPosition()==1?1:0);
+                        .put("release_notes",notes)
+                        .put("is_mandatory",required?1:0);
                 JSONObject done=api.post("app_release_upload_finalize",payload);
                 activity.runOnUiThread(()->{
                     publish.setEnabled(true);
                     publish.setText("انتشار نسخه جدید");
                     apkUri=null;apkName="";apkSize=0;
                     selectedFile.setText("فایلی انتخاب نشده است.");
-                    activity.toast("نسخه "+done.optJSONObject("release").optString("version_name",name)+" منتشر شد");
+                    JSONObject published=done.optJSONObject("release");
+                    activity.toast("نسخه "+(published==null?name:published.optString("version_name",name))+" منتشر شد");
                     activity.reloadActiveTab();
                 });
             }catch(Exception e){
