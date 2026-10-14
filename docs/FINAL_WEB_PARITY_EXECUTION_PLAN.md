@@ -93,7 +93,7 @@ Status: IN PROGRESS
 - Phase 5 remains IN PROGRESS until CI is verified and device-based Web 4.7.46 screen/state parity is audited. Do not mark DONE or merge to main prematurely.
 
 ## Phase 6 — Pro and community features
-Status: PENDING
+Status: IN PROGRESS
 - Segments and leaderboard.
 - Personal/club/global Heatmap.
 - Training Load.
@@ -109,7 +109,7 @@ Status: PENDING
 - Challenges, detail, participation, editor.
 
 ## Phase 7 — Administration
-Status: PENDING
+Status: IN PROGRESS
 - General site settings.
 - Appearance settings.
 - Medals.
@@ -119,6 +119,23 @@ Status: PENDING
 - App notifications/history.
 - Firebase/FCM configuration and test.
 - System status.
+
+### Phases 6–7 — Native feature hardening (2026-10-14)
+- `5b029e4f75df`: reject invalid segment/offline route selections; confirm local cache deletion.
+- `1fae37437f12`, `2ff2a4f6785c`: vector Kudos glyph and native on/off state, unchanged Follow/Kudos API actions.
+- `a32b8efd49d9`, `571282f599fa`: admin user editor preserves account activity/privacy instead of forcing fields and offers one-tap profile prefill with blank password.
+- `bf0a676ed6d2`, `5e0458a2d77d`: main admin SMS drawer opens the full NativeSiteSettingsActivity SMS tab instead of read-only summary.
+- `9d4d0d11bf12`: release-upload UI data captured before IO; missing release response handled; reject empty APK.
+- Native release manager/chunk upload, FCM, notifications, site appearance/medals/users, social/feed, Replay/Flyover/Heatmap and other Pro screens were found in the repository; **code presence is not device parity certification**.
+- Outstanding Phase 7: verify pattern/bulk SMS action contracts and rollback against exact Web 4.7.46 backend; provider/store sign-off pending.
+
+### Phase 8 — Structural QA scaffolding (2026-10-14)
+- `5e08d4c600a9`: added `ci/native_web_parity_checks.sh` to guard native architecture and cross-screen contracts.
+- `eac15d570bcc`: native QA runs the independent structural audit before Android test/lint/APK smoke builds.
+- `f15b6ecdb641`: comprehensive QA matrix in `docs/NATIVE_WEB_4_7_46_PARITY_QA_MATRIX.md`.
+- Build results for these commits are **NOT VERIFIED** through the currently accessible GitHub connector. Do not mark DONE or claim signed APK delivery.
+- Exact 4.7.46 PPUP and reference screenshots were not found in accessible sources. Pixel parity and all seven guest/member/admin/device acceptance matrices remain outstanding.
+- Phase 8 stays PENDING for final sign-off until preceding stages pass independent release/device verification.
 
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
