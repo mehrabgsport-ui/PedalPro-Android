@@ -33,6 +33,8 @@ public final class LicensedNeshanMapBridge implements NeshanMapBridge {
     private double userLat=Double.NaN,userLng=Double.NaN;
     private double targetLat=Double.NaN,targetLng=Double.NaN;
     private double cameraLat=Double.NaN,cameraLng=Double.NaN;
+    private double markerLat=Double.NaN,markerLng=Double.NaN;
+    private boolean manualPan, navigationActive;
     private boolean follow=true, headingUp=true, courseValid;
     private float heading;
     private int zoom=17;
@@ -56,7 +58,7 @@ public final class LicensedNeshanMapBridge implements NeshanMapBridge {
                 fingerDown=true;touchStartX=e.getX();touchStartY=e.getY();
             } else if(e.getActionMasked()==MotionEvent.ACTION_MOVE&&fingerDown&&e.getPointerCount()==1) {
                 if(Math.hypot(e.getX()-touchStartX,e.getY()-touchStartY)>24f)
-                    follow=false;
+                    {manualPan=true;follow=false;}
             } else if(e.getActionMasked()==MotionEvent.ACTION_UP||
                     e.getActionMasked()==MotionEvent.ACTION_CANCEL)fingerDown=false;
             return false;
@@ -134,26 +136,32 @@ public final class LicensedNeshanMapBridge implements NeshanMapBridge {
 
     @Override public void setCurrent(double lat,double lng){
         if(!Double.isFinite(lat)||!Double.isFinite(lng)||Math.abs(lat)>85||Math.abs(lng)>180)return;
-        float moved=Float.POSITIVE_INFINITY;
-        if(Double.isFinite(userLat)){
-            float[] result=new float[1];
-            Location.distanceBetween(userLat,userLng,lat,lng,result);
-            moved=result[0];
-        }
         userLat=lat;userLng=lng;
+        float moved=Float.POSITIVE_INFINITY;
+        if(Double.isFinite(markerLat)){
+            float[] distance=new float[1];
+            Location.distanceBetween(markerLat,markerLng,lat,lng,distance);
+            moved=distance[0];
+        }
         long now=SystemClock.elapsedRealtime();
-        if(moved>=2.5f && now-lastMarkerMs>350L){
+        if((userMarker==null||moved>=1.5f)&&now-lastMarkerMs>280L){
             if(userMarker!=null)map.removeMarker(userMarker);
             userMarker=newMarker(lat,lng,false);
             map.addMarker(userMarker);
+            markerLat=lat;markerLng=lng;
             lastMarkerMs=now;
         }
-        if(follow&&(moved>=3f||!Double.isFinite(cameraLat)))
-            updateCamera(false);
+        if(follow)updateCamera(false);
     }
 
     @Override public void setNavigation(boolean enabled,boolean headingUp,float courseDegrees,boolean valid){
-        this.follow=enabled;this.headingUp=headingUp;
+        // Camera gestures temporarily suspend follow until explicit recenter,
+        // even when TrackingService delivers another bearing sample.
+        if(!enabled){follow=false;manualPan=false;}
+        else if(!navigationActive){follow=true;manualPan=false;}
+        else if(!manualPan)follow=true;
+        navigationActive=enabled;
+        this.headingUp=headingUp;
         this.courseValid=valid&&Float.isFinite(courseDegrees);
         if(courseValid)this.heading=courseDegrees;
         updateCamera(true);
@@ -161,7 +169,7 @@ public final class LicensedNeshanMapBridge implements NeshanMapBridge {
 
     private void updateCamera(boolean forced){
         if(follow&&!Double.isFinite(userLat))return;
-        boolean needsPitch=follow;
+        boolean needsPitch=navigationActive;
         if(needsPitch!=tilted||forced){
             // Neshan official SDK: 90 degrees overhead, approx 55 degrees pitched.
             map.setTilt(needsPitch?55f:90f,.35f);
@@ -198,7 +206,9 @@ public final class LicensedNeshanMapBridge implements NeshanMapBridge {
     }
 
     @Override public void recenter(){
+        manualPan=false;
         follow=true;
+        navigationActive=true;
         updateCamera(true);
     }
 
