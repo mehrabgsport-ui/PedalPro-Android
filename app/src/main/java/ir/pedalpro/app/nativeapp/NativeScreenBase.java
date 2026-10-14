@@ -142,7 +142,7 @@ abstract class NativeScreenBase extends Activity {
         webHeader.setBackground(headerGradient());
 
         ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_logo);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         logo.setOnClickListener(v->openMain("dashboard"));
