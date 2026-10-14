@@ -242,3 +242,6 @@ Each phase is split into small commits. After each batch:
 - Existing public XYZ raster remains an **explicitly labelled fallback**, not a Neshan map. Locally stored MOBILE key cannot substitute for SDK license.
 - CI optionally enables the SDK based on the secret, builds signed Bazaar and Myket artifacts, never publishes. TrackingService/GPS and backend untouched.
 - RC8 `2.0.0-native-rc8` / versionCode 52; licensed-build and real-phone certification require a matching official licence.
+
+### RC9 correction — official current Neshan SDK (2026-10-14)
+Documentation supplied by the owner under `/legacy/installation/` is explicitly expired. Its licence file and `org.neshan.mapsdk.MapView` must not be relied upon. The current Neshan Android SDK uses MapLibre Native `org.neshan.maplibre:android-sdk-opengl:13.4.1` and MOBILE API key manifest metadata. A new MapLibre bridge supports provider vector styling, native camera bearing/pitch, tracked and proposed polylines, and Android lifecycle; no WebView/GPS changes. A GitHub Actions secret `NESHAN_MOBILE_API_KEY` is required for a genuine Neshan SDK APK. Source integration does not equal device validation or Neshan map deployment until this secret is configured and the licensed map loads.

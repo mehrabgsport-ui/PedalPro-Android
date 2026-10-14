@@ -106,3 +106,14 @@ VIDEO evidence: `1000152337.mp4` displayed an OSM raster map flickering into nav
 | Map gestures | Overlay hidden in SDK mode; native gestures exposed | Pan/zoom/recenter device QA |
 | License/security | Build gated by non-committed `neshan.licence`; service API token not hardcoded | Confirm SHA1 and official SDK permissions |
 | Fallback | Explicitly labelled XYZ, not shown as Neshan | Only for diagnostic / unlicensed testing |
+
+### RC9 — current Neshan MapLibre acceptance
+| Feature | Source status | Gate |
+|---|---|---|
+| New official SDK | `org.neshan.maplibre:android-sdk-opengl:13.4.1` conditional dependency | Compile with test MOBILE key |
+| Authorization | Manifest meta-data `org.maplibre.android.API_KEY`; no legacy `.license` | Real MOBILE secret with provider restrictions |
+| Cartography | `https://static.neshan.org/sdk/maplibre/styles/dark.json` and `light.json` | Neshan vector tiles visibly loaded on phone |
+| Camera navigation | Native `CameraPosition` zoom/bearing/tilt/follow/recenter | Stable heading and pitch while cycling |
+| Route drawing | Two distinct native polylines; current rider marker | Position projection and performance on device |
+| Tracking integrity | No TrackingService, GPS filter, distance/calorie, or user data changes | Paused/offline/on-device verification |
+| Complete route guidance | Current Neshan Map SDK is a renderer, not a built-in bicycle navigation engine | True turn-by-turn bicycle rules and Web UX remain not verified |
