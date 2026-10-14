@@ -47,6 +47,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private PedalIconView arrow;
     private boolean busy=false;
     private boolean groupArrivalNotified;
+    private long arrivalCandidateTime;
+    private long arrivalCandidateFixTime;
     private float currentAccuracy=Float.MAX_VALUE;
     private Location recentFix;
     private boolean startingGroupTracking;
@@ -231,6 +233,11 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY,cts.getToken())
                 .addOnSuccessListener(this,loc->{
                     if(loc==null)return;
+                    long fixAge=Math.max(0L,System.currentTimeMillis()-loc.getTime());
+                    if(fixAge>12000L){
+                        currentAccuracy=Float.MAX_VALUE;
+                        return; // Never announce arrival using a cached GPS fix.
+                    }
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
                     currentAccuracy=loc.hasAccuracy()?loc.getAccuracy():Float.MAX_VALUE;
                     recentFix=loc;
@@ -386,8 +393,22 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         double km=r[0]/1000.0;
         float deg=(r.length>1?r[1]:0);
         distance.setText(String.format(Locale.US,km<1?"%.2f km":"%.1f km",km));
-        if("group".equals(mode)&&!groupArrivalNotified
-                && currentAccuracy<=30f&&r[0]<=Math.max(35f,currentAccuracy*1.5f)){
+        boolean fresh=recentFix!=null && recentFix.hasAccuracy() &&
+                Math.max(0L,System.currentTimeMillis()-recentFix.getTime())<=12000L;
+        boolean nearGroup="group".equals(mode)&&fresh&&currentAccuracy<=30f&&
+                r[0]<=Math.max(35f,currentAccuracy*1.5f);
+        // Require two distinct accurate GPS fixes, at least six seconds apart.
+        long fixTime=recentFix==null?0L:recentFix.getTime();
+        if(!nearGroup){
+            arrivalCandidateTime=0L;
+            arrivalCandidateFixTime=0L;
+        }else if(!groupArrivalNotified && arrivalCandidateTime==0L){
+            arrivalCandidateTime=SystemClock.elapsedRealtime();
+            arrivalCandidateFixTime=fixTime;
+            status.setText("نزدیک گروه هستی؛ در حال تأیید موقعیت…");
+        }else if(!groupArrivalNotified &&
+                fixTime>arrivalCandidateFixTime &&
+                SystemClock.elapsedRealtime()-arrivalCandidateTime>=6000L){
             groupArrivalNotified=true;
             status.setText("به گروه رسیدی؛ رکاب‌زنی شما همچنان ثبت می‌شود.");
             new AlertDialog.Builder(this)
