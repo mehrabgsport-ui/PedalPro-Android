@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.json.JSONObject;
 
@@ -46,6 +47,7 @@ public final class LowPowerRideActivity extends Activity {
     private TextView speed;
     private TextView distance;
     private PedalIconView pauseIcon;
+    private FrameLayout pauseControl;
     private SessionStore session;
 
     private final Runnable tick=new Runnable(){
@@ -92,6 +94,9 @@ public final class LowPowerRideActivity extends Activity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(),false);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
+        WindowInsetsControllerCompat systemBars = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        systemBars.setAppearanceLightStatusBars(false);
+        systemBars.setAppearanceLightNavigationBars(false);
 
         build();
         register();
@@ -146,10 +151,11 @@ public final class LowPowerRideActivity extends Activity {
         root.addView(metrics,metricsLp);
 
         FrameLayout pause=new FrameLayout(this);
+        pauseControl=pause;
         pause.setBackgroundColor(Color.TRANSPARENT);
         pause.setClickable(true);
         pause.setFocusable(true);
-        pause.setContentDescription("توقف");
+        pause.setContentDescription("توقف ثبت");
         pauseIcon=new PedalIconView(this,PedalIconView.Icon.PAUSE,Color.WHITE);
         pause.addView(pauseIcon,new FrameLayout.LayoutParams(dp(46),dp(46),Gravity.CENTER));
         pause.setOnClickListener(v->togglePause());
@@ -196,7 +202,8 @@ public final class LowPowerRideActivity extends Activity {
             paused=true;
             speed.setText("0.0");
             pauseIcon.setIcon(PedalIconView.Icon.PLAY);
-            pauseIcon.setContentDescription("ادامه");
+            pauseIcon.setContentDescription("ادامه ثبت");
+            pauseControl.setContentDescription("ادامه ثبت");
         }else{
             Intent start=new Intent(this,TrackingService.class);
             start.setAction(TrackingService.ACTION_START);
@@ -209,7 +216,8 @@ public final class LowPowerRideActivity extends Activity {
             paused=false;
             anchor=SystemClock.elapsedRealtime();
             pauseIcon.setIcon(PedalIconView.Icon.PAUSE);
-            pauseIcon.setContentDescription("توقف");
+            pauseIcon.setContentDescription("توقف ثبت");
+            pauseControl.setContentDescription("توقف ثبت");
         }
     }
 
