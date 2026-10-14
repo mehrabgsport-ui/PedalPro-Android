@@ -5360,6 +5360,14 @@ public final class NativeMainActivity extends Activity {
                 // Do not stop the ride on the server while acknowledged track points
                 // are still queued on the phone. Prepare freezes new GPS acquisition.
                 android.content.SharedPreferences tracking = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE);
+                String queuedBefore = tracking.getString("pending", "[]");
+                boolean unsentBefore = queuedBefore != null && !"[]".equals(queuedBefore);
+                if (unsentBefore && (!tracking.getBoolean("active", false) ||
+                        tracking.getInt("ride_id", 0) != rideId)) {
+                    // A paused or previous ride still owns these points: never finish and
+                    // silently strand them (or credit them to an unrelated new ride).
+                    throw new IllegalStateException("نقاط GPS هنوز ارسال نشده‌اند. ابتدا ثبت GPS را ادامه دهید و پس از همگام‌سازی، رکاب‌زنی را پایان دهید.");
+                }
                 if (tracking.getBoolean("active", false) && tracking.getInt("ride_id", 0) == rideId) {
                     Intent prepare = new Intent(this, TrackingService.class);
                     prepare.setAction(TrackingService.ACTION_PREPARE_FINISH);

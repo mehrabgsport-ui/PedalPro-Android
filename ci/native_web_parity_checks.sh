@@ -193,6 +193,9 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC16: paused rides with unsent GPS points must not be closed silently.
+expect "$NATIVE/NativeMainActivity.java" 'if (unsentBefore && (!tracking.getBoolean("active", false)' "Paused ride cannot discard unsent GPS points at finish"
+
 # RC16: the service must drain the acknowledged queue before server stop_ride.
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'ACTION_PREPARE_FINISH' "Foreground GPS service supports graceful final sync"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" '.putBoolean("finish_prepared", true).apply();' "Final GPS batch enqueued before release acknowledgement"

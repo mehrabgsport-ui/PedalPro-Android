@@ -13,3 +13,5 @@
 - Native stop waits up to 25 seconds for the service's readiness flag and an empty point queue before calling existing `stop_ride`; on timeout, the ride remains open and the existing tracker restarts.
 - If server `stop_ride` fails, native bootstrap is consulted before resuming that same ride. This does not invent server endpoints or claim an offline ride has been synced.
 - Pending GPS storage is preserved on failed upload. Device QA of network-loss/resume and activity termination remains required.
+
+- When tracking has been manually paused while unsent points remain, finishing is blocked with an actionable message; resuming the existing GPS ride allows normal retry and subsequent finish. The app does not silently discard the paused queue.
