@@ -1,6 +1,7 @@
 package ir.pedalpro.app.nativeapp;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -22,11 +23,17 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import org.json.JSONObject;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import ir.pedalpro.app.R;
 
+/**
+ * Shared native shell that mirrors the current 4.7.46 mobile web chrome.
+ * Secondary screens keep their page heading in the scrolling content area.
+ */
 abstract class NativeScreenBase extends Activity {
     protected static final int BG=Color.rgb(6,17,30);
     protected static final int CARD=Color.rgb(13,28,44);
@@ -44,7 +51,13 @@ abstract class NativeScreenBase extends Activity {
     protected LinearLayout content;
     protected PedalProApiClient api;
     protected SessionStore session;
+
     private TextView subtitle;
+    private LinearLayout webHeader;
+    private PedalActionView headerAccount;
+    private View headerAdminSettings;
+    private TextView rideDockLabel;
+    private boolean signedIn=false;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -72,7 +85,6 @@ abstract class NativeScreenBase extends Activity {
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         root.setBackgroundColor(Color.TRANSPARENT);
 
         ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{
@@ -81,48 +93,202 @@ abstract class NativeScreenBase extends Activity {
             return insets;
         });
 
-        LinearLayout head=new LinearLayout(this);
-        head.setOrientation(LinearLayout.HORIZONTAL);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setPadding(dp(15),dp(9),dp(15),dp(9));
-        head.setBackground(headerGradient());
-
-        ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
-        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-
-        LinearLayout titles=new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setGravity(Gravity.END|Gravity.CENTER_VERTICAL);
-        TextView title=text(screenTitle(),20,true,TEXT);
-        subtitle=text("",10,false,MUTED);
-        titles.addView(title);
-        titles.addView(subtitle);
-
-        Button back=plainButton("‹",28);
-        back.setBackground(round(Color.argb(110,7,31,45),16,STROKE));
-        back.setOnClickListener(v->finish());
-
-        head.addView(logo,new LinearLayout.LayoutParams(dp(78),dp(56)));
-        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(0,dp(56),1f);
-        tp.setMargins(dp(8),0,dp(8),0);
-        head.addView(titles,tp);
-        head.addView(back,new LinearLayout.LayoutParams(dp(50),dp(48)));
-        root.addView(head,new LinearLayout.LayoutParams(-1,dp(80)));
+        root.addView(buildWebHeader(),new LinearLayout.LayoutParams(-1,-2));
 
         ScrollView scroll=new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
 
+        LinearLayout scroller=new LinearLayout(this);
+        scroller.setOrientation(LinearLayout.VERTICAL);
+        scroller.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        scroller.setPadding(dp(14),dp(12),dp(14),dp(26));
+
+        LinearLayout pageHead=new LinearLayout(this);
+        pageHead.setOrientation(LinearLayout.VERTICAL);
+        pageHead.setGravity(Gravity.END);
+        TextView title=text(screenTitle(),22,true,TEXT);
+        subtitle=text("",11,false,MUTED);
+        pageHead.addView(title);
+        LinearLayout.LayoutParams subLp=new LinearLayout.LayoutParams(-1,-2);
+        subLp.setMargins(0,dp(4),0,0);
+        pageHead.addView(subtitle,subLp);
+        LinearLayout.LayoutParams headLp=new LinearLayout.LayoutParams(-1,-2);
+        headLp.setMargins(dp(2),dp(3),dp(2),dp(12));
+        scroller.addView(pageHead,headLp);
+
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14),dp(14),dp(14),dp(26));
-        scroll.addView(content);
+        scroller.addView(content,new LinearLayout.LayoutParams(-1,-2));
+
+        scroll.addView(scroller);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
+        root.addView(buildWebBottomNav(),new LinearLayout.LayoutParams(-1,dp(116)));
 
         frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
         setContentView(frame);
         onScreenReady();
+        refreshChrome();
+        VazirmatnLoader.apply(this,frame);
+    }
+
+    private LinearLayout buildWebHeader(){
+        webHeader=new LinearLayout(this);
+        webHeader.setOrientation(LinearLayout.HORIZONTAL);
+        webHeader.setGravity(Gravity.CENTER_VERTICAL);
+        webHeader.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        webHeader.setPadding(dp(10),dp(20),dp(10),dp(14));
+        webHeader.setMinimumHeight(dp(72));
+        webHeader.setBackground(headerGradient());
+
+        ImageView logo=new ImageView(this);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        logo.setContentDescription("PedalPro");
+        logo.setOnClickListener(v->openMain("dashboard"));
+        webHeader.addView(logo,new LinearLayout.LayoutParams(dp(108),dp(54)));
+
+        webHeader.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));
+
+        headerAccount=new PedalActionView(this,PedalIconView.Icon.USER,"ورود",PedalActionView.Style.OUTLINE);
+        headerAccount.setOnClickListener(v->openMain(signedIn?"me":"login"));
+        webHeader.addView(headerAccount,new LinearLayout.LayoutParams(dp(105),dp(46)));
+
+        headerAdminSettings=iconSquare(PedalIconView.Icon.SETTINGS,()->startActivity(new Intent(this,NativeSiteSettingsActivity.class)),"تنظیمات سایت");
+        headerAdminSettings.setVisibility(View.GONE);
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(46),dp(46));
+        sp.setMargins(dp(6),0,0,0);
+        webHeader.addView(headerAdminSettings,sp);
+
+        View menu=iconSquare(PedalIconView.Icon.MENU,()->openMain("menu"),"منو");
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(46),dp(46));
+        mp.setMargins(dp(6),0,0,0);
+        webHeader.addView(menu,mp);
+        return webHeader;
+    }
+
+    private LinearLayout buildWebBottomNav(){
+        LinearLayout nav=new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
+        nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        nav.setClipChildren(false);
+        nav.setPadding(dp(10),dp(16),dp(10),dp(10));
+        nav.setBackground(bottomGradient());
+
+        nav.addView(bottomItem("⌂","خانه",()->openMain("dashboard")),bottomWeight(1f,90));
+        nav.addView(bottomItem("🗓️","فعالیت‌ها",()->openMain("activities")),bottomWeight(1f,90));
+
+        LinearLayout center=new LinearLayout(this);
+        center.setGravity(Gravity.CENTER);
+        center.setClipChildren(false);
+        View ride=centerRide();
+        ride.setTranslationY(-dp(38));
+        center.addView(ride,new LinearLayout.LayoutParams(dp(106),dp(106)));
+        nav.addView(center,new LinearLayout.LayoutParams(0,dp(106),1.12f));
+
+        nav.addView(bottomItem("📍","مسیرها",()->openMain("routes")),bottomWeight(1f,90));
+        nav.addView(bottomItem("👤","من",()->openMain("me")),bottomWeight(1f,90));
+        return nav;
+    }
+
+    private View bottomItem(String glyph,String label,Runnable run){
+        LinearLayout host=new LinearLayout(this);
+        host.setOrientation(LinearLayout.VERTICAL);
+        host.setGravity(Gravity.CENTER);
+        host.setPadding(dp(6),dp(10),dp(6),dp(8));
+        host.setClickable(true);
+        host.setFocusable(true);
+        host.setContentDescription(label);
+
+        TextView icon=text(glyph,24,false,Color.rgb(238,248,255));
+        icon.setGravity(Gravity.CENTER);
+        icon.setIncludeFontPadding(false);
+        host.addView(icon,new LinearLayout.LayoutParams(dp(30),dp(30)));
+
+        TextView name=text(label,11,true,Color.rgb(238,248,255));
+        name.setTextSize(11.5f);
+        name.setGravity(Gravity.CENTER);
+        name.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-2,-2);
+        nlp.setMargins(0,dp(9),0,0);
+        host.addView(name,nlp);
+
+        host.setOnClickListener(v->run.run());
+        return host;
+    }
+
+    private View centerRide(){
+        FrameLayout ring=new FrameLayout(this);
+        GradientDrawable outer=new GradientDrawable();
+        outer.setShape(GradientDrawable.OVAL);
+        outer.setColor(Color.argb(199,16,49,71));
+        ring.setBackground(outer);
+        ring.setElevation(dp(12));
+        ring.setClickable(true);
+        ring.setFocusable(true);
+        ring.setContentDescription("شروع رکاب");
+        ring.setOnClickListener(v->openMain("ride"));
+
+        LinearLayout inner=new LinearLayout(this);
+        inner.setOrientation(LinearLayout.VERTICAL);
+        inner.setGravity(Gravity.CENTER);
+        inner.setPadding(dp(8),dp(8),dp(8),dp(8));
+        GradientDrawable cyan=new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(29,239,244),Color.rgb(21,209,238),Color.rgb(43,178,255)});
+        cyan.setShape(GradientDrawable.OVAL);
+        inner.setBackground(cyan);
+
+        rideDockLabel=text("شروع\nرکاب",16,true,Color.rgb(6,39,55));
+        rideDockLabel.setGravity(Gravity.CENTER);
+        rideDockLabel.setIncludeFontPadding(false);
+        inner.addView(rideDockLabel);
+
+        ring.addView(inner,new FrameLayout.LayoutParams(dp(86),dp(86),Gravity.CENTER));
+        return ring;
+    }
+
+    private View iconSquare(PedalIconView.Icon icon,Runnable run,String description){
+        FrameLayout box=new FrameLayout(this);
+        box.setBackground(round(Color.argb(20,255,255,255),14,Color.argb(50,255,255,255)));
+        PedalIconView iv=new PedalIconView(this,icon,Color.WHITE);
+        box.addView(iv,new FrameLayout.LayoutParams(dp(24),dp(24),Gravity.CENTER));
+        box.setClickable(true);
+        box.setFocusable(true);
+        box.setContentDescription(description);
+        box.setOnClickListener(v->run.run());
+        return box;
+    }
+
+    private void refreshChrome(){
+        io.execute(()->{
+            try{
+                JSONObject b=api.bootstrap();
+                JSONObject user=b.optJSONObject("user");
+                JSONObject ui=b.optJSONObject("ui");
+                boolean isAdmin=b.optBoolean("is_admin",false)||b.optInt("is_admin",0)==1;
+                int gap=ui==null?20:Math.max(6,Math.min(50,ui.optInt("mobile_header_top_gap_px",20)));
+                String ride=ui==null?"شروع":ui.optString("ride_button_text","شروع").trim();
+                if(ride.isBlank())ride="شروع";
+                String finalRide=ride;
+                main.post(()->{
+                    signedIn=user!=null;
+                    headerAccount.setLabel(signedIn?"حساب کاربری":"ورود");
+                    headerAdminSettings.setVisibility(isAdmin?View.VISIBLE:View.GONE);
+                    webHeader.setPadding(dp(10),dp(gap),dp(10),dp(14));
+                    rideDockLabel.setText(finalRide+"\nرکاب");
+                });
+            }catch(Exception ignored){}
+        });
+    }
+
+    private void openMain(String page){
+        Intent i=new Intent(this,NativeMainActivity.class);
+        i.putExtra("page",page);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
+        finish();
     }
 
     protected abstract String screenTitle();
@@ -262,12 +428,25 @@ abstract class NativeScreenBase extends Activity {
         return b;
     }
 
+    private LinearLayout.LayoutParams bottomWeight(float w,int h){
+        return new LinearLayout.LayoutParams(0,dp(h),w);
+    }
+
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{Color.argb(87,24,59,82),Color.argb(107,8,31,49)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1),Color.argb(51,255,255,255));
+        return g;
+    }
+
+    private GradientDrawable bottomGradient(){
+        GradientDrawable g=new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.argb(102,24,59,82),Color.argb(122,8,31,49)});
+        g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
+        g.setStroke(dp(1),Color.argb(61,255,255,255));
         return g;
     }
 
