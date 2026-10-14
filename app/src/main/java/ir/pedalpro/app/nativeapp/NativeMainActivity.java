@@ -2291,6 +2291,16 @@ public final class NativeMainActivity extends Activity {
         groupLp.gravity=Gravity.RIGHT;
         groupLp.setMargins(0,dp(10),0,0);
         top.addView(group,groupLp);
+        boolean groupAdmin = bootstrap != null &&
+                (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (groupAdmin) {
+            PedalActionView program=action(PedalIconView.Icon.GROUP,"برنامه گروهی",PedalActionView.Style.OUTLINE);
+            program.setOnClickListener(v->showGroupProgramDialog());
+            LinearLayout.LayoutParams programLp=new LinearLayout.LayoutParams(dp(158),dp(48));
+            programLp.gravity=Gravity.RIGHT;
+            programLp.setMargins(0,dp(7),0,0);
+            top.addView(program,programLp);
+        }
         immersive.addView(top,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
 
         LinearLayout bottom=new LinearLayout(this);
@@ -5089,7 +5099,7 @@ public final class NativeMainActivity extends Activity {
             try {
                 JSONObject body = new JSONObject()
                         .put("challenge_id", Math.max(0, challengeId))
-                        .put("event_id", Math.max(0, eventId))
+                        .put("event_id", 0)
                         .put("title", rideTitle)
                         .put("public_tracking", publicTracking)
                         .put("viewer_user_ids", viewerIds == null ? new JSONArray() : viewerIds)
@@ -5108,6 +5118,17 @@ public final class NativeMainActivity extends Activity {
                         .put("accuracy", fix.hasAccuracy() ? fix.getAccuracy() : JSONObject.NULL)
                         .put("timestamp", System.currentTimeMillis());
                 try { api.post("track_point", point); } catch (Exception ignored) { }
+                String groupStartError = "";
+                if (eventId > 0) {
+                    try {
+                        api.post("event_group_start", new JSONObject()
+                                .put("event_id", eventId).put("ride_id", rideId));
+                    } catch (Exception failure) {
+                        // The personal ride exists: never hide group-start failure or orphan GPS.
+                        groupStartError = failure.getMessage();
+                    }
+                }
+                final String groupNotice = groupStartError;
 
                 JSONObject d = api.bootstrap();
                 bootstrap = d;
@@ -5131,7 +5152,8 @@ public final class NativeMainActivity extends Activity {
                     if (activeRideRouteView != null) {
                         activeRideRouteView.setCurrent(fix.getLatitude(), fix.getLongitude());
                     }
-                    toast("ثبت GPS شروع شد.");
+                    toast(groupNotice.isEmpty() ? "ثبت GPS شروع شد." :
+                            "رکاب شخصی شروع شد، اما برنامه گروهی فعال نشد: " + groupNotice);
                 });
             } catch (Exception e) {
                 main.post(() -> {
@@ -5333,6 +5355,91 @@ public final class NativeMainActivity extends Activity {
             w.setAttributes(lp);
         }
         VazirmatnLoader.apply(this,box);
+    }
+
+    /** A program segment is part of, but never replaces, an active personal ride. */
+    private void showGroupProgramDialog() {
+        if (activeRide == null || bootstrap == null) return;
+        final int rideId = activeRide.optInt("id", 0);
+        if (rideId <= 0) return;
+        JSONObject segment=bootstrap.optJSONObject("my_active_event_segment");
+        if (segment != null && segment.optInt("ride_id", 0) == rideId) {
+            final int segmentId=segment.optInt("id", 0);
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("پایان بخش گروهی")
+                    .setMessage("«"+segment.optString("event_title","برنامه گروهی")+"» پایان می‌یابد، ولی رکاب‌زنی شخصی و GPS ادامه پیدا می‌کند. ابتدا نقاط GPS با سرور همگام می‌شوند.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("پایان برنامه",(d,w)->stopGroupProgram(rideId,segmentId))
+                    .show();
+            return;
+        }
+        JSONArray all=bootstrap.optJSONArray("events");
+        java.util.ArrayList<String> titles=new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> ids=new java.util.ArrayList<>();
+        if (all != null) for (int i=0;i<all.length();i++) {
+            JSONObject event=all.optJSONObject(i); if (event==null) continue;
+            String state=event.optString("status","");
+            if (!"planned".equals(state) && !"active".equals(state)) continue;
+            ids.add(event.optInt("id",0));titles.add(event.optString("title","برنامه"));
+        }
+        if (ids.isEmpty()) {toast("برنامه قابل شروع وجود ندارد.");return;}
+        final int[] chosen={0};
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("شروع برنامه گروهی روی رکاب فعلی")
+                .setSingleChoiceItems(titles.toArray(new String[0]),0,(d,which)->chosen[0]=which)
+                .setNegativeButton("انصراف",null)
+                .setPositiveButton("شروع",(d,w)->{
+                    int id=ids.get(chosen[0]);
+                    if(id>0)startGroupProgram(rideId,id);
+                }).show();
+    }
+
+    private void startGroupProgram(int rideId,int eventId) {
+        io.execute(()->{
+            try {
+                api.post("event_group_start",new JSONObject()
+                        .put("event_id",eventId).put("ride_id",rideId));
+                JSONObject state=api.bootstrap();
+                main.post(()->{
+                    if(activeRide==null || activeRide.optInt("id",0)!=rideId)return;
+                    bootstrap=state;activeRide=state.optJSONObject("my_active_ride");
+                    toast("برنامه گروهی آغاز شد؛ رکاب شخصی ادامه دارد.");showRide();
+                });
+            }catch(Exception e){main.post(()->toast("شروع برنامه گروهی ناموفق بود: "+e.getMessage()));}
+        });
+    }
+
+    private void stopGroupProgram(int rideId,int segmentId) {
+        io.execute(()->{
+            boolean prepared=false;
+            try {
+                android.content.SharedPreferences track=getSharedPreferences(TrackingService.PREFS,MODE_PRIVATE);
+                if(!track.getBoolean("active",false)||track.getInt("ride_id",0)!=rideId)
+                    throw new IllegalStateException("ثبت GPS شخصی فعال نیست؛ ابتدا ثبت را ادامه دهید.");
+                Intent p=new Intent(this,TrackingService.class).setAction(TrackingService.ACTION_PREPARE_FINISH);
+                p.putExtra("ride_id",rideId);startService(p);
+                prepared=true;
+                long deadline=SystemClock.elapsedRealtime()+25000L;
+                boolean synced=false;
+                while(SystemClock.elapsedRealtime()<deadline){
+                    String queued=track.getString("pending","[]");
+                    if(track.getBoolean("finish_prepared",false)&&
+                            track.getInt("finish_ride_id",0)==rideId&&
+                            (queued==null||"[]".equals(queued))){synced=true;break;}
+                    Thread.sleep(250L);
+                }
+                if(!synced)throw new IllegalStateException("هنوز نقاط GPS ارسال‌نشده وجود دارد؛ دوباره تلاش کنید.");
+                JSONObject body=new JSONObject().put("ride_id",rideId);
+                if(segmentId>0)body.put("segment_id",segmentId);
+                api.post("event_group_stop",body);
+                JSONObject state=api.bootstrap();
+                main.post(()->{
+                    bootstrap=state;activeRide=state.optJSONObject("my_active_ride");
+                    toast("برنامه گروهی پایان یافت. ثبت رکاب شخصی ادامه دارد.");showRide();
+                });
+            }catch(Exception e){main.post(()->toast("پایان برنامه انجام نشد: "+e.getMessage()));}
+            finally { if(prepared)startTrackingService(rideId); }
+        });
     }
 
     private void startTrackingService(int rideId) {
