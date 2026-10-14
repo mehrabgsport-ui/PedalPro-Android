@@ -20,6 +20,39 @@ import java.util.Map;
 public final class NativeAdvancedActivity extends NativeScreenBase {
     private JSONObject boot;
     private String tab="overview";
+    private JSONArray replayPoints=new JSONArray();
+    private int replayIndex=0;
+    private boolean replayRunning=false;
+    private long replayDelayMs=650L;
+    private NativeRouteView replayMap;
+    private TextView replayMeta;
+    private Button replayPlay;
+    private android.widget.SeekBar replaySlider;
+
+    private JSONArray flyPoints=new JSONArray();
+    private int flyIndex=0;
+    private boolean flyRunning=false;
+    private int flyStep=1;
+    private NativeRouteView flyMap;
+    private TextView flyMeta;
+    private Button flyPlay;
+
+    private final Runnable replayTick=new Runnable(){
+        @Override public void run(){
+            if(!replayRunning||replayPoints==null||replayIndex>=replayPoints.length()){stopReplayNative();return;}
+            replayPaintNative(replayIndex++);
+            main.postDelayed(this,replayDelayMs);
+        }
+    };
+
+    private final Runnable flyTick=new Runnable(){
+        @Override public void run(){
+            if(!flyRunning||flyPoints==null||flyIndex>=flyPoints.length()){stopFlyNative();return;}
+            flyPaintNative(flyIndex);
+            flyIndex+=Math.max(1,flyStep);
+            main.postDelayed(this,80L);
+        }
+    };
 
     @Override protected String screenTitle(){return "PedalPro Pro";}
 
@@ -348,7 +381,148 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void renderRideData(String title,String action){
-        LinearLayout c=card();c.addView(text(title,18,true,TEXT));EditText ride=input("شناسه رکاب‌زنی");Button load=primary("بارگذاری");TextView out=text("",11,false,MUTED);load.setOnClickListener(v->{load.setEnabled(false);io.execute(()->{try{Map<String,Object> q=new HashMap<>();q.put("ride_id",iv(ride,0));JSONObject d=api.get(action,q);JSONArray pts=d.optJSONArray("points");main.post(()->{load.setEnabled(true);out.setText("نقاط مسیر: "+(pts==null?0:pts.length())+(d.has("distance_km")?" · "+d.optDouble("distance_km",0)+" km":""));});}catch(Exception e){main.post(()->{load.setEnabled(true);out.setText(e.getMessage());});}});});c.addView(ride);c.addView(load);c.addView(out);content.addView(c,cardLp());
+        if("pp_activity_replay".equals(action)){renderReplayNative();return;}
+        if("pp_flyover".equals(action)){renderFlyoverNative();return;}
+    }
+
+    private void renderReplayNative(){
+        stopReplayNative();
+        LinearLayout form=card();
+        android.widget.Spinner ride=rideSpinner();
+        Button load=primary("بارگذاری Replay");
+        form.addView(ride);form.addView(load);content.addView(form,cardLp());
+
+        LinearLayout controls=new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        controls.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        replayPlay=normal("▶ پخش");
+        replaySlider=new android.widget.SeekBar(this);
+        android.widget.Spinner speed=simpleSpinner(new String[]{"1×","2×","4×"});
+        controls.addView(replayPlay,new LinearLayout.LayoutParams(dp(92),dp(46)));
+        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(0,dp(46),1f);slp.setMargins(dp(7),0,dp(7),0);controls.addView(replaySlider,slp);
+        controls.addView(speed,new LinearLayout.LayoutParams(dp(82),dp(46)));
+        content.addView(controls,cardLp());
+
+        replayMeta=noticeView("یک رکاب‌زنی را انتخاب کنید.");
+        content.addView(replayMeta,cardLp());
+        replayMap=new NativeRouteView(this);
+        content.addView(replayMap,new LinearLayout.LayoutParams(-1,dp(360)));
+
+        load.setOnClickListener(v->loadReplayNative(rideId(ride),load));
+        replayPlay.setOnClickListener(v->{
+            if(replayRunning){stopReplayNative();return;}
+            if(replayPoints==null||replayPoints.length()==0){loadReplayNative(rideId(ride),load);return;}
+            replayRunning=true;replayPlay.setText("⏸ مکث");main.removeCallbacks(replayTick);main.post(replayTick);
+        });
+        replaySlider.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(android.widget.SeekBar seekBar,int progress,boolean fromUser){if(fromUser){stopReplayNative();replayPaintNative(progress);}}
+            @Override public void onStartTrackingTouch(android.widget.SeekBar seekBar){}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar seekBar){}
+        });
+        speed.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){replayDelayMs=position==0?650L:position==1?350L:170L;}
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
+    }
+
+    private void loadReplayNative(int rideId,Button load){
+        stopReplayNative();load.setEnabled(false);
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();q.put("ride_id",rideId);
+                JSONObject d=api.get("pp_activity_replay",q);
+                JSONArray pts=d.optJSONArray("points");if(pts==null)pts=new JSONArray();
+                JSONArray finalPts=pts;
+                main.post(()->{
+                    load.setEnabled(true);replayPoints=finalPts;replayIndex=0;
+                    if(replayMap!=null)replayMap.setPoints(finalPts);
+                    if(replaySlider!=null){replaySlider.setMax(Math.max(0,finalPts.length()-1));replaySlider.setProgress(0);}
+                    replayPaintNative(0);
+                });
+            }catch(Exception e){main.post(()->{load.setEnabled(true);toast(e.getMessage());});}
+        });
+    }
+
+    private void replayPaintNative(int i){
+        if(replayPoints==null||replayPoints.length()==0)return;
+        i=Math.max(0,Math.min(replayPoints.length()-1,i));replayIndex=i;
+        JSONObject p=replayPoints.optJSONObject(i);if(p==null)return;
+        double lat=p.optDouble("lat",Double.NaN),lng=p.optDouble("lng",Double.NaN);
+        if(replayMap!=null&&Double.isFinite(lat)&&Double.isFinite(lng))replayMap.setCurrent(lat,lng);
+        if(replaySlider!=null)replaySlider.setProgress(i);
+        if(replayMeta!=null)replayMeta.setText((i+1)+"/"+replayPoints.length()+" · "+
+                String.format(Locale.US,"%.1f km/h",p.optDouble("speed_kmh",0))+" · "+
+                (p.isNull("altitude")?"—":Math.round(p.optDouble("altitude",0))+" m")+" · "+p.optString("recorded_at",""));
+    }
+
+    private void stopReplayNative(){
+        replayRunning=false;main.removeCallbacks(replayTick);
+        if(replayPlay!=null)replayPlay.setText("▶ پخش");
+    }
+
+    private void renderFlyoverNative(){
+        stopFlyNative();
+        LinearLayout form=card();
+        android.widget.Spinner ride=rideSpinner();
+        Button load=primary("بارگذاری Flyover");
+        form.addView(ride);form.addView(load);content.addView(form,cardLp());
+
+        LinearLayout actions=new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        flyPlay=normal("▶ پخش");
+        android.widget.Spinner speed=simpleSpinner(new String[]{"1×","2×","4×"});
+        actions.addView(flyPlay,new LinearLayout.LayoutParams(0,dp(46),1f));
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(92),dp(46));sp.setMargins(dp(8),0,0,0);actions.addView(speed,sp);
+        content.addView(actions,cardLp());
+
+        flyMap=new NativeRouteView(this);
+        flyMap.setBackgroundColor(android.graphics.Color.rgb(7,19,31));
+        content.addView(flyMap,new LinearLayout.LayoutParams(-1,dp(300)));
+        flyMeta=text("",11,false,MUTED);flyMeta.setPadding(0,dp(8),0,0);content.addView(flyMeta,cardLp());
+
+        load.setOnClickListener(v->loadFlyNative(rideId(ride),load));
+        flyPlay.setOnClickListener(v->{
+            if(flyRunning){stopFlyNative();return;}
+            if(flyPoints==null||flyPoints.length()==0){loadFlyNative(rideId(ride),load);return;}
+            flyRunning=true;flyPlay.setText("⏸ توقف");main.removeCallbacks(flyTick);main.post(flyTick);
+        });
+        speed.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){flyStep=position==0?1:position==1?2:4;}
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent){}
+        });
+    }
+
+    private void loadFlyNative(int rideId,Button load){
+        stopFlyNative();load.setEnabled(false);
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();q.put("ride_id",rideId);
+                JSONObject d=api.get("pp_flyover",q);
+                JSONArray pts=d.optJSONArray("points");if(pts==null)pts=new JSONArray();
+                JSONArray finalPts=pts;
+                main.post(()->{
+                    load.setEnabled(true);flyPoints=finalPts;flyIndex=0;
+                    if(flyMap!=null)flyMap.setPoints(finalPts);
+                    flyPaintNative(0);
+                });
+            }catch(Exception e){main.post(()->{load.setEnabled(true);toast(e.getMessage());});}
+        });
+    }
+
+    private void flyPaintNative(int i){
+        if(flyPoints==null||flyPoints.length()==0)return;
+        i=Math.max(0,Math.min(flyPoints.length()-1,i));flyIndex=i;
+        JSONObject p=flyPoints.optJSONObject(i);if(p==null)return;
+        double lat=p.optDouble("lat",Double.NaN),lng=p.optDouble("lng",Double.NaN);
+        if(flyMap!=null&&Double.isFinite(lat)&&Double.isFinite(lng))flyMap.setCurrent(lat,lng);
+        if(flyMeta!=null)flyMeta.setText("نقطه "+(i+1)+"/"+flyPoints.length()+" · سرعت "+
+                String.format(Locale.US,"%.1f km/h",p.optDouble("speed_kmh",0))+" · ارتفاع "+
+                Math.round(p.optDouble("altitude",0))+" m");
+    }
+
+    private void stopFlyNative(){
+        flyRunning=false;main.removeCallbacks(flyTick);if(flyPlay!=null)flyPlay.setText("▶ پخش");
     }
 
     private void renderAnalysis(){
@@ -555,6 +729,17 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         return row;
     }
 
+    private android.widget.Spinner simpleSpinner(String[] values){
+        android.widget.Spinner spinner=new android.widget.Spinner(this);
+        ArrayList<String> labels=new ArrayList<>();
+        java.util.Collections.addAll(labels,values);
+        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,labels){
+            @Override public android.view.View getView(int position,android.view.View convertView,android.view.ViewGroup parent){TextView v=(TextView)super.getView(position,convertView,parent);styleSpinnerText(v);return v;}
+            @Override public android.view.View getDropDownView(int position,android.view.View convertView,android.view.ViewGroup parent){TextView v=(TextView)super.getDropDownView(position,convertView,parent);v.setTextColor(TEXT);v.setBackgroundColor(android.graphics.Color.rgb(9,26,41));v.setPadding(dp(12),dp(12),dp(12),dp(12));v.setGravity(android.view.Gravity.CENTER);return v;}
+        };
+        spinner.setAdapter(adapter);spinner.setBackground(round(android.graphics.Color.argb(122,5,25,40),12,android.graphics.Color.argb(46,255,255,255)));return spinner;
+    }
+
     private android.widget.Spinner rideSpinner(){
         android.widget.Spinner spinner=new android.widget.Spinner(this);
         ArrayList<String> labels=new ArrayList<>();
@@ -663,4 +848,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private void post(String action,JSONObject p,Button b,String ok,Runnable after){b.setEnabled(false);io.execute(()->{try{api.post(action,p);main.post(()->{b.setEnabled(true);toast(ok);after.run();});}catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}});}
     private int iv(EditText e,int fallback){try{return Integer.parseInt(e.getText().toString().trim());}catch(Exception x){return fallback;}}
     private String formatSeconds(long v){long s=Math.max(0,v);return String.format(Locale.US,"%02d:%02d:%02d",s/3600,(s%3600)/60,s%60);}
+    @Override protected void onDestroy(){
+        stopReplayNative();
+        stopFlyNative();
+        super.onDestroy();
+    }
+
 }
