@@ -5368,14 +5368,34 @@ public final class NativeMainActivity extends Activity {
         currentPage = "about";
         selectNav(null);
         content.removeAllViews();
+
         JSONObject site = bootstrap == null ? null : bootstrap.optJSONObject("site");
-        String title = site == null ? "درباره ما" : site.optString("about_title", "درباره ما");
+        String title = site == null ? "درباره پدال پرو" : site.optString("about_title", "درباره پدال پرو");
         String body = site == null ? "" : site.optString("about_body", "");
+
         addHero(title, "");
-        LinearLayout box = glassCard(24);
-        if (!body.isBlank()) box.addView(text(body, 13, false, TEXT));
-        else box.addView(text("PedalPro", 18, true, TEXT));
-        content.addView(box, cardLp());
+
+        LinearLayout about = new LinearLayout(this);
+        about.setOrientation(LinearLayout.VERTICAL);
+        about.setGravity(Gravity.CENTER_HORIZONTAL);
+        about.setPadding(dp(20), dp(20), dp(20), dp(20));
+        about.setBackground(roundRect(Color.argb(10, 255, 255, 255), 24, Color.argb(36, 255, 255, 255)));
+
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.pedalpro_logo);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        logo.setContentDescription("PedalPro");
+        about.addView(logo, new LinearLayout.LayoutParams(dp(210), dp(150)));
+
+        if (!body.isBlank()) {
+            TextView copy = text(body, 13, false, Color.rgb(229, 240, 247));
+            copy.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.END);
+            copy.setLineSpacing(0, 2.05f);
+            copy.setPadding(0, dp(14), 0, 0);
+            about.addView(copy, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        content.addView(about, cardLp());
         VazirmatnLoader.apply(this, content);
         animatePageIn();
     }
