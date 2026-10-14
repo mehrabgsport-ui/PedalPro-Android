@@ -71,7 +71,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private static final String CHANNEL_ID = "pedalpro_ride_tracking";
     private static final int NOTIFICATION_ID = 4107;
     private static final float FIRST_LOCK_ACCURACY_M = 18f;
-    private static final long MAX_FIX_AGE_MS = 8000L;
+    private static final long MAX_FIX_AGE_MS = 5000L;
     private static final long MIN_DISTINCT_FIX_MS = 450L;
     private static final long IMU_STILL_ENTER_MS = 2500L;
     private static final long IMU_STARTUP_GUARD_MS = 3500L;
@@ -131,6 +131,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     // One-fix quarantine: a point is persisted only after the following fix confirms
     // that it was not an isolated GNSS teleport. This intentionally adds ~1s latency.
     private Location pendingCandidate;
+    private Location initialLockFix;
     private long pendingCandidateReceivedAt = 0L;
     private int stationaryFixes = 0;
     private int movementConfirmFixes = 0;
@@ -219,7 +220,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             // values that are too strict (e.g. 10m / 2000ms / 50kmh) must not
             // degrade tracking quality or delete legitimate downhill fixes.
             float requestedAccuracy = (float) intent.getDoubleExtra("max_accuracy", 25);
-            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 80);
+            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 65);
             String suppliedNeshanKey = intent.getStringExtra("neshan_service_key");
             if (NeshanRoadMatcher.validKey(suppliedNeshanKey)) {
                 neshanServiceKey = suppliedNeshanKey.trim();
@@ -232,8 +233,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     .remove("finish_ride_id")
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
-                    .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
-                    .putFloat("max_speed_kmh", Math.max(80f, requestedMaxSpeed))
+                    .putFloat("max_accuracy", Math.max(18f, Math.min(30f, requestedAccuracy)))
+                    .putFloat("max_speed_kmh", Math.max(40f, Math.min(75f, requestedMaxSpeed)))
                     .putLong("interval_ms", 1000L)
                     .putString("neshan_service_key", neshanServiceKey == null ? "" : neshanServiceKey)
                     .apply();
@@ -257,6 +258,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         roadMatchRunning.set(false);
         lastRoadMatchAttemptAt = 0L;
         lastAcceptedLocation = null;
+        initialLockFix = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;
@@ -486,7 +488,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     .setMinUpdateIntervalMillis(900L)
                     .setMaxUpdateDelayMillis(0L)
                     .setMaxUpdateAgeMillis(0L)
-                    .setMinUpdateDistanceMeters(0f)
+                    .setMinUpdateDistanceMeters(3f)
                     .setWaitForAccurateLocation(true)
                     .build();
 
@@ -530,15 +532,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
+                        LocationManager.GPS_PROVIDER, 1000L, 3f, this, Looper.getMainLooper());
             }
         } catch (Exception ignored) { }
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                        LocationManager.NETWORK_PROVIDER, Math.max(2000L, interval), 0f, this, Looper.getMainLooper());
-            }
-        } catch (Exception ignored) { }
+        // NETWORK_PROVIDER is not suitable for recording bicycle distance.
+        // Wi-Fi/cell-tower hops are kept out of the GPS track.
         broadcastStatus("GPS مستقیم اندروید فعال — حالت سازگار", false);
     }
 
@@ -551,6 +549,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         // Preserve the untouched sensor fix for diagnostics before filtering.
         appendRawPoint(loc, source);
+        if ("network".equalsIgnoreCase(loc.getProvider()) ||
+                "passive".equalsIgnoreCase(loc.getProvider())) {
+            noteRejected("موقعیت شبکه‌ای برای ثبت مسیر رد شد");
+            return;
+        }
 
         long now = System.currentTimeMillis();
         lastRawFixAt = now;
@@ -567,12 +570,29 @@ public class TrackingService extends Service implements LocationListener, Sensor
             int quality = gnssQualityScore(now);
             if (!loc.hasAccuracy() || loc.getAccuracy() > FIRST_LOCK_ACCURACY_M ||
                     (quality >= 0 && quality < 28 && loc.getAccuracy() > 12f)) {
+                initialLockFix = null;
                 noteRejected("در انتظار قفل دقیق GPS");
+                return;
+            }
+            if (initialLockFix == null) {
+                initialLockFix = new Location(loc);
+                broadcastStatus("اولین موقعیت دقیق؛ منتظر تأیید GPS", false);
+                return;
+            }
+            long dt = loc.getTime() - initialLockFix.getTime();
+            if (!GpsTrackQuality.stableFirstPair(initialLockFix.getLatitude(),
+                    initialLockFix.getLongitude(), loc.getLatitude(), loc.getLongitude(),
+                    initialLockFix.getAccuracy(), loc.getAccuracy(), dt,
+                    hasReliableSpeed(loc) ? loc.getSpeed() : 0.0)) {
+                initialLockFix = new Location(loc);
+                noteRejected("قفل اولیه GPS تأیید نشد");
                 return;
             }
             Location first = new Location(loc);
             first.setSpeed(0f);
+            initialLockFix = null;
             acceptCandidate(first, now, false);
+            broadcastStatus("قفل GPS با دو نمونه دقیق تأیید شد", false);
             return;
         }
 
@@ -638,14 +658,17 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         boolean forwardSupport = lookAhead == null ||
                 (forwardMeters >= 1.2 && netMeters >= Math.max(3.0, noiseRadius * 0.85));
-        boolean dopplerMovement = reliableSpeed && osMps >= 0.65 &&
-                (meters >= 1.4 || netMeters >= 2.5);
+        boolean dopplerMovement = reliableSpeed && osMps >= 1.15 &&
+                forwardSupport && netMeters >= Math.max(5.5, noiseRadius * 1.10) &&
+                meters >= Math.max(3.0, noiseRadius * 0.80);
         boolean geometricMovement = meters >= Math.max(4.0, noiseRadius * 1.10) &&
                 derivedMps >= 0.50 && forwardSupport &&
                 netMeters >= Math.max(5.0, noiseRadius * 1.30);
         boolean accumulatedSlowMovement = totalDtMs >= 2500L &&
                 netMeters >= Math.max(6.0, noiseRadius * 1.55);
         boolean moving = dopplerMovement || geometricMovement || accumulatedSlowMovement;
+        if (GpsTrackQuality.stationaryJitter(meters, netMeters, prevAcc, curAcc,
+                reliableSpeed ? osMps : 0.0, forwardSupport)) moving = false;
 
         long now = Math.max(receivedAt, System.currentTimeMillis());
         boolean imuStill = isImuStationaryStrong(now) || isImuStartupGuard(now);
@@ -704,7 +727,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         stationaryFixes = 0;
         movementConfirmFixes = 0;
-        double maxMps = prefs.getFloat("max_speed_kmh", 100f) / 3.6;
+        double maxMps = prefs.getFloat("max_speed_kmh", 65f) / 3.6;
+        if (derivedMps > maxMps * 1.15) {
+            noteRejected("پرش سرعت GPS رد شد");
+            return;
+        }
         double chosenMps = derivedMps;
         if (reliableSpeed && Math.abs(osMps - derivedMps) <= Math.max(1.8, derivedMps * 0.55)) {
             chosenMps = derivedMps * 0.64 + osMps * 0.36;
@@ -788,30 +815,16 @@ public class TrackingService extends Service implements LocationListener, Sensor
             lastFilterStatusAt = now;
             String quality = candidate.hasAccuracy()
                     ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
-            String road = NeshanRoadMatcher.validKey(neshanServiceKey) ? " + Map Matching نشان" : "";
+            String road = " · GNSS پالایش‌شده";
             broadcastStatus((moving ? "GPS V5" : "GPS V5 قفل دقیق") + road + quality, false);
         }
     }
 
     private void queueRoadAwareOutput(Location candidate) {
         if (candidate == null) return;
-        Location copy = new Location(candidate);
-        boolean emitNow = false;
-        synchronized (roadMatchOutputBuffer) {
-            roadMatchHistory.addLast(new Location(copy));
-            while (roadMatchHistory.size() > ROAD_MATCH_MAX_HISTORY) roadMatchHistory.removeFirst();
-
-            if (!NeshanRoadMatcher.validKey(neshanServiceKey) || roadMatchHistory.size() < ROAD_MATCH_MIN_POINTS) {
-                emitNow = true;
-            } else {
-                roadMatchOutputBuffer.addLast(copy);
-            }
-        }
-        if (emitNow) {
-            emitAcceptedPoint(copy, false, 0.0);
-            return;
-        }
-        maybeStartRoadMatch();
+        // Snapping per point to alternating parallel streets created zigzag distance.
+        // Preserve only GNSS points already accepted by the movement filter.
+        emitAcceptedPoint(new Location(candidate), false, 0.0);
     }
 
     private void maybeStartRoadMatch() {
@@ -948,7 +961,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         long dtMs = current.getTime() - lastAcceptedLocation.getTime();
         if (dtMs <= 0L) return false;
-        if (dtMs > 120000L) return true;
+        if (dtMs > 45000L) {
+            return lastAcceptedLocation.distanceTo(current) <=
+                    Math.max(120d, Math.min(350d, dtMs / 1000d * 4.0d));
+        }
 
         double meters = lastAcceptedLocation.distanceTo(current);
         double kmh = meters / (dtMs / 1000.0) * 3.6;
@@ -957,7 +973,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         float curAcc = current.hasAccuracy() ? current.getAccuracy() : 8f;
         double uncertainty = Math.max(6.0, (prevAcc + curAcc) * 0.75);
 
-        double configuredMax = Math.max(45.0, prefs.getFloat("max_speed_kmh", 100f));
+        double configuredMax = Math.max(40.0, Math.min(75.0, prefs.getFloat("max_speed_kmh", 65f)));
         double recent = medianRecentSpeedKmh();
         double hardLimit = configuredMax * 1.15;
         double dynamicLimit = Math.max(65.0, recent * 3.2 + 28.0);
@@ -1361,6 +1377,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             roadMatchOutputBuffer.clear();
         }
         lastAcceptedLocation = null;
+        initialLockFix = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;
