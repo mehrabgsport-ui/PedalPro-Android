@@ -71,6 +71,7 @@
         <activity android:name=".nativeapp.NativeHeatmapActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSegmentLeaderboardActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSiteSettingsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAppSettingsActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
