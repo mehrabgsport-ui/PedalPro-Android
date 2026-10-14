@@ -61,7 +61,7 @@ expect "$NATIVE/NeshanDirectionsClient.java" 'overview_polyline' "Neshan encoded
 expect "$NATIVE/NeshanServiceCredentials.java" 'AndroidKeyStore' "Device-encrypted Neshan service credentials"
 expect "$NATIVE/NativeRouteView.java" 'setNavigationRoute(JSONArray rows)' "Separate suggestion route from recorded GPS"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'public void setNavigationRoute(JSONArray rows)' "Shared Neshan street route visual surface"
-expect "$NATIVE/NativeLiveNavigationActivity.java" 'NeshanDirectionsClient.fetch(secret' "Moving-group route refresh"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'CyclingDirectionsClient.fetch(api' "Moving-group bicycle route via verified server contract"
 expect "$NATIVE/NativeLiveNavigationActivity.java" '45_000L' "Directions requests are throttled"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.clearNavigationRoute();' "Straight-distance fallback"
 expect "$NATIVE/NativeRouteView.java" 'setExternalBasemap(boolean useNativeProvider)' "Transparent Neshan-compatible track overlay"
@@ -192,6 +192,27 @@ expect "$NATIVE/NativeChatActivity.java" 'if(changed||receiptsChanged)renderMess
 expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boolean attended, CheckBox control)' "Attendance waits for server acknowledgement"
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
+
+# RC18 bicycle-only navigation and route-bound GNSS identifiers.
+expect "$NATIVE/CyclingDirectionsClient.java" 'api.get("pp_cycling_directions",query)' "Backend bicycle-only routing adapter"
+expect "$NATIVE/CyclingDirectionsClient.java" '"cycling-regular".equals(data.optString("profile"))' "Car profiles are never treated as bike routes"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'mapView.setNavigationRoute(route.points)' "Navigation draws bicycle approach to selected route"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'arrivalCandidateFixTime=loc.getTime()' "Saved route arrival requires multiple GPS fixes"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'groupTargetFresh(g)' "Stale leader target never used"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'drawWheel(c,p,50,77,16,8)' "Native 2.5D bicycle marker with wheel contact"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'p.put("client_point_id", java.util.UUID.randomUUID().toString());' "Stable per-point idempotency key"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'payload.optInt("ride_id",rideId) != rideId' "Offline points cannot be credited to another ride"
+python3 - "$NATIVE/NativeSavedRouteFollowActivity.java" "$NATIVE/NativeLiveNavigationActivity.java" <<'PY'
+import pathlib,sys
+route,group=[pathlib.Path(p).read_text() for p in sys.argv[1:]]
+assert 'NeshanDirectionsClient.fetch(' not in group
+assert group.count('CyclingDirectionsClient.fetch(')==1
+assert route.index('private void startFollow()') < route.index('private void activateFollowing()')
+assert 'beginTrackingThen(this::updateLocation)' in route
+assert 'phase=PHASE_TO_TARGET;' in route
+assert 'routeView.clearTarget();routeView.clearNavigationRoute();' in group
+print('PASS RC18 bicycle-only route and stale group position guards')
+PY
 
 # RC17 Backend audit verified API contracts (4.7.46).
 expect "$NATIVE/NativeMainActivity.java" 'api.post("event_group_start"' "Group segment created on personal ride"
