@@ -5109,16 +5109,9 @@ public final class NativeMainActivity extends Activity {
                 int rideId = created.optInt("ride_id", 0);
                 if (rideId <= 0) throw new IllegalStateException("شناسه رکاب از سرور دریافت نشد.");
 
-                JSONObject point = new JSONObject()
-                        .put("ride_id", rideId)
-                        .put("client_point_id", java.util.UUID.randomUUID().toString())
-                        .put("lat", fix.getLatitude())
-                        .put("lng", fix.getLongitude())
-                        .put("altitude", fix.hasAltitude() ? fix.getAltitude() : JSONObject.NULL)
-                        .put("speed_kmh", fix.hasSpeed() ? fix.getSpeed() * 3.6 : 0)
-                        .put("accuracy", fix.hasAccuracy() ? fix.getAccuracy() : JSONObject.NULL)
-                        .put("timestamp", System.currentTimeMillis());
-                try { api.post("track_point", point); } catch (Exception ignored) { }
+                // Important: do not persist the UI preflight fix. TrackingService
+                // creates the first stored GPS point after its two-fix accuracy lock.
+                // The preflight fix may center the map, but never affects distance.
                 String groupStartError = "";
                 if (eventId > 0) {
                     try {

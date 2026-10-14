@@ -16,3 +16,5 @@ Root cause analysis from 14 Oct screenshot: heavy zigzags, repeated stationary s
 - No production server changes. Signed store artifacts are internal candidate builds only; on-device riding with permission/battery settings is still required.
 
 No claim of using Strava proprietary algorithms. Strava docs acknowledge bad GPS data and smoothing; exact internal thresholds are not public.
+
+- RC21 safety correction: native ride-start no longer sends a one-off preflight track_point to PHP before TrackingService obtains its two accurate fixes. Camera-centering remains independent.

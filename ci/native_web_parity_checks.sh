@@ -209,6 +209,11 @@ assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
 PY
 
+# RC21: no direct raw GPS start point may bypass the TrackingService filter.
+if grep -Fq 'api.post("track_point"' "$NATIVE/NativeMainActivity.java"; then
+  echo "Raw UI GPS point bypasses the V6 recording filter" >&2
+  exit 1
+fi
 # RC21: GPS quality controls are tested in a standalone pure-Java harness.
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'initialLockFix' "Startup waits for two consecutive accurate GNSS fixes"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'GpsTrackQuality.stationaryJitter(' "Suppress jitter from standing bicycle"
