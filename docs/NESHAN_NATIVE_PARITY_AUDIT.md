@@ -17,6 +17,7 @@ The screenshots show an incomplete raised **شروع/ادامه رکاب** CTA a
 
 **Required external credentials:**
 - Android Neshan SDK `neshan.licence` issued for package `ir.pedalpro.app` and the **actual release APK signing SHA-1**. Obtain this from <https://platform.neshan.org/>; place locally in `app/src/main/res/raw/neshan.licence` (do not commit).
+- Release signing **SHA-1 verified from successful GitHub Actions keytool log**: `B7:56:19:B4:7B:D3:18:96:66:58:4A:3A:0A:9A:F1:2F:2C:AA:11:4B` (both Bazaar/Myket currently share this signing material). Do not confuse the SHA-256 of the APK artifact ZIP with this signing SHA-1.
 - If the website uses Neshan service-based road directions/matching, a **separately authorized Neshan service key** is required; previous PedalPro Web integration used `neshan_service_key` in runtime config. A `web.*` display credential/browser-referrer key is **not** an Android SDK licence or automatically a routing key.
 - Signed Bazaar and Myket builds presently share the configured GitHub release signing key. Check its SHA-1 fingerprint, then issue the Neshan Android licence for that fingerprint. Keep the licence as private build material.
 
