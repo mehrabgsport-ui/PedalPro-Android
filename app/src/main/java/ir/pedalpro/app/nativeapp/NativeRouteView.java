@@ -350,7 +350,7 @@ public final class NativeRouteView extends View {
             if (cameraListener != null) cameraListener.onCameraChanged(cameraLat,cameraLng,cameraZoom);
         } else {
             PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,
-                    headingUp ? 1.50f : 1.0f);
+                    headingUp ? 1.50f : 1.0f, headingUp ? navigationBearing : 0f);
         }
         Path p = new Path();
         boolean first = true;
@@ -397,6 +397,7 @@ public final class NativeRouteView extends View {
         }
 
         canvas.restoreToCount(mapSave);
+        if(!externalBasemap)PedalMapTiles.drawAttribution(this,canvas);
         if(navigationMode && !userCamera && currentPoint!=null && !externalBasemap) {
             // The marker stays upright in Heading-Up and reflects travel direction
             // in North-Up. No fake heading is shown before a valid bearing arrives.
