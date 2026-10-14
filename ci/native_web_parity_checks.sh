@@ -125,13 +125,13 @@ expect "$NATIVE/NativeSocialActivity.java" 'PedalIconView.Icon.HEART' "Kudos nat
 
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'private String safeBaleValue(String key,Object value)' "Undocumented Bale fields are redacted"
 expect "$NATIVE/NativeRouteView.java" 'public void setHeadingUpEnabled(boolean enabled)' "North-Up and Heading-Up can be switched while following"
-expect "$NATIVE/NativeRouteView.java" 'double ahead=h*.18d;' "Rider appears below the map center"
+expect "$NATIVE/NativeRouteView.java" 'float[] riderAt={w*.5f,h*.68f};' "Rider appears below the map center"
 expect "$NATIVE/NativeRouteView.java" 'navigationZoom = Math.max(3, Math.min(18, navigationZoom + amount));' "Navigation zoom does not disable follow"
 expect "$NATIVE/NativeRouteView.java" 'PedalMapTiles.drawAttribution(this,canvas)' "Map attribution stays upright"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'overlay.setHeadingUpEnabled(!overlay.isHeadingUpEnabled())' "Heading toggle is not a follow toggle"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setNavigationMode(true)' "Live/group map follows current rider"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setHeadingDegrees(loc.getBearing())' "Live navigation heading from an actual location"
-expect "$NATIVE/PedalMapTiles.java" 'double rangeW = overscan > 1.01f ? (cos*w + sin*h)*1.08 : w;' "Rotated raster viewport bounds requests"
+expect "$NATIVE/PedalMapTiles.java" 'inverseProjection.mapPoints(corners)' "Perspective-aware tile viewport bounds requests"
 expect "$NATIVE/PedalMapTiles.java" 'CACHE_SCOPE = Integer.toHexString(TILE_URL.hashCode())' "Tiles are provider-scoped"
 
 expect "$NATIVE/NativeMainActivity.java" 'PedalNeshanMapSurface keepMap=shownRideId>0' "Recreate ride UI without discarding loaded map"
