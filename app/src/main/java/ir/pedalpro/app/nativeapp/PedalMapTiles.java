@@ -5,6 +5,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.Handler;
@@ -19,6 +21,9 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Collections;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.WeakHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,16 +37,20 @@ import java.util.concurrent.Executors;
  * Public OSM tiles are a limited development fallback; cache and attribution are mandatory.
  */
 final class PedalMapTiles {
-    static final int TILE = 256;
+    // Logical display pixels, not the 256px provider bitmap. RC6 downloaded more
+    // than a screenful of high-zoom raster tiles on high-density devices.
+    static final int TILE = 512;
     private static final ExecutorService IO = Executors.newFixedThreadPool(2);
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final Map<String, Bitmap> MEMORY = Collections.synchronizedMap(
-            new LinkedHashMap<String, Bitmap>(72, .75f, true) {
+            new LinkedHashMap<String, Bitmap>(56, .75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, Bitmap> item) {
-                    return size() > 72;
+                    return size() > 56;
                 }
             });
     private static final Set<String> PENDING = Collections.synchronizedSet(new HashSet<>());
+    private static final Set<View> WATCHERS = Collections.synchronizedSet(
+            Collections.newSetFromMap(new WeakHashMap<View,Boolean>()));
     private static final Map<String, Long> RETRY_AFTER = Collections.synchronizedMap(new LinkedHashMap<>());
     private static volatile boolean hostRejected = false;
     private static final Paint IMAGE = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
@@ -62,61 +71,97 @@ final class PedalMapTiles {
         return (1 - Math.log(Math.tan(phi) + 1.0 / Math.cos(phi)) / Math.PI) / 2.0 * TILE * (1 << zoom);
     }
 
+
     static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom) {
-        draw(target,c,centerLat,centerLng,zoom,1.0f);
+        draw(target,c,centerLat,centerLng,zoom,1f,0f,null);
     }
 
     static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom,
                      float overscan) {
-        draw(target,c,centerLat,centerLng,zoom,overscan,0f);
+        draw(target,c,centerLat,centerLng,zoom,overscan,0f,null);
     }
 
     static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom,
-                     float overscan, float bearingDegrees) {
-        if (!Double.isFinite(centerLat) || !Double.isFinite(centerLng)) return;
-        float w = target.getWidth(), h = target.getHeight();
-        double worldX = worldX(centerLng, zoom), worldY = worldY(centerLat, zoom);
-        double left = worldX - w / 2.0, top = worldY - h / 2.0;
-        // Fetch diagonal coverage only when rotating the camera. Visible tile positions
-        // remain relative to the original viewport, avoiding a shifted GPS overlay.
-        double extent = Math.hypot(w,h) * 1.05;
-        double angle = Math.toRadians(bearingDegrees);
-        double cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
-        // Exact screen bounding box in inverse rotation/pitch space prevents
-        // unnecessary tile fetches at north/east headings.
-        double rangeW = overscan > 1.01f ? (cos*w + sin*h)*1.08 : w;
-        double rangeH = overscan > 1.01f ? (sin*w + cos*h)/.86*1.08 : h;
-        if (!Double.isFinite(rangeW)||!Double.isFinite(rangeH)) {
-            rangeW=extent; rangeH=extent;
+                     float overscan,float bearingDegrees) {
+        draw(target,c,centerLat,centerLng,zoom,overscan,bearingDegrees,null);
+    }
+
+    static void draw(View target,Canvas c,double centerLat,double centerLng,int zoom,
+                     float overscan,float bearingDegrees,Matrix inverseProjection) {
+        if(!Double.isFinite(centerLat)||!Double.isFinite(centerLng))return;
+        WATCHERS.add(target);
+        float w=target.getWidth(),h=target.getHeight();
+        if(w<1||h<1)return;
+        double worldX=worldX(centerLng,zoom),worldY=worldY(centerLat,zoom);
+        double left=worldX-w*.5,top=worldY-h*.5;
+        // Exact inverse-projected viewport coverage (plus fractional-tile margin).
+        // This remains correct with heading rotation AND true perspective pitch.
+        float[] corners={0,0,w,0,w,h,0,h};
+        if(inverseProjection!=null)inverseProjection.mapPoints(corners);
+        double minX=Double.POSITIVE_INFINITY,maxX=Double.NEGATIVE_INFINITY;
+        double minY=Double.POSITIVE_INFINITY,maxY=Double.NEGATIVE_INFINITY;
+        for(int i=0;i<corners.length;i+=2){
+            minX=Math.min(minX,corners[i]);maxX=Math.max(maxX,corners[i]);
+            minY=Math.min(minY,corners[i+1]);maxY=Math.max(maxY,corners[i+1]);
         }
-        int firstX = (int) Math.floor((worldX - rangeW/2) / TILE);
-        int firstY = (int) Math.floor((worldY - rangeH/2) / TILE);
-        int lastX = (int) Math.floor((worldX + rangeW/2) / TILE);
-        int lastY = (int) Math.floor((worldY + rangeH/2) / TILE);
-        int n = 1 << zoom;
-        int available = 0;
-        for (int ty = firstY; ty <= lastY; ty++) {
-            if (ty < 0 || ty >= n) continue;
-            for (int tx = firstX; tx <= lastX; tx++) {
-                int wrappedX = ((tx % n) + n) % n;
-                String id = zoom + "_" + wrappedX + "_" + ty;
-                Bitmap bmp = MEMORY.get(id);
-                if (bmp == null) {
-                    queue(target, id, zoom, wrappedX, ty);
-                    continue;
+        if(!Double.isFinite(minX)||!Double.isFinite(maxX)||!Double.isFinite(minY)
+                ||!Double.isFinite(maxY))return;
+        final double margin=20d;
+        int firstX=(int)Math.floor((left+minX-margin)/TILE);
+        int lastX=(int)Math.floor((left+maxX+margin)/TILE);
+        int firstY=(int)Math.floor((top+minY-margin)/TILE);
+        int lastY=(int)Math.floor((top+maxY+margin)/TILE);
+        int n=1<<zoom;
+        // A malicious/broken transform must never schedule a giant tile set.
+        if(lastX-firstX>16||lastY-firstY>16)return;
+        ArrayList<int[]> needed=new ArrayList<>();
+        int loaded=0;
+        final double midX=worldX/TILE,midY=worldY/TILE;
+        for(int y=firstY;y<=lastY;y++){
+            if(y<0||y>=n)continue;
+            for(int x=firstX;x<=lastX;x++){
+                int wrappedX=((x%n)+n)%n;
+                String id=zoom+"_"+wrappedX+"_"+y;
+                float drawX=(float)(x*TILE-left),drawY=(float)(y*TILE-top);
+                RectF rect=new RectF(drawX,drawY,drawX+TILE,drawY+TILE);
+                Bitmap tile=MEMORY.get(id);
+                if(tile!=null&&!tile.isRecycled()){
+                    c.drawBitmap(tile,null,rect,IMAGE);
+                    loaded++;
+                }else{
+                    boolean placeholder=false;
+                    // Parent pyramid retains street imagery during zoom & network
+                    // transitions rather than swapping to an empty navy viewport.
+                    for(int level=1;level<=2&&zoom-level>=0;level++){
+                        int parts=1<<level;
+                        Bitmap parent=MEMORY.get((zoom-level)+"_"+(wrappedX/parts)+"_"+(y/parts));
+                        if(parent==null||parent.isRecycled())continue;
+                        int width=parent.getWidth(),height=parent.getHeight();
+                        int sx=wrappedX%parts,sy=y%parts;
+                        Rect crop=new Rect(sx*width/parts,sy*height/parts,
+                                (sx+1)*width/parts,(sy+1)*height/parts);
+                        c.drawBitmap(parent,crop,rect,IMAGE);
+                        placeholder=true;
+                        break;
+                    }
+                    if(placeholder)loaded++;
+                    needed.add(new int[]{wrappedX,y,x});
                 }
-                if (bmp.isRecycled()) continue;
-                available++;
-                float x = (float) (tx * TILE - left);
-                float y = (float) (ty * TILE - top);
-                c.drawBitmap(bmp, null, new RectF(x, y, x + TILE, y + TILE), IMAGE);
             }
         }
-        CAPTION.setTextSize(target.getResources().getDisplayMetrics().scaledDensity * 10f);
-        if (available == 0) {
-            CAPTION.setColor(Color.rgb(199, 215, 224));
-            c.drawText(hostRejected ? "دسترسی به سرویس نقشه رد شد؛ تنظیمات API را بررسی کنید" :
-                    "در حال دریافت نقشه زمینه…", 16f, h / 2f, CAPTION);
+        // Queue nearest-to-camera tiles first. RC6 requested top-left tiles first,
+        // making the rider location the last region to become visible.
+        needed.sort(Comparator.comparingDouble(pt->
+                Math.pow(pt[2]+.5-midX,2)+Math.pow(pt[1]+.5-midY,2)));
+        for(int[] pt:needed){
+            if(PENDING.size()>=18)break;
+            queue(target,zoom+"_"+pt[0]+"_"+pt[1],zoom,pt[0],pt[1]);
+        }
+        if(loaded==0) {
+            CAPTION.setTextSize(target.getResources().getDisplayMetrics().scaledDensity*12f);
+            CAPTION.setColor(Color.rgb(199,215,224));
+            c.drawText(hostRejected?"سرویس نقشه پاسخ نمی‌دهد":"در حال بارگذاری نقشه…",
+                    18f,h*.55f,CAPTION);
         }
     }
 
@@ -135,7 +180,7 @@ final class PedalMapTiles {
         if (TILE_URL == null || !TILE_URL.startsWith("https://")) return;
         Long retry = RETRY_AFTER.get(id);
         if (retry != null && retry > System.currentTimeMillis()) return;
-        if (PENDING.size() >= 96 || !PENDING.add(id)) return;
+        if (PENDING.size() >= 18 || !PENDING.add(id)) return;
         Context app = target.getContext().getApplicationContext();
         IO.execute(() -> {
             try {
@@ -183,7 +228,15 @@ final class PedalMapTiles {
                     MEMORY.put(id, bitmap);
                     RETRY_AFTER.remove(id);
                     hostRejected = false;
-                    if (target.isAttachedToWindow()) MAIN.post(target::postInvalidateOnAnimation);
+                    MAIN.post(()->{
+                        // Re-render all still-visible map surfaces, not only the view
+                        // that originally requested the tile (which may be detached).
+                        synchronized(WATCHERS){
+                            for(View view:WATCHERS)
+                                if(view!=null&&view.isAttachedToWindow())
+                                    view.postInvalidateOnAnimation();
+                        }
+                    });
                 }
             } catch (Exception ignored) {
                 // Keep GPS route visible even when the tile host is offline.
