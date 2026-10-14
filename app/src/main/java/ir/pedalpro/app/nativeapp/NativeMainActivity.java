@@ -4736,6 +4736,10 @@ public final class NativeMainActivity extends Activity {
                 main.post(() -> {
                     pendingFreshFix = null;
                     showRide();
+                    // Seed only the native map camera; tracking/server GPS logic is unchanged.
+                    if (activeRideRouteView != null) {
+                        activeRideRouteView.setCurrent(fix.getLatitude(), fix.getLongitude());
+                    }
                     toast("ثبت GPS شروع شد.");
                 });
             } catch (Exception e) {
