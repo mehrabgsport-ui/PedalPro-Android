@@ -199,10 +199,7 @@ public final class NativeChatActivity extends NativeScreenBase {
                     if(generation!=roomGeneration||selectedRoom!=roomId)return;
                     loading=false;
                     if(full){messages=new JSONArray();lastId=0;}
-                    if(items!=null)for(int i=0;i<items.length();i++){
-                        JSONObject m=items.optJSONObject(i);
-                        if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}
-                    }
+                    appendMessages(items);
                     mergeReceipts(receipts);
                     renderMessages();
                 });
@@ -234,12 +231,9 @@ public final class NativeChatActivity extends NativeScreenBase {
                 JSONArray receipts=live==null?null:live.optJSONArray("receipts");
                 main.post(()->{
                     if(generation!=roomGeneration||selectedRoom!=roomId||loading)return;
-                    if(items!=null)for(int i=0;i<items.length();i++){
-                        JSONObject m=items.optJSONObject(i);
-                        if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}
-                    }
-                    mergeReceipts(receipts);
-                    renderMessages();
+                    boolean changed=appendMessages(items);
+                    boolean receiptsChanged=mergeReceipts(receipts);
+                    if(changed||receiptsChanged)renderMessages();
                 });
             }catch(Exception ignored){}
             finally{
@@ -250,12 +244,56 @@ public final class NativeChatActivity extends NativeScreenBase {
         });
     }
 
-    private void mergeReceipts(JSONArray receipts){
-        if(receipts==null)return;
-        for(int i=0;i<receipts.length();i++){
-            JSONObject r=receipts.optJSONObject(i);if(r==null)continue;long id=r.optLong("id",0);
-            for(int j=0;j<messages.length();j++){JSONObject m=messages.optJSONObject(j);if(m!=null&&m.optLong("id",0)==id){try{if(r.has("delivered_at"))m.put("delivered_at",r.opt("delivered_at"));if(r.has("read_at"))m.put("read_at",r.opt("read_at"));}catch(Exception ignored){}break;}}
+    /** Keep only unique live messages; the server is the source for full history. */
+    private boolean appendMessages(JSONArray incoming){
+        if(incoming==null||incoming.length()==0)return false;
+        boolean changed=false;
+        for(int i=0;i<incoming.length();i++){
+            JSONObject m=incoming.optJSONObject(i);
+            if(m==null)continue;
+            long id=m.optLong("id",0L);
+            if(id<=0L)continue;
+            boolean duplicate=false;
+            for(int j=messages.length()-1;j>=0;j--){
+                JSONObject existing=messages.optJSONObject(j);
+                if(existing!=null&&existing.optLong("id",0L)==id){duplicate=true;break;}
+            }
+            if(duplicate)continue;
+            messages.put(m);
+            lastId=Math.max(lastId,id);
+            changed=true;
         }
+        if(messages.length()>240){
+            JSONArray recent=new JSONArray();
+            for(int j=messages.length()-240;j<messages.length();j++)
+                recent.put(messages.optJSONObject(j));
+            messages=recent;
+        }
+        return changed;
+    }
+
+    private boolean mergeReceipts(JSONArray receipts){
+        if(receipts==null||receipts.length()==0)return false;
+        boolean changed=false;
+        for(int i=0;i<receipts.length();i++){
+            JSONObject r=receipts.optJSONObject(i);
+            if(r==null)continue;
+            long id=r.optLong("id",0);
+            for(int j=0;j<messages.length();j++){
+                JSONObject m=messages.optJSONObject(j);
+                if(m==null||m.optLong("id",0)!=id)continue;
+                for(String key:new String[]{"delivered_at","read_at"}){
+                    if(!r.has(key))continue;
+                    Object previous=m.opt(key),next=r.opt(key);
+                    if(!java.util.Objects.equals(previous,next)){
+                        try{m.put(key,next);changed=true;}
+                        catch(Exception ignored){}
+                    }
+                }
+                break;
+            }
+        }
+        return changed;
     }
 
     private void renderMessages(){
