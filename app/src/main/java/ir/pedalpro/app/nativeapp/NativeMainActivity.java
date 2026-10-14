@@ -5844,8 +5844,8 @@ public final class NativeMainActivity extends Activity {
         String desc=event.optString("description","");
         TextView d=text(route+(desc.isBlank()?"":"، "+desc),12,false,TEXT);
         d.setMaxLines(5);d.setGravity(Gravity.RIGHT);d.setTextDirection(View.TEXT_DIRECTION_RTL);
-        if(android.os.Build.VERSION.SDK_INT>=26)
-            d.setJustificationMode(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD);
+        if(android.os.Build.VERSION.SDK_INT>=29)
+            d.setJustificationMode(android.graphics.text.LineBreaker.JUSTIFICATION_MODE_INTER_WORD);
         d.setPadding(dp(12),dp(9),dp(12),dp(12));info.addView(d);
         LinearLayout r1=new LinearLayout(this);r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.addView(metaTile(PedalIconView.Icon.DISTANCE,event.optDouble("planned_distance",0)>0?JalaliDate.fa(Math.round(event.optDouble("planned_distance",0)))+" کیلومتر":"مسافت آزاد"),rowWeightLp());
