@@ -148,6 +148,14 @@ public final class NativeMainActivity extends Activity {
     private int displayClockRideId = 0;
 
     // Presentation clock only; GPS tracking and server ride-duration calculations remain untouched.
+    private long displayedRideSeconds() {
+        long sec = rideBaseSeconds;
+        if (!manualPaused && rideTimerAnchorElapsed > 0L) {
+            sec += Math.max(0L, (SystemClock.elapsedRealtime() - rideTimerAnchorElapsed) / 1000L);
+        }
+        return Math.max(0L, sec);
+    }
+
     private void synchronizeDisplayedRideTime(JSONObject ride) {
         if (ride == null || ride.optInt("id", 0) <= 0) {
             displayClockRideId = 0;
@@ -157,10 +165,7 @@ public final class NativeMainActivity extends Activity {
         }
         int id = ride.optInt("id", 0);
         long serverSeconds = Math.max(0L, ride.optLong("duration_seconds", 0L));
-        long locallyDisplayed = id == displayClockRideId ? rideBaseSeconds : 0L;
-        if (id == displayClockRideId && !manualPaused && rideTimerAnchorElapsed > 0L) {
-            locallyDisplayed += Math.max(0L, (SystemClock.elapsedRealtime() - rideTimerAnchorElapsed) / 1000L);
-        }
+        long locallyDisplayed = id == displayClockRideId ? displayedRideSeconds() : 0L;
         if (id != displayClockRideId) manualPaused = false;
         rideBaseSeconds = Math.max(serverSeconds, locallyDisplayed);
         displayClockRideId = id;
@@ -170,11 +175,7 @@ public final class NativeMainActivity extends Activity {
     private final Runnable clockTick = new Runnable() {
         @Override public void run() {
             if (rideTimer != null && activeRide != null) {
-                long sec = rideBaseSeconds;
-                if (!manualPaused && rideTimerAnchorElapsed > 0L) {
-                    sec += Math.max(0L, (SystemClock.elapsedRealtime() - rideTimerAnchorElapsed) / 1000L);
-                }
-                rideTimer.setText(formatDuration(sec));
+                rideTimer.setText(formatDuration(displayedRideSeconds()));
             }
             main.postDelayed(this, 1000L);
         }
@@ -1949,7 +1950,7 @@ public final class NativeMainActivity extends Activity {
         low.setOnClickListener(v -> {
             Intent i = new Intent(this, LowPowerRideActivity.class);
             i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
-            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS, rideBaseSeconds > 0 ? rideBaseSeconds : activeRide.optLong("duration_seconds", 0));
+            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS, displayedRideSeconds());
             i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM, activeRide.optDouble("distance_km", 0));
             i.putExtra(LowPowerRideActivity.EXTRA_IS_PAUSED, manualPaused);
             startActivityForResult(i, REQ_LOW_POWER);
