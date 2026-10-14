@@ -1,6 +1,7 @@
 package ir.pedalpro.app.nativeapp;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.text.InputType;
