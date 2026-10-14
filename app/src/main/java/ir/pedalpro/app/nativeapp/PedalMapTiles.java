@@ -49,6 +49,7 @@ final class PedalMapTiles {
     private static final long CACHE_AGE_MS = 7L * 24 * 60 * 60 * 1000;
     private static final String TILE_URL = BuildConfig.PEDALPRO_MAP_TILE_TEMPLATE;
     private static final String CREDIT = BuildConfig.PEDALPRO_MAP_ATTRIBUTION;
+    private static final String CACHE_SCOPE = Integer.toHexString(TILE_URL.hashCode());
 
     private PedalMapTiles() {}
 
@@ -67,6 +68,11 @@ final class PedalMapTiles {
 
     static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom,
                      float overscan) {
+        draw(target,c,centerLat,centerLng,zoom,overscan,0f);
+    }
+
+    static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom,
+                     float overscan, float bearingDegrees) {
         if (!Double.isFinite(centerLat) || !Double.isFinite(centerLng)) return;
         float w = target.getWidth(), h = target.getHeight();
         double worldX = worldX(centerLng, zoom), worldY = worldY(centerLat, zoom);
@@ -74,8 +80,15 @@ final class PedalMapTiles {
         // Fetch diagonal coverage only when rotating the camera. Visible tile positions
         // remain relative to the original viewport, avoiding a shifted GPS overlay.
         double extent = Math.hypot(w,h) * 1.05;
-        double rangeW = overscan > 1.01f ? extent : w;
-        double rangeH = overscan > 1.01f ? extent : h;
+        double angle = Math.toRadians(bearingDegrees);
+        double cos = Math.abs(Math.cos(angle)), sin = Math.abs(Math.sin(angle));
+        // Exact screen bounding box in inverse rotation/pitch space prevents
+        // unnecessary tile fetches at north/east headings.
+        double rangeW = overscan > 1.01f ? (cos*w + sin*h)*1.08 : w;
+        double rangeH = overscan > 1.01f ? (sin*w + cos*h)/.86*1.08 : h;
+        if (!Double.isFinite(rangeW)||!Double.isFinite(rangeH)) {
+            rangeW=extent; rangeH=extent;
+        }
         int firstX = (int) Math.floor((worldX - rangeW/2) / TILE);
         int firstY = (int) Math.floor((worldY - rangeH/2) / TILE);
         int lastX = (int) Math.floor((worldX + rangeW/2) / TILE);
@@ -105,11 +118,16 @@ final class PedalMapTiles {
             c.drawText(hostRejected ? "دسترسی به سرویس نقشه رد شد؛ تنظیمات API را بررسی کنید" :
                     "در حال دریافت نقشه زمینه…", 16f, h / 2f, CAPTION);
         }
-        // Mandatory per-tile provider attribution. Other providers may require a different credit.
+    }
+
+    /** Draw after restoring the rotated map canvas, so attribution stays legible. */
+    static void drawAttribution(View target, Canvas c) {
+        CAPTION.setTextSize(target.getResources().getDisplayMetrics().scaledDensity * 10f);
         CAPTION.setColor(Color.WHITE);
         CAPTION.setShadowLayer(3, 0, 1, Color.BLACK);
         String credit = CREDIT == null ? "" : CREDIT;
-        c.drawText(credit, Math.max(10f, w - CAPTION.measureText(credit) - 10f), h - 24f, CAPTION);
+        c.drawText(credit, Math.max(10f, target.getWidth() - CAPTION.measureText(credit) - 10f),
+                target.getHeight() - 24f, CAPTION);
         CAPTION.clearShadowLayer();
     }
 
@@ -117,11 +135,11 @@ final class PedalMapTiles {
         if (TILE_URL == null || !TILE_URL.startsWith("https://")) return;
         Long retry = RETRY_AFTER.get(id);
         if (retry != null && retry > System.currentTimeMillis()) return;
-        if (!PENDING.add(id)) return;
+        if (PENDING.size() >= 96 || !PENDING.add(id)) return;
         Context app = target.getContext().getApplicationContext();
         IO.execute(() -> {
             try {
-                File folder = new File(app.getCacheDir(), "pedalpro-map-tiles");
+                File folder = new File(app.getCacheDir(), "pedalpro-map-tiles-" + CACHE_SCOPE);
                 if (!folder.exists() && !folder.mkdirs()) return;
                 File file = new File(folder, id + ".png");
                 Bitmap bitmap = null;
