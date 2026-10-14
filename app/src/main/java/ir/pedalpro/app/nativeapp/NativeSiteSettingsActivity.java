@@ -221,56 +221,237 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         content.addView(box,cardLp());
     }
 
-    /**
-     * Reflect only real Bale values already returned by the authenticated site bootstrap.
-     * No guessed Bale API action or webhook mutation: we do not know the website's
-     * bot-controller request/response contract from this Android repository.
-     */
+
+    // All Bale operations below are backed by the verified web 4.7.46 PHP actions.
+    // The token is write-only: never populate its editor from any API response.
+    private String baleSearch = "";
+    private int balePage = 1;
+
     private void renderBale() {
-        LinearLayout box=card();
-        box.addView(text("ربات بله",18,true,TEXT));
-        box.addView(text("این قسمت مربوط به ربات پیام‌رسان بله است، نه Robots موتور جستجو. فقط داده‌های واقعی دریافتی از API مدیریتی سایت نمایش داده می‌شوند؛ توکن و Webhook محرمانه نمایش داده نمی‌شوند.",12,false,MUTED));
-        int displayed=0;
-        String[] candidates={"bale_bot_settings","bale_settings","bale_bot","bale","bale_status","bale_webhook","bale_bots","bot_bale"};
-        for(String key:candidates) {
-            if(data==null||data.isNull(key)||!data.has(key))continue;
-            Object object=data.opt(key);
-            if(object instanceof JSONObject) {
-                displayed+=appendBaleFields(box,(JSONObject)object,key,0);
-            } else if(object instanceof JSONArray) {
-                JSONArray array=(JSONArray)object;
-                for(int i=0;i<Math.min(array.length(),15);i++) {
-                    JSONObject row=array.optJSONObject(i);
-                    if(row!=null)displayed+=appendBaleFields(box,row,key+" / "+(i+1),0);
-                }
-            } else if(object!=null) {
-                String safe=safeBaleValue(key,object);
-                if(safe!=null) {
-                    box.addView(text(key+": "+safe,12,false,TEXT));
-                    displayed++;
-                }
+        LinearLayout loading=card();
+        loading.addView(text("ربات بله",18,true,TEXT));
+        loading.addView(text("دریافت وضعیت، اعضای متصل و گزارش ارسال از سرور…",12,false,MUTED));
+        content.addView(loading,cardLp());
+        refreshBalePanel();
+    }
+
+    private void refreshBalePanel() {
+        final String search=baleSearch;
+        final int page=balePage;
+        io.execute(()->{
+            try {
+                JSONObject status=api.get("bale_status");
+                JSONObject users=api.post("bale_connected_users",
+                        new JSONObject().put("search",search).put("page",page));
+                JSONObject history=api.get("bale_custom_history");
+                main.post(()->{
+                    if(!"bale".equals(activeTab))return;
+                    content.removeAllViews();
+                    renderTabs();
+                    renderBalePanel(status,users,history);
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception failure){
+                main.post(()->{
+                    if(!"bale".equals(activeTab))return;
+                    content.removeAllViews();renderTabs();
+                    addCard("خطای دریافت تنظیمات بله",failure.getMessage());
+                    Button retry=normal("تلاش مجدد");
+                    retry.setOnClickListener(v->refreshBalePanel());
+                    content.addView(retry);
+                });
+            }
+        });
+    }
+
+    private void renderBalePanel(JSONObject status,JSONObject listing,JSONObject history) {
+        JSONObject settings=status.optJSONObject("settings");
+        if(settings==null){addCard("خطا","ساختار تنظیمات بله از سرور دریافت نشد.");return;}
+
+        LinearLayout form=card();
+        form.addView(text("تنظیمات مدیریتی ربات بله",18,true,TEXT));
+        form.addView(text("متصل: "+status.optInt("connected_count",0)+
+                " · توکن: "+(settings.optBoolean("token_configured")?"تنظیم شده":"تنظیم نشده")+
+                " · Webhook: "+(settings.optBoolean("webhook_configured")?"تنظیم شده":"تنظیم نشده"),
+                12,false,MUTED));
+        CheckBox enabled=new CheckBox(this);
+        enabled.setText("ربات بله فعال است");
+        enabled.setTextColor(TEXT);enabled.setChecked(settings.optBoolean("enabled",false));
+        form.addView(enabled);
+        EditText name=input("نام ربات");
+        name.setText(settings.optString("name",""));
+        form.addView(name);
+        EditText username=input("نام کاربری ربات");
+        username.setText(settings.optString("username",""));
+        form.addView(username);
+        EditText token=input("توکن جدید (برای حفظ توکن قبلی خالی بماند)");
+        token.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        token.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        form.addView(token);
+        EditText adminChat=input("Chat ID مدیر");
+        adminChat.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_NORMAL);
+        adminChat.setText(settings.optString("admin_chat_id",""));
+        form.addView(adminChat);
+        EditText reminder=input("ساعت یادآوری پیش از برنامه");
+        reminder.setInputType(InputType.TYPE_CLASS_NUMBER);
+        reminder.setText(String.valueOf(settings.optInt("reminder_hours",24)));
+        form.addView(reminder);
+
+        JSONObject templateValues=settings.optJSONObject("templates");
+        java.util.LinkedHashMap<String,EditText> templates=new java.util.LinkedHashMap<>();
+        if(templateValues!=null){
+            form.addView(text("قالب‌های پیام · متغیرها: {{name}} {{event}} {{date}} {{time}} {{medal}} {{record}}",12,true,TEXT));
+            java.util.Iterator<String> keys=templateValues.keys();
+            while(keys.hasNext()){
+                String key=keys.next();
+                EditText value=input("قالب: "+key);
+                value.setSingleLine(false);value.setMinLines(2);
+                value.setText(templateValues.optString(key,""));
+                form.addView(value);
+                templates.put(key,value);
             }
         }
-        // Some web backends expose Bale flags as flat fields of site/settings
-        // instead of a dedicated object; discover only real non-secret fields.
-        displayed+=appendBaleFlatFields(box,data,"bootstrap");
-        displayed+=appendBaleFlatFields(box,data==null?null:data.optJSONObject("site"),"site");
-        displayed+=appendBaleFlatFields(box,data==null?null:data.optJSONObject("ui_settings"),"ui_settings");
-        JSONObject settings=data==null?null:data.optJSONObject("settings");
-        displayed+=appendBaleFlatFields(box,settings,"settings");
-        if(settings!=null)for(String key:candidates) {
-            JSONObject value=settings.optJSONObject(key);
-            if(value!=null)displayed+=appendBaleFields(box,value,key,0);
+        Button save=primary("ذخیره تنظیمات ربات بله");
+        save.setOnClickListener(v->{
+            JSONObject payload=new JSONObject();
+            try{
+                payload.put("enabled",enabled.isChecked());
+                payload.put("name",name.getText().toString().trim());
+                payload.put("username",username.getText().toString().trim());
+                payload.put("admin_chat_id",adminChat.getText().toString().trim());
+                payload.put("reminder_hours",intValue(reminder,24));
+                if(!token.getText().toString().trim().isEmpty())
+                    payload.put("token",token.getText().toString().trim());
+                JSONObject messageTemplates=new JSONObject();
+                for(java.util.Map.Entry<String,EditText> entry:templates.entrySet())
+                    messageTemplates.put(entry.getKey(),entry.getValue().getText().toString());
+                payload.put("templates",messageTemplates);
+            }catch(Exception e){toast("اطلاعات معتبر نیست.");return;}
+            save.setEnabled(false);
+            io.execute(()->{
+                try{
+                    api.post("bale_save_settings",payload);
+                    main.post(()->{token.setText("");toast("تنظیمات بله ذخیره شد.");refreshBalePanel();});
+                }catch(Exception e){main.post(()->{save.setEnabled(true);toast(e.getMessage());});}
+            });
+        });
+        form.addView(save);
+
+        Button webhook=normal("ثبت Webhook بله");
+        webhook.setOnClickListener(v->confirmBaleAdminAction(
+                "ثبت Webhook","این عملیات Webhook واقعی ربات را در سرویس بله تنظیم می‌کند.",
+                "bale_set_webhook"));
+        form.addView(webhook);
+        Button test=normal("ارسال پیام تست به مدیر");
+        test.setOnClickListener(v->confirmBaleAdminAction(
+                "ارسال پیام تست","پیام واقعی به Chat ID مدیر ارسال می‌شود.","bale_test"));
+        form.addView(test);
+        Button queue=normal("پردازش صف پیام‌ها");
+        queue.setOnClickListener(v->confirmBaleAdminAction(
+                "اجرای صف بله","این عملیات پیام‌های آماده ارسال را واقعاً ارسال می‌کند.","bale_run_queue"));
+        form.addView(queue);
+        content.addView(form,cardLp());
+
+        LinearLayout connected=card();
+        connected.addView(text("اعضای متصل به ربات",17,true,TEXT));
+        connected.addView(text("تعداد نتیجه: "+listing.optInt("filtered_count",0)+
+                " · صفحه "+listing.optInt("page",pageOrOne())+" از "+listing.optInt("pages",1),12,false,MUTED));
+        EditText search=input("جست‌وجوی نام، نام کاربری یا شماره");
+        search.setText(baleSearch);
+        connected.addView(search);
+        Button doSearch=normal("جست‌وجو");
+        doSearch.setOnClickListener(v->{baleSearch=search.getText().toString().trim();balePage=1;refreshBalePanel();});
+        connected.addView(doSearch);
+        JSONArray users=listing.optJSONArray("users");
+        if(users!=null)for(int i=0;i<users.length();i++){
+            JSONObject person=users.optJSONObject(i);if(person==null)continue;
+            int uid=person.optInt("user_id",0);
+            connected.addView(text(person.optString("display_name","")+
+                    " · @"+person.optString("username","")+
+                    (person.optBoolean("is_active",true)?"":" · غیرفعال"),12,false,TEXT));
+            Button sendOne=normal("ارسال پیام به این عضو");
+            sendOne.setOnClickListener(v->composeBaleMessage("one",uid,person.optString("display_name","عضو")));
+            connected.addView(sendOne);
         }
-        if(displayed==0) {
-            box.addView(text("پاسخ فعلی سایت، تنظیمات ربات بله را در bootstrap برنمی‌گرداند؛ امکان نمایش یا ویرایش معتبر آن هنوز وجود ندارد. برای انتقال دقیق، قرارداد API یا فایل تنظیمات وب لازم است.",12,false,ORANGE));
-        }else{
-            box.addView(text("وضعیت بالا از سایت خوانده شده است. ذخیره/تغییر توکن و Webhook غیرفعال است تا API واقعی سایت مشخص شود؛ هیچ مقدار فرضی به سرور ارسال نمی‌شود.",11,false,ORANGE));
-        }
-        Button refresh=normal("دریافت مجدد تنظیمات از سایت");
-        refresh.setOnClickListener(v->load("bale"));
-        box.addView(refresh);
-        content.addView(box,cardLp());
+        LinearLayout nav=new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        Button previous=normal("قبلی");
+        previous.setEnabled(listing.optInt("page",1)>1);
+        previous.setOnClickListener(v->{balePage=Math.max(1,balePage-1);refreshBalePanel();});
+        Button next=normal("بعدی");
+        next.setEnabled(listing.optInt("page",1)<listing.optInt("pages",1));
+        next.setOnClickListener(v->{balePage++;refreshBalePanel();});
+        nav.addView(previous,new LinearLayout.LayoutParams(0,dp(48),1f));
+        nav.addView(next,new LinearLayout.LayoutParams(0,dp(48),1f));
+        connected.addView(nav);
+        Button sendAll=primary("ارسال پیام به همه اعضای متصل");
+        sendAll.setOnClickListener(v->composeBaleMessage("all",0,"همه اعضا"));
+        connected.addView(sendAll);
+        content.addView(connected,cardLp());
+
+        LinearLayout logs=card();
+        logs.addView(text("تاریخچه ارسال پیام بله",17,true,TEXT));
+        JSONArray entries=history.optJSONArray("history");
+        if(entries!=null&&entries.length()>0)for(int i=0;i<entries.length();i++){
+            JSONObject e=entries.optJSONObject(i);if(e==null)continue;
+            logs.addView(text(e.optString("created_at","")+" · "+
+                    e.optString("preview","")+"\nگیرندگان "+e.optInt("recipients")+
+                    " · ارسال "+e.optInt("sent")+" · خطا "+e.optInt("failed")+
+                    " · در انتظار "+e.optInt("waiting")+" · رد "+e.optInt("skipped"),
+                    11,false,MUTED));
+        }else logs.addView(text("پیام دستی ثبت نشده است.",11,false,MUTED));
+        Button refresh=normal("بروزرسانی وضعیت و تاریخچه");
+        refresh.setOnClickListener(v->refreshBalePanel());
+        logs.addView(refresh);
+        content.addView(logs,cardLp());
+    }
+
+    private int pageOrOne(){return Math.max(1,balePage);}
+
+    private void confirmBaleAdminAction(String title,String description,String action) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(title).setMessage(description)
+                .setNegativeButton("انصراف",null)
+                .setPositiveButton("تأیید",(dialog,which)->io.execute(()->{
+                    try{
+                        api.post(action,new JSONObject());
+                        main.post(()->{toast("عملیات انجام شد.");refreshBalePanel();});
+                    }catch(Exception e){main.post(()->toast(e.getMessage()));}
+                })).show();
+    }
+
+    private void composeBaleMessage(String audience,int userId,String recipient) {
+        EditText message=input("متن پیام به "+recipient);
+        message.setSingleLine(false);message.setMinLines(4);
+        String nonce=java.util.UUID.randomUUID().toString().replace("-","");
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("ارسال پیام بله")
+                .setView(message)
+                .setNegativeButton("انصراف",null)
+                .setPositiveButton("ادامه",(dialog,which)->{
+                    String body=message.getText().toString().trim();
+                    if(body.length()<1||body.length()>3000||body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>11000) {
+                        toast("متن باید بین ۱ تا ۳۰۰۰ نویسه و حداکثر ۱۱۰۰۰ بایت باشد.");return;
+                    }
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("تأیید ارسال واقعی")
+                            .setMessage("گیرنده: "+recipient+"\nاین پیام واقعاً از طریق ربات بله ارسال می‌شود.")
+                            .setNegativeButton("انصراف",null)
+                            .setPositiveButton("ارسال",(d,w)->{
+                                io.execute(()->{
+                                    try {
+                                        JSONObject payload=new JSONObject()
+                                                .put("text",body).put("audience",audience).put("nonce",nonce);
+                                        if("one".equals(audience))payload.put("user_id",userId);
+                                        JSONObject ack=api.post("bale_custom_send",payload);
+                                        main.post(()->{
+                                            toast("ارسال ثبت شد: "+ack.optString("delivery","queued"));
+                                            refreshBalePanel();
+                                        });
+                                    }catch(Exception e){main.post(()->toast("ارسال تأیید نشد: "+e.getMessage()));}
+                                });
+                            }).show();
+                }).show();
     }
 
     private int appendBaleFlatFields(LinearLayout box,JSONObject source,String scope){
