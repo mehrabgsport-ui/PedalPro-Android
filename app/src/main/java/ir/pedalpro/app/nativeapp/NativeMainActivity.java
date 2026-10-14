@@ -1699,31 +1699,661 @@ public final class NativeMainActivity extends Activity {
         content.removeAllViews();
         addHero("چالش‌ها", "");
 
-        JSONArray challenges = bootstrap.optJSONArray("challenges");
-        if (challenges == null || challenges.length() == 0) {
-            addEmpty("چالشی برای نمایش وجود ندارد.");
-            return;
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (signedIn()) {
+            LinearLayout create = new LinearLayout(this);
+            create.setOrientation(LinearLayout.HORIZONTAL);
+            create.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            PedalActionView add = action(PedalIconView.Icon.PLUS, "چالش جدید", PedalActionView.Style.PRIMARY);
+            add.setOnClickListener(v -> showChallengeEditor(null, false));
+            create.addView(add, new LinearLayout.LayoutParams(0, dp(52), 1f));
+            if (admin) {
+                PedalActionView official = action(PedalIconView.Icon.PLUS, "چالش رسمی جدید", PedalActionView.Style.OUTLINE);
+                official.setOnClickListener(v -> showChallengeEditor(null, true));
+                LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(0, dp(52), 1f);
+                op.setMargins(dp(8), 0, 0, 0);
+                create.addView(official, op);
+            }
+            content.addView(create, cardLp());
         }
+
+        JSONArray challenges = bootstrap == null ? null : bootstrap.optJSONArray("challenges");
+        if (challenges == null) challenges = new JSONArray();
+
+        addChallengeSectionTitle("چالش‌های زنده", "");
+        int liveShown = 0;
         for (int i = 0; i < challenges.length(); i++) {
             JSONObject ch = challenges.optJSONObject(i);
             if (ch == null) continue;
-            LinearLayout box = card();
-            boolean official = ch.optInt("is_official", 0) == 1;
-            box.addView(text((official ? "★ " : "") + ch.optString("title", "چالش"), 16, true, official ? ORANGE : TEXT));
-            String status = ch.optString("status", "");
-            int joined = ch.optInt("joiners_count", ch.optInt("participants_count", 0));
-            box.addView(text("وضعیت: " + status + " · همراهان: " + joined, 11, false, MUTED));
-            String desc = ch.optString("description", "");
-            if (!desc.isBlank()) box.addView(text(desc, 12, false, MUTED));
-            boolean joinedByMe = ch.optInt("joined_by_me", 0) == 1;
-            Button join = primaryButton(joinedByMe ? "لغو همراهی" : "پیوستن به چالش");
-            int challengeId = ch.optInt("id", 0);
-            join.setOnClickListener(v -> toggleChallengeJoin(challengeId, !joinedByMe, join));
-            box.addView(join);
-            content.addView(box, cardLp());
+            JSONObject live = challengeLiveRide(ch);
+            if (live == null || !challengeLiveVisible(live, ch)) continue;
+            content.addView(buildChallengeCard(ch), cardLp());
+            liveShown++;
         }
+        if (liveShown == 0) addEmpty("چالش زنده عمومی وجود ندارد.");
+
+        addChallengeSectionTitle("چالش‌ها", "");
+        if (challenges.length() == 0) {
+            addEmpty("هنوز چالشی ساخته نشده است.");
+        } else {
+            for (int i = 0; i < challenges.length(); i++) {
+                JSONObject ch = challenges.optJSONObject(i);
+                if (ch != null) content.addView(buildChallengeCard(ch), cardLp());
+            }
+        }
+
+        if (signedIn()) {
+            addChallengeSectionTitle("چالش‌های من", "چالش‌هایی که ساخته‌اید یا در آن‌ها شرکت کرده‌اید");
+            JSONObject me = bootstrap.optJSONObject("user");
+            int uid = me == null ? 0 : me.optInt("id", 0);
+            int mine = 0;
+            for (int i = 0; i < challenges.length(); i++) {
+                JSONObject ch = challenges.optJSONObject(i);
+                if (ch == null) continue;
+                if (ch.optInt("creator_user_id", 0) == uid || ch.optInt("joined_by_me", 0) == 1) {
+                    content.addView(buildChallengeCard(ch), cardLp());
+                    mine++;
+                }
+            }
+            if (mine == 0) addEmpty("هنوز در هیچ چالشی عضو نشده‌اید.");
+        }
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
+
+    private void addChallengeSectionTitle(String title, String sub) {
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.VERTICAL);
+        head.setGravity(Gravity.END);
+        TextView t = text(title, 19, true, TEXT);
+        head.addView(t);
+        if (sub != null && !sub.isBlank()) {
+            TextView st = text(sub, 11, false, MUTED);
+            st.setPadding(0, dp(3), 0, 0);
+            head.addView(st);
+        }
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(3), dp(10), dp(3), dp(8));
+        content.addView(head, lp);
+    }
+
+    private View buildChallengeCard(JSONObject ch) {
+        boolean official = ch.optInt("is_official", 0) == 1;
+        JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        boolean mine = me != null && (ch.optInt("creator_user_id", 0) == uid || ch.optInt("joined_by_me", 0) == 1);
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        JSONArray participants = challengeParticipants(ch);
+        JSONObject live = challengeLiveRide(ch);
+        double progress = ch.optDouble("target_value", 0) > 0 ? challengeProgressValue(ch) : 0;
+        double target = ch.optDouble("target_value", 0);
+        double pct = target > 0 ? Math.min(100, progress / Math.max(.0001, target) * 100.0) : 0;
+
+        LinearLayout box = glassCard(24);
+        if (mine) {
+            GradientDrawable selected = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.argb(56, 19, 64, 93), Color.argb(71, 8, 30, 46)});
+            selected.setCornerRadius(dp(24));
+            selected.setStroke(dp(1), Color.argb(92, 46, 230, 166));
+            box.setBackground(selected);
+        }
+
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.TOP);
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        titleRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView title = text((official ? "⭐ " : "") + ch.optString("title", "چالش"), 17, true, TEXT);
+        titleRow.addView(title);
+        if (mine) {
+            TextView badge = challengeBadge("در این چالش هستم", GREEN);
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-2, -2);
+            bp.setMargins(dp(7), 0, 0, 0);
+            titleRow.addView(badge, bp);
+        }
+        copy.addView(titleRow);
+
+        LinearLayout meta = new LinearLayout(this);
+        meta.setOrientation(LinearLayout.HORIZONTAL);
+        meta.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        meta.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        meta.setPadding(0, dp(7), 0, 0);
+        meta.addView(challengeMeta("👤 " + ch.optString("creator_name", "عضو")));
+        if (!ch.optString("starts_at", "").isBlank()) {
+            String date = "📅 " + JalaliDate.format(ch.optString("starts_at"), false);
+            if (!ch.optString("ends_at", "").isBlank()) date += " تا " + JalaliDate.format(ch.optString("ends_at"), false);
+            meta.addView(challengeMeta(date));
+        }
+        if (official) meta.addView(challengeBadge("رسمی", Color.rgb(255, 217, 74)));
+        if (!official && "private".equals(ch.optString("visibility"))) meta.addView(challengeBadge("خصوصی", Color.rgb(220, 188, 255)));
+        if (live != null && live.optInt("public_tracking", 0) == 1) meta.addView(challengeBadge("زنده", GREEN));
+        copy.addView(meta);
+
+        top.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView participantsCount = challengeBadge("شرکت‌کنندگان " + JalaliDate.fa(participants.length()), Color.rgb(210, 229, 241));
+        LinearLayout.LayoutParams countLp = new LinearLayout.LayoutParams(-2, -2);
+        countLp.setMargins(dp(8), 0, 0, 0);
+        top.addView(participantsCount, countLp);
+        box.addView(top);
+
+        String desc = ch.optString("description", "");
+        if (!desc.isBlank()) {
+            TextView d = text(desc, 12, false, MUTED);
+            d.setPadding(0, dp(10), 0, 0);
+            box.addView(d);
+        }
+
+        LinearLayout extras = new LinearLayout(this);
+        extras.setOrientation(LinearLayout.HORIZONTAL);
+        extras.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        extras.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        extras.setPadding(0, dp(9), 0, 0);
+        extras.addView(challengeBadge("نوع هدف: " + challengeMetricLabel(ch.optString("metric", "distance")), Color.rgb(213, 232, 244)));
+        if (target > 0) {
+            String v = String.format(Locale.US, "پیشرفت: %." + ("rides".equals(ch.optString("metric")) ? "0" : "1") + "f / %.1f", progress, target);
+            if ("rides".equals(ch.optString("metric"))) v = "پیشرفت: " + Math.round(progress) + " / " + Math.round(target);
+            TextView pb = challengeBadge(v, Color.rgb(213, 232, 244));
+            LinearLayout.LayoutParams pblp = new LinearLayout.LayoutParams(-2, -2);
+            pblp.setMargins(dp(7), 0, 0, 0);
+            extras.addView(pb, pblp);
+        }
+        box.addView(extras);
+
+        if (target > 0) box.addView(challengeProgressBar(pct));
+
+        if (participants.length() > 0) {
+            LinearLayout chips = new LinearLayout(this);
+            chips.setOrientation(LinearLayout.HORIZONTAL);
+            chips.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            chips.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            chips.setPadding(0, dp(10), 0, 0);
+            int show = Math.min(5, participants.length());
+            for (int i = 0; i < show; i++) {
+                JSONObject p = participants.optJSONObject(i);
+                if (p == null) continue;
+                boolean self = me != null && p.optInt("user_id", 0) == uid;
+                TextView chip = challengeMemberChip(p.optString("display_name", "عضو"), self);
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2);
+                if (i > 0) cp.setMargins(dp(5), 0, 0, 0);
+                chips.addView(chip, cp);
+            }
+            if (participants.length() > 5) {
+                TextView more = challengeMemberChip("+" + (participants.length() - 5), false);
+                LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-2, -2);
+                mp.setMargins(dp(5), 0, 0, 0);
+                chips.addView(more, mp);
+            }
+            box.addView(chips);
+        }
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        actions.setGravity(Gravity.END);
+        actions.setPadding(0, dp(10), 0, 0);
+
+        if (live != null && challengeLiveVisible(live, ch)) {
+            Button liveBtn = primaryButton("مشاهده زنده");
+            int rideId = live.optInt("id", 0);
+            liveBtn.setOnClickListener(v -> openRideDetailNative(rideId));
+            actions.addView(liveBtn, challengeActionLp());
+        }
+
+        boolean canJoin = me != null
+                && ch.optInt("allow_join", 1) == 1
+                && ("public".equals(ch.optString("visibility", "public")) || official)
+                && ch.optInt("creator_user_id", 0) != uid;
+        if (canJoin) {
+            boolean joined = ch.optInt("joined_by_me", 0) == 1;
+            Button join = normalButton(joined ? "خروج از چالش" : "شرکت در چالش");
+            int challengeId = ch.optInt("id", 0);
+            join.setOnClickListener(v -> toggleChallengeJoin(challengeId, !joined, join));
+            actions.addView(join, challengeActionLp());
+        }
+
+        Button details = normalButton("جزئیات");
+        details.setOnClickListener(v -> showChallengeDetail(ch));
+        actions.addView(details, challengeActionLp());
+
+        if (mine || admin) {
+            Button edit = normalButton("ویرایش");
+            edit.setOnClickListener(v -> showChallengeEditor(ch, official));
+            actions.addView(edit, challengeActionLp());
+        }
+        box.addView(actions);
+        return box;
+    }
+
+    private LinearLayout.LayoutParams challengeActionLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(44));
+        lp.setMargins(dp(5), 0, 0, 0);
+        return lp;
+    }
+
+    private TextView challengeMeta(String value) {
+        TextView t = text(value, 10, false, MUTED);
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.setMargins(dp(7), 0, 0, 0);
+        t.setLayoutParams(lp);
+        return t;
+    }
+
+    private TextView challengeBadge(String value, int color) {
+        TextView t = text(value, 10, true, color);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(8), dp(5), dp(8), dp(5));
+        t.setBackground(roundRect(Color.argb(14, 255, 255, 255), 11, Color.argb(25, 255, 255, 255)));
+        return t;
+    }
+
+    private TextView challengeMemberChip(String value, boolean self) {
+        TextView t = text(value, 10, true, self ? Color.rgb(4, 36, 24) : TEXT);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dp(9), dp(6), dp(9), dp(6));
+        t.setBackground(roundRect(self ? Color.rgb(46, 230, 166) : Color.argb(18, 255, 255, 255), 13, Color.argb(32, 255, 255, 255)));
+        return t;
+    }
+
+    private View challengeProgressBar(double percent) {
+        FrameLayout track = new FrameLayout(this);
+        track.setBackground(roundRect(Color.argb(22, 255, 255, 255), 999, 0));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(8));
+        lp.setMargins(0, dp(10), 0, 0);
+        track.setLayoutParams(lp);
+        View fill = new View(this);
+        GradientDrawable bg = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{Color.rgb(46, 230, 166), Color.rgb(43, 146, 255)});
+        bg.setCornerRadius(dp(999));
+        fill.setBackground(bg);
+        int width = Math.max(dp(2), Math.round((getResources().getDisplayMetrics().widthPixels - dp(64)) * (float)Math.max(0, Math.min(100, percent)) / 100f));
+        track.addView(fill, new FrameLayout.LayoutParams(width, -1));
+        return track;
+    }
+
+    private JSONArray challengeParticipants(JSONObject ch) {
+        JSONArray out = new JSONArray();
+        JSONArray members = bootstrap == null ? null : bootstrap.optJSONArray("challenge_members");
+        int challengeId = ch.optInt("id", 0);
+        int creatorId = ch.optInt("creator_user_id", 0);
+        boolean creatorFound = false;
+        java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+        if (members != null) {
+            for (int i = 0; i < members.length(); i++) {
+                JSONObject m = members.optJSONObject(i);
+                if (m == null || m.optInt("challenge_id", 0) != challengeId) continue;
+                int uid = m.optInt("user_id", 0);
+                if (seen.add(uid)) {
+                    out.put(m);
+                    if (uid == creatorId) creatorFound = true;
+                }
+            }
+        }
+        if (!creatorFound && creatorId > 0) {
+            JSONObject creator = new JSONObject();
+            try {
+                creator.put("challenge_id", challengeId);
+                creator.put("user_id", creatorId);
+                creator.put("display_name", ch.optString("creator_name", "سازنده"));
+            } catch (Exception ignored) {}
+            JSONArray withCreator = new JSONArray();
+            withCreator.put(creator);
+            for (int i = 0; i < out.length(); i++) withCreator.put(out.optJSONObject(i));
+            return withCreator;
+        }
+        return out;
+    }
+
+    private JSONArray challengeProgressRides(JSONObject ch) {
+        JSONArray all = bootstrap == null ? null : bootstrap.optJSONArray("rides");
+        JSONArray out = new JSONArray();
+        if (all == null) return out;
+
+        String metric = ch.optString("metric", "distance");
+        int challengeId = ch.optInt("id", 0);
+        java.util.HashSet<Integer> participantIds = new java.util.HashSet<>();
+        JSONArray participants = challengeParticipants(ch);
+        for (int i = 0; i < participants.length(); i++) {
+            JSONObject p = participants.optJSONObject(i);
+            if (p != null) participantIds.add(p.optInt("user_id", 0));
+        }
+        String start = ch.optString("starts_at", "");
+        String end = ch.optString("ends_at", "");
+        java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = 0; i < all.length(); i++) {
+                JSONObject r = all.optJSONObject(i);
+                if (r == null || !"completed".equals(r.optString("status"))) continue;
+                boolean direct = r.optInt("challenge_id", 0) == challengeId;
+                if ("rides".equals(metric) && !direct) continue;
+                if (pass == 0 && !direct) continue;
+                if (pass == 1) {
+                    if (direct || !participantIds.contains(r.optInt("owner_user_id", 0))) continue;
+                    String raw = r.optString("ended_at", r.optString("started_at", ""));
+                    String date = raw.length() >= 10 ? raw.substring(0, 10) : raw;
+                    if (!start.isBlank() && !date.isBlank() && date.compareTo(start.substring(0, Math.min(10, start.length()))) < 0) continue;
+                    if (!end.isBlank() && !date.isBlank() && date.compareTo(end.substring(0, Math.min(10, end.length()))) > 0) continue;
+                }
+                int id = r.optInt("id", i + 1);
+                if (seen.add(id)) out.put(r);
+            }
+            if ("rides".equals(metric)) break;
+        }
+        return out;
+    }
+
+    private double challengeProgressValue(JSONObject ch) {
+        JSONArray rides = challengeProgressRides(ch);
+        String metric = ch.optString("metric", "distance");
+        if ("distance".equals(metric)) {
+            double total = 0;
+            for (int i = 0; i < rides.length(); i++) total += rides.optJSONObject(i).optDouble("distance_km", 0);
+            return total;
+        }
+        if ("elevation".equals(metric)) {
+            double total = 0;
+            for (int i = 0; i < rides.length(); i++) total += rides.optJSONObject(i).optDouble("ascent_m", 0);
+            return total;
+        }
+        return rides.length();
+    }
+
+    private JSONObject challengeLiveRide(JSONObject ch) {
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
+        if (rides == null) return null;
+        int challengeId = ch.optInt("id", 0);
+        for (int i = 0; i < rides.length(); i++) {
+            JSONObject r = rides.optJSONObject(i);
+            if (r != null && r.optInt("challenge_id", 0) == challengeId && "active".equals(r.optString("status"))) return r;
+        }
+        return null;
+    }
+
+    private boolean challengeLiveVisible(JSONObject live, JSONObject ch) {
+        if (live == null) return false;
+        JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        boolean mine = me != null && (ch.optInt("creator_user_id", 0) == uid || ch.optInt("joined_by_me", 0) == 1);
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        return live.optInt("public_tracking", 0) == 1 || mine || admin;
+    }
+
+    private String challengeMetricLabel(String metric) {
+        if ("elevation".equals(metric)) return "صعود";
+        if ("rides".equals(metric)) return "تعداد رکاب‌زنی";
+        return "مسافت";
+    }
+
+    private void openRideDetailNative(int rideId) {
+        if (rideId <= 0) return;
+        Intent i = new Intent(this, NativeRideDetailActivity.class);
+        i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, rideId);
+        startActivity(i);
+    }
+
+    private void showChallengeDetail(JSONObject ch) {
+        Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout box = glassCard(22);
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        head.addView(text(ch.optString("title", "چالش"), 20, true, TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
+        Button close = normalButton("×");
+        close.setOnClickListener(v -> d.dismiss());
+        head.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        box.addView(head);
+
+        double val = challengeProgressValue(ch);
+        String metric = ch.optString("metric", "distance");
+        String unit = "distance".equals(metric) ? " km" : "elevation".equals(metric) ? " m" : "";
+        LinearLayout notice = glassCard(15);
+        notice.addView(text(ch.optString("title", "چالش"), 14, true, TEXT));
+        if (!ch.optString("description", "").isBlank()) notice.addView(text(ch.optString("description"), 12, false, TEXT));
+        notice.addView(text("هدف: " + challengeMetricLabel(metric) + " " + (ch.optString("target_value", "").isBlank() ? "—" : ch.optString("target_value")), 12, false, TEXT));
+        notice.addView(text("پیشرفت فعلی: " + ("rides".equals(metric) ? Math.round(val) : String.format(Locale.US, "%.1f", val)) + unit, 12, false, TEXT));
+        notice.addView(text("وضعیت: " + ch.optString("status", ""), 12, false, TEXT));
+        box.addView(notice, cardLp());
+
+        box.addView(text("شرکت‌کنندگان", 17, true, TEXT));
+        JSONArray participants = challengeParticipants(ch);
+        if (participants.length() == 0) {
+            box.addView(text("هنوز کسی در این چالش شرکت نکرده است.", 12, false, MUTED));
+        } else {
+            LinearLayout chips = new LinearLayout(this);
+            chips.setOrientation(LinearLayout.VERTICAL);
+            JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+            int uid = me == null ? 0 : me.optInt("id", 0);
+            for (int i = 0; i < participants.length(); i++) {
+                JSONObject p = participants.optJSONObject(i);
+                if (p == null) continue;
+                TextView c = challengeMemberChip(p.optString("display_name", "عضو"), me != null && p.optInt("user_id", 0) == uid);
+                LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+                clp.setMargins(0, dp(4), 0, 0);
+                chips.addView(c, clp);
+            }
+            box.addView(chips);
+        }
+
+        TextView ridesTitle = text("رکاب‌زنی‌های مرتبط", 17, true, TEXT);
+        ridesTitle.setPadding(0, dp(16), 0, dp(6));
+        box.addView(ridesTitle);
+        JSONArray rides = challengeProgressRides(ch);
+        if (rides.length() == 0) {
+            box.addView(text("هنوز رکاب‌زنی‌ای ثبت نشده است.", 12, false, MUTED));
+        } else {
+            for (int i = 0; i < rides.length(); i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r == null) continue;
+                Button b = normalButton(r.optString("owner_name", "") + " · " + String.format(Locale.US, "%.1f km", r.optDouble("distance_km", 0)) + ("active".equals(r.optString("status")) ? " 🟢" : ""));
+                int rideId = r.optInt("id", 0);
+                b.setOnClickListener(v -> { d.dismiss(); openRideDetailNative(rideId); });
+                box.addView(b);
+            }
+        }
+
+        scroll.addView(box);
+        d.setContentView(scroll);
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = Math.min(getResources().getDisplayMetrics().heightPixels - dp(48), dp(720));
+            lp.gravity = Gravity.CENTER;
+            lp.dimAmount = .66f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this, box);
+    }
+
+    private void showChallengeEditor(JSONObject ch, boolean official) {
+        if (!signedIn()) { showAuthDialog("login"); return; }
+        Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout box = glassCard(18);
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        head.addView(text("چالش", 20, true, TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
+        Button close = normalButton("×");
+        close.setOnClickListener(v -> d.dismiss());
+        head.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        box.addView(head);
+
+        EditText title = input("عنوان");
+        title.setText(ch == null ? "" : ch.optString("title", ""));
+        android.widget.Spinner metric = challengeSpinner(new String[]{"مسافت (km)", "صعود (m)", "تعداد رکاب‌زنی"}, ch == null ? 0 : "elevation".equals(ch.optString("metric")) ? 1 : "rides".equals(ch.optString("metric")) ? 2 : 0);
+        EditText target = input("مقدار هدف");
+        target.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        target.setText(ch == null ? "" : ch.optString("target_value", ""));
+        EditText start = input("شروع · تاریخ شمسی");
+        start.setText(ch == null || ch.optString("starts_at", "").isBlank() ? "" : jalaliDateForInput(ch.optString("starts_at")));
+        EditText end = input("پایان · تاریخ شمسی");
+        end.setText(ch == null || ch.optString("ends_at", "").isBlank() ? "" : jalaliDateForInput(ch.optString("ends_at")));
+        android.widget.Spinner status = challengeSpinner(new String[]{"برنامه‌ریزی", "در حال اجرا", "تمام‌شده"}, ch == null ? 0 : "active".equals(ch.optString("status")) ? 1 : "completed".equals(ch.optString("status")) ? 2 : 0);
+        android.widget.Spinner visibility = challengeSpinner(new String[]{"عمومی", "خصوصی"}, ch != null && "private".equals(ch.optString("visibility")) ? 1 : 0);
+        android.widget.Spinner allowJoin = challengeSpinner(new String[]{"بله", "خیر"}, ch != null && ch.optInt("allow_join", 1) == 0 ? 1 : 0);
+        EditText desc = input("توضیحات");
+        desc.setSingleLine(false);
+        desc.setMinLines(3);
+        desc.setText(ch == null ? "" : ch.optString("description", ""));
+
+        box.addView(title);
+        box.addView(metric);
+        box.addView(target);
+        box.addView(start);
+        box.addView(end);
+        box.addView(status);
+        box.addView(visibility);
+        box.addView(allowJoin);
+        box.addView(desc);
+
+        LinearLayout foot = new LinearLayout(this);
+        foot.setOrientation(LinearLayout.HORIZONTAL);
+        foot.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button save = primaryButton("ذخیره");
+        foot.addView(save, new LinearLayout.LayoutParams(0, dp(50), 1f));
+
+        boolean canDelete = ch != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1
+                || ch.optInt("creator_user_id", 0) == bootstrap.optJSONObject("user").optInt("id", 0));
+        if (canDelete) {
+            Button delete = normalButton("حذف چالش");
+            delete.setTextColor(RED);
+            delete.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                    .setMessage("این چالش حذف شود؟ رکاب‌زنی‌های ثبت‌شده حذف نمی‌شوند و فقط از چالش جدا می‌شوند.")
+                    .setPositiveButton("حذف", (dialog, which) -> deleteChallenge(ch.optInt("id", 0), d, delete))
+                    .setNegativeButton("انصراف", null)
+                    .show());
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(0, dp(50), 1f);
+            dlp.setMargins(dp(8), 0, 0, 0);
+            foot.addView(delete, dlp);
+        }
+        box.addView(foot);
+
+        save.setOnClickListener(v -> {
+            String titleText = title.getText().toString().trim();
+            if (titleText.isBlank()) { toast("عنوان چالش را وارد کنید."); return; }
+            String startIso = start.getText().toString().trim().isBlank() ? "" : JalaliDate.toGregorianIso(start.getText().toString().trim());
+            String endIso = end.getText().toString().trim().isBlank() ? "" : JalaliDate.toGregorianIso(end.getText().toString().trim());
+            if (!start.getText().toString().trim().isBlank() && startIso.isBlank()) { toast("تاریخ شروع نامعتبر است."); return; }
+            if (!end.getText().toString().trim().isBlank() && endIso.isBlank()) { toast("تاریخ پایان نامعتبر است."); return; }
+            String[] metrics = {"distance", "elevation", "rides"};
+            String[] statuses = {"planned", "active", "completed"};
+            save.setEnabled(false);
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("id", ch == null ? 0 : ch.optInt("id", 0));
+                payload.put("title", titleText);
+                payload.put("metric", metrics[Math.max(0, Math.min(2, metric.getSelectedItemPosition()))]);
+                payload.put("target_value", JalaliDate.en(target.getText().toString().trim()));
+                payload.put("starts_at", startIso);
+                payload.put("ends_at", endIso);
+                payload.put("status", statuses[Math.max(0, Math.min(2, status.getSelectedItemPosition()))]);
+                payload.put("visibility", visibility.getSelectedItemPosition() == 1 ? "private" : "public");
+                payload.put("allow_join", allowJoin.getSelectedItemPosition() == 0);
+                payload.put("description", desc.getText().toString().trim());
+                payload.put("is_official", official || (ch != null && ch.optInt("is_official", 0) == 1));
+            } catch (Exception ignored) {}
+            io.execute(() -> {
+                try {
+                    api.post("save_challenge", payload);
+                    bootstrap = api.bootstrap();
+                    activeRide = bootstrap.optJSONObject("my_active_ride");
+                    main.post(() -> { d.dismiss(); toast("چالش ذخیره شد"); showChallenges(); });
+                } catch (Exception e) {
+                    main.post(() -> { save.setEnabled(true); toast(e.getMessage()); });
+                }
+            });
+        });
+
+        scroll.addView(box);
+        d.setContentView(scroll);
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = Math.min(getResources().getDisplayMetrics().heightPixels - dp(40), dp(760));
+            lp.gravity = Gravity.CENTER;
+            lp.dimAmount = .66f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this, box);
+    }
+
+    private android.widget.Spinner challengeSpinner(String[] labels, int selected) {
+        android.widget.Spinner spinner = new android.widget.Spinner(this);
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
+            @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView v = (TextView) super.getView(position, convertView, parent);
+                v.setTextColor(TEXT); v.setTextSize(12); v.setGravity(Gravity.CENTER_VERTICAL | Gravity.END); v.setPadding(dp(12), 0, dp(12), 0);
+                return v;
+            }
+            @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
+                TextView v = (TextView) super.getDropDownView(position, convertView, parent);
+                v.setTextColor(TEXT); v.setBackgroundColor(Color.rgb(9, 26, 41)); v.setPadding(dp(12), dp(12), dp(12), dp(12)); v.setGravity(Gravity.END);
+                return v;
+            }
+        };
+        spinner.setAdapter(adapter);
+        spinner.setSelection(Math.max(0, Math.min(labels.length - 1, selected)));
+        spinner.setBackground(roundRect(Color.argb(122, 5, 25, 40), 15, Color.argb(46, 255, 255, 255)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(50));
+        lp.setMargins(0, dp(6), 0, dp(6));
+        spinner.setLayoutParams(lp);
+        return spinner;
+    }
+
+    private void deleteChallenge(int id, Dialog modal, Button button) {
+        if (id <= 0) return;
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("delete_challenge", new JSONObject().put("challenge_id", id));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> { modal.dismiss(); toast("چالش حذف شد"); showChallenges(); });
+            } catch (Exception e) {
+                main.post(() -> { button.setEnabled(true); toast(e.getMessage()); });
+            }
+        });
+    }
+
+    private String jalaliDateForInput(String iso) {
+        if (iso == null || iso.isBlank()) return "";
+        try {
+            java.time.LocalDate d = java.time.LocalDate.parse(iso.substring(0, 10));
+            int[] j = JalaliDate.toJalali(d.getYear(), d.getMonthValue(), d.getDayOfMonth());
+            return JalaliDate.fa(String.format(Locale.US, "%04d/%02d/%02d", j[0], j[1], j[2]));
+        } catch (Exception e) { return iso; }
+    }
 
     private void toggleChallengeJoin(int challengeId, boolean join, Button button) {
         if (challengeId <= 0) return;
