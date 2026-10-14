@@ -160,8 +160,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         controls.addView(control("+","بزرگ‌نمایی نقشه",()->overlay.zoomBy(1)));
         controls.addView(control("−","کوچک‌نمایی نقشه",()->overlay.zoomBy(-1)));
         controls.addView(control("◎","بازگشت به موقعیت رکاب‌زن",overlay::recenter));
-        navigationControl=(TextView)control("↗","تغییر حالت نقشه ناویگیشن",()->
-                setNavigationMode(!overlay.isNavigationMode()));
+        navigationControl=(TextView)control("↗","تغییر حالت نقشه ناویگیشن",this::toggleOrientation);
         controls.addView(navigationControl);
         if (neshanMap != null) {
             controls.addView(control("☾","تغییر حالت روز و شب نشان",()->{
@@ -216,16 +215,29 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         mapControls.setElevation(dp(9));
     }
 
+    /** Orientation changes must never stop tracking or modify stored GPS. */
+    private void toggleOrientation() {
+        if(!overlay.isNavigationMode())overlay.setNavigationMode(true);
+        else overlay.setHeadingUpEnabled(!overlay.isHeadingUpEnabled());
+        refreshOrientationLabel();
+    }
+
+    private void refreshOrientationLabel() {
+        if(navigationControl==null)return;
+        boolean follow=overlay.isNavigationMode();
+        boolean heading=overlay.isHeadingUpEnabled();
+        navigationControl.setText(!follow?"↗":heading?"↑":"N");
+        navigationControl.setContentDescription(!follow?
+                "فعال‌سازی دنبال‌کردن رکاب‌زن":
+                heading?"Heading-Up فعال؛ تغییر به شمال بالا":
+                        "North-Up فعال؛ تغییر به جهت حرکت بالا");
+    }
+
     /** Navigation camera affects visual presentation only, not GPS/tracking. */
     public void setNavigationMode(boolean enabled) {
         overlay.setNavigationMode(enabled);
-        if(navigationControl!=null){
-            navigationControl.setText(enabled?"⬆":"↗");
-            navigationControl.setContentDescription(enabled?
-                    "حالت دنبال‌کردن رکاب‌زن فعال":"فعال‌کردن حالت ناویگیشن");
-        }
-        // The licensed SDK must implement its road layers and bearing/tilt natively;
-        // the fallback renderer keeps the track and basemap aligned on rotation.
+        refreshOrientationLabel();
+        // The licensed SDK requires its own native bearing/tilt camera implementation.
     }
 
     public void setHeadingDegrees(float bearing){overlay.setHeadingDegrees(bearing);}
