@@ -64,6 +64,10 @@ jobs:
           grep -Fq 'PedalIconView.Icon.SENSOR' "$NATIVE/NativeMainActivity.java"
           grep -Fq 'create.setEnabled(false)' "$NATIVE/NativeSafetyActivity.java"
 
+      - name: Native web-parity contract audit
+        shell: bash
+        run: bash ci/native_web_parity_checks.sh
+
       - name: Unit tests
         run: |
           gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             --stacktrace
