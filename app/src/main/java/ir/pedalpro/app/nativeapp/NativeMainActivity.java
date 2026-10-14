@@ -134,6 +134,7 @@ public final class NativeMainActivity extends Activity {
     private String launchPage = "";
     private int launchEventId = 0;
     private PedalNeshanMapSurface activeRideRouteView;
+    private FrameLayout activeRideImmersiveOverlay;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
     private android.net.Uri pendingProfileAvatarUri;
@@ -1974,8 +1975,164 @@ public final class NativeMainActivity extends Activity {
         synchronizeDisplayedRideTime(activeRide);
         VazirmatnLoader.apply(this, content);
         animatePageIn();
+        renderImmersiveRide(live,pause,low,details,stop,gps);
     }
 
+
+
+    private void hideImmersiveRideOverlay() {
+        if(activeRideImmersiveOverlay==null)return;
+        FrameLayout old=activeRideImmersiveOverlay;
+        activeRideImmersiveOverlay=null;
+        if(old.getParent()==stageRoot)stageRoot.removeView(old);
+    }
+
+    private void renderImmersiveRide(PedalActionView live,PedalActionView pause,
+                                    PedalActionView low,PedalActionView details,
+                                    PedalActionView stop,LinearLayout gpsCard) {
+        if(activeRide==null||activeRideRouteView==null||stageRoot==null)return;
+        // Keep controls attached to the existing ride callbacks; no TrackingService logic changes.
+        content.removeView(activeRideRouteView);
+        content.removeView(live);
+        content.removeView(pause);
+        content.removeView(low);
+        content.removeView(details);
+        content.removeView(stop);
+        gpsCard.removeView(rideGps);
+
+        FrameLayout immersive=new FrameLayout(this);
+        immersive.setBackgroundColor(Color.rgb(7,20,31));
+        immersive.setClipChildren(false);
+        immersive.setClipToPadding(false);
+        ViewCompat.setOnApplyWindowInsetsListener(immersive,(v,insets)->{
+            androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(0,bars.top,0,bars.bottom);
+            return insets;
+        });
+        activeRideImmersiveOverlay=immersive;
+        activeRideRouteView.setFullRideMode(true);
+        immersive.addView(activeRideRouteView,new FrameLayout.LayoutParams(-1,-1));
+
+        LinearLayout top=new LinearLayout(this);
+        top.setOrientation(LinearLayout.VERTICAL);
+        top.setPadding(dp(12),dp(12),dp(12),0);
+
+        LinearLayout stateBar=new LinearLayout(this);
+        stateBar.setOrientation(LinearLayout.HORIZONTAL);
+        stateBar.setGravity(Gravity.CENTER_VERTICAL);
+        stateBar.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        stateBar.setPadding(dp(9),dp(8),dp(9),dp(8));
+        stateBar.setBackground(roundRect(Color.argb(245,13,38,56),22,Color.argb(110,56,195,218)));
+
+        stop.setLabel("پایان");
+        stateBar.addView(stop,new LinearLayout.LayoutParams(dp(74),dp(51)));
+
+        LinearLayout titleBlock=new LinearLayout(this);
+        titleBlock.setGravity(Gravity.CENTER);
+        titleBlock.setOrientation(LinearLayout.VERTICAL);
+        TextView rideTitle=text("حالت رکاب‌زنی دوچرخه",17,true,TEXT);
+        rideTitle.setGravity(Gravity.CENTER);
+        titleBlock.addView(rideTitle);
+        rideGps.setGravity(Gravity.CENTER);
+        rideGps.setTextSize(10);
+        rideGps.setMaxLines(2);
+        titleBlock.addView(rideGps,new LinearLayout.LayoutParams(-1,-2));
+        stateBar.addView(titleBlock,new LinearLayout.LayoutParams(0,dp(62),1f));
+
+        PedalActionView back=action(PedalIconView.Icon.BACK,"برگشت",PedalActionView.Style.OUTLINE);
+        back.setOnClickListener(v->showHome());
+        stateBar.addView(back,new LinearLayout.LayoutParams(dp(84),dp(51)));
+        top.addView(stateBar,new LinearLayout.LayoutParams(-1,dp(80)));
+
+        LinearLayout running=new LinearLayout(this);
+        running.setGravity(Gravity.CENTER_VERTICAL);
+        running.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        running.setPadding(dp(12),dp(6),dp(12),dp(6));
+        running.setBackground(roundRect(Color.argb(244,12,38,55),20,Color.argb(104,49,184,213)));
+        TextView title=text("رکاب‌زنی در حال ثبت است",16,true,TEXT);
+        running.addView(new PedalIconView(this,PedalIconView.Icon.HEADING,Color.rgb(33,219,236)),
+                new LinearLayout.LayoutParams(dp(30),dp(30)));
+        running.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
+        pause.setLabel(manualPaused?"ادامه":"مکث");
+        pause.setOnClickListener(v->{
+            toggleManualPause(pause);
+            pause.setLabel(manualPaused?"ادامه":"مکث");
+            title.setText(manualPaused?"رکاب‌زنی متوقف شده است":"رکاب‌زنی در حال ثبت است");
+        });
+        running.addView(pause,new LinearLayout.LayoutParams(dp(92),dp(48)));
+        LinearLayout.LayoutParams runLp=new LinearLayout.LayoutParams(-1,dp(66));
+        runLp.setMargins(0,dp(9),0,0);
+        top.addView(running,runLp);
+
+        PedalActionView group=action(PedalIconView.Icon.ROUTE,"مسیریابی گروه",PedalActionView.Style.OUTLINE);
+        group.setOnClickListener(v->openGroupNavigation());
+        LinearLayout.LayoutParams groupLp=new LinearLayout.LayoutParams(dp(158),dp(48));
+        groupLp.gravity=Gravity.RIGHT;
+        groupLp.setMargins(0,dp(10),0,0);
+        top.addView(group,groupLp);
+        immersive.addView(top,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+
+        LinearLayout bottom=new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.VERTICAL);
+        bottom.setPadding(dp(12),0,dp(12),dp(12));
+
+        LinearLayout tools=new LinearLayout(this);
+        tools.setOrientation(LinearLayout.VERTICAL);
+        tools.setPadding(dp(10),dp(10),dp(10),dp(10));
+        tools.setBackground(roundRect(Color.argb(240,10,33,49),20,Color.argb(108,50,182,207)));
+        tools.setVisibility(View.GONE);
+        tools.addView(live,new LinearLayout.LayoutParams(-1,dp(49)));
+        tools.addView(low,new LinearLayout.LayoutParams(-1,dp(49)));
+        tools.addView(details,new LinearLayout.LayoutParams(-1,dp(49)));
+        PedalActionView neshan=action(PedalIconView.Icon.SETTINGS,
+                "تنظیمات نشان و کلیدهای API",PedalActionView.Style.OUTLINE);
+        neshan.setOnClickListener(v->openNativeAppSettings());
+        tools.addView(neshan,new LinearLayout.LayoutParams(-1,dp(49)));
+        bottom.addView(tools,new LinearLayout.LayoutParams(-1,-2));
+
+        PedalActionView menu=action(PedalIconView.Icon.SETTINGS,
+                "ابزارهای رکاب و تنظیمات نشان",PedalActionView.Style.OUTLINE);
+        menu.setOnClickListener(v->tools.setVisibility(
+                tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
+        LinearLayout.LayoutParams menuLp=new LinearLayout.LayoutParams(-1,dp(46));
+        menuLp.setMargins(0,dp(5),0,dp(8));
+        bottom.addView(menu,menuLp);
+
+        LinearLayout stats=new LinearLayout(this);
+        stats.setGravity(Gravity.CENTER);
+        stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        stats.setBackground(roundRect(Color.argb(248,13,38,55),22,Color.argb(114,57,197,218)));
+        rideTimer=metricValue("زمان",formatDuration(displayedRideSeconds()));
+        rideDistance=metricValue("مسافت",String.format(Locale.US,"%.2f",activeRide.optDouble("distance_km",0)));
+        rideSpeed=metricValue("سرعت",String.format(Locale.US,"%.1f",activeRide.optDouble("avg_speed_kmh",0)));
+        stats.addView(immersiveMetric("زمان",rideTimer),new LinearLayout.LayoutParams(0,dp(88),1f));
+        stats.addView(immersiveMetric("مسافت · km",rideDistance),new LinearLayout.LayoutParams(0,dp(88),1f));
+        stats.addView(immersiveMetric("سرعت · km/h",rideSpeed),new LinearLayout.LayoutParams(0,dp(88),1f));
+        TextView satellite=text(isTrackingServiceActive()?"فعال":"متوقف",16,true,
+                isTrackingServiceActive()?GREEN:ORANGE);
+        satellite.setGravity(Gravity.CENTER);
+        stats.addView(immersiveMetric("GPS",satellite),new LinearLayout.LayoutParams(0,dp(88),1f));
+        bottom.addView(stats,new LinearLayout.LayoutParams(-1,dp(92)));
+        immersive.addView(bottom,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
+        stageRoot.addView(immersive,new FrameLayout.LayoutParams(-1,-1));
+        VazirmatnLoader.apply(this,immersive);
+    }
+
+    private View immersiveMetric(String label,TextView value) {
+        LinearLayout box=new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        TextView caption=text(label,10,true,Color.rgb(190,216,225));
+        caption.setGravity(Gravity.CENTER);
+        value.setTextColor(Color.WHITE);
+        value.setTextSize(17);
+        value.setGravity(Gravity.CENTER);
+        box.addView(caption);
+        LinearLayout.LayoutParams valueLp=new LinearLayout.LayoutParams(-1,-2);
+        valueLp.setMargins(0,dp(7),0,0);
+        box.addView(value,valueLp);
+        return box;
+    }
 
     private void showActivities() {
         currentPage = "activities";
@@ -5182,6 +5339,7 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void selectNav(View selected) {
+        hideImmersiveRideOverlay();
         tintBottomItem(navHome, selected == navHome);
         tintBottomItem(navActivities, selected == navActivities);
         tintBottomItem(navRoutes, selected == navRoutes);
