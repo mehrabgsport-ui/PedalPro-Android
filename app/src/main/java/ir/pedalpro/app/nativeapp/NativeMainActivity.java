@@ -1628,7 +1628,7 @@ public final class NativeMainActivity extends Activity {
         if (events != null) {
             for (int i = 0; i < events.length(); i++) {
                 JSONObject event = events.optJSONObject(i);
-                if (event == null || "cancelled".equals(event.optString("status"))) continue;
+                if (event == null) continue;
                 addEventCard(event);
                 eventCount++;
             }
@@ -1664,20 +1664,89 @@ public final class NativeMainActivity extends Activity {
         currentPage = "routes";
         selectNav(navRoutes);
         content.removeAllViews();
-        addHero("مسیرها و رکاب‌زنی‌ها", "");
-        addLiveRidesSection(20);
+        addHero("مسیرهای GPS", "");
 
-        JSONArray rides = bootstrap.optJSONArray("rides");
-        int added = 0;
+        final java.util.ArrayList<JSONObject> rows = new java.util.ArrayList<>();
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
         if (rides != null) {
-            for (int i = 0; i < rides.length() && added < 30; i++) {
+            for (int i = 0; i < rides.length(); i++) {
                 JSONObject r = rides.optJSONObject(i);
-                if (r == null || "active".equals(r.optString("status"))) continue;
-                addRideSummaryCard(r, true);
-                added++;
+                if (r != null && r.optInt("id", 0) > 0) rows.add(r);
             }
         }
-        if (added == 0 && liveCount() == 0) addEmpty("مسیر قابل نمایشی وجود ندارد.");
+
+        LinearLayout shell = glassCard(26);
+        shell.addView(text("مسیرهای GPS", 22, true, TEXT));
+        TextView subtitle = text("یک مسیر را انتخاب کنید تا نقشه، آمار و نمودار سرعت آن نمایش داده شود.", 12, false, MUTED);
+        subtitle.setPadding(0, dp(4), 0, dp(10));
+        shell.addView(subtitle);
+
+        android.widget.Spinner selector = new android.widget.Spinner(this);
+        java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+        if (rows.isEmpty()) {
+            labels.add("مسیر موجود نیست");
+        } else {
+            for (JSONObject r : rows) {
+                String label = r.optString("title", "رکاب‌زنی") + " — " +
+                        r.optString("owner_name", "") + " — " +
+                        JalaliDate.format(r.optString("started_at", ""), false);
+                labels.add(label);
+            }
+        }
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(
+                this, android.R.layout.simple_spinner_dropdown_item, labels);
+        selector.setAdapter(adapter);
+        selector.setPadding(dp(12), dp(8), dp(12), dp(8));
+        selector.setBackground(roundRect(Color.argb(122, 5, 25, 40), 15, Color.argb(46, 255, 255, 255)));
+        shell.addView(selector, new LinearLayout.LayoutParams(-1, dp(52)));
+
+        LinearLayout statsHost = new LinearLayout(this);
+        statsHost.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams statsLp = new LinearLayout.LayoutParams(-1, -2);
+        statsLp.setMargins(0, dp(12), 0, dp(8));
+        shell.addView(statsHost, statsLp);
+
+        FrameLayout mapWrap = new FrameLayout(this);
+        mapWrap.setBackground(roundRect(Color.rgb(6, 19, 31), 24, Color.argb(51, 255, 255, 255)));
+        mapWrap.setClipToOutline(true);
+        NativeRouteView routeView = new NativeRouteView(this);
+        mapWrap.addView(routeView, new FrameLayout.LayoutParams(-1, -1));
+        shell.addView(mapWrap, new LinearLayout.LayoutParams(-1, dp(290)));
+
+        TextView chartTitle = text("نمودار سرعت", 18, true, TEXT);
+        chartTitle.setPadding(0, dp(14), 0, dp(8));
+        shell.addView(chartTitle);
+        NativeSpeedChartView chart = new NativeSpeedChartView(this);
+        shell.addView(chart, new LinearLayout.LayoutParams(-1, dp(160)));
+
+        TextView state = text(rows.isEmpty() ? "مسیر GPS ثبت نشده است." : "در حال دریافت مسیر…", 11, false, MUTED);
+        state.setPadding(0, dp(8), 0, 0);
+        shell.addView(state);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        shell.addView(actions);
+
+        content.addView(shell, cardLp());
+
+        if (!rows.isEmpty()) {
+            selector.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (position < 0 || position >= rows.size()) return;
+                    loadRouteSelection(rows.get(position).optInt("id", 0), routeView, chart, statsHost, actions, state);
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+            selector.setSelection(0);
+            loadRouteSelection(rows.get(0).optInt("id", 0), routeView, chart, statsHost, actions, state);
+        } else {
+            renderRouteStats(statsHost, null);
+            routeView.setPoints(new JSONArray());
+            chart.setPoints(new JSONArray());
+        }
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
 
@@ -3798,41 +3867,65 @@ public final class NativeMainActivity extends Activity {
 
 
     private void addEventCard(JSONObject event) {
+        String status = event.optString("status", "planned");
+        int stripeColor = "completed".equals(status) ? Color.rgb(43, 146, 255)
+                : "cancelled".equals(status) ? RED : GREEN;
+
         FrameLayout shell = new FrameLayout(this);
-        GradientDrawable outer = roundRect(Color.argb(188, 7, 31, 45), 25, Color.argb(100, 245, 249, 252));
+        GradientDrawable outer = roundRect(Color.argb(188, 7, 31, 45), 26, Color.argb(100, 245, 249, 252));
         shell.setBackground(outer);
         shell.setElevation(dp(3));
 
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(16), dp(15), dp(17), dp(15));
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
 
-        String title = event.optString("title", "برنامه");
-        box.addView(text(title, 20, true, TEXT));
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.TOP);
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
 
-        LinearLayout meta = new LinearLayout(this);
-        meta.setOrientation(LinearLayout.HORIZONTAL);
-        meta.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        meta.setGravity(Gravity.CENTER);
-        String date = JalaliDate.format(event.optString("event_date", ""), true);
-        meta.addView(metaTile(PedalIconView.Icon.CALENDAR, date), rowWeightLp());
-        meta.addView(metaTile(PedalIconView.Icon.LOCATION, event.optString("meeting_location", "محل قرار")), rowWeightLp());
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.END);
+        copy.addView(text(event.optString("title", "برنامه"), 20, true, TEXT));
+
+        StringBuilder meta = new StringBuilder();
+        String date = JalaliDate.format(event.optString("event_date", ""), false);
+        if (!date.isBlank()) meta.append("📅 ").append(date);
+        String meeting = event.optString("meeting_location", "");
+        if (!meeting.isBlank()) {
+            if (meta.length() > 0) meta.append("   ");
+            meta.append("📍 ").append(meeting);
+        }
+        String route = event.optString("route_name", "");
+        if (!route.isBlank()) {
+            if (meta.length() > 0) meta.append("   ");
+            meta.append("🛣️ ").append(route);
+        }
         double planned = event.optDouble("planned_distance", 0);
-        meta.addView(metaTile(PedalIconView.Icon.DISTANCE, planned > 0 ? JalaliDate.fa(Math.round(planned)) + " کیلومتر" : "مسافت آزاد"), rowWeightLp());
-        box.addView(meta);
+        if (planned > 0) {
+            if (meta.length() > 0) meta.append("   ");
+            meta.append("↔ ").append(String.format(Locale.US, "%.1f km", planned));
+        }
+        TextView metaView = text(meta.toString(), 12, false, Color.rgb(179, 195, 212));
+        metaView.setPadding(0, dp(7), 0, 0);
+        copy.addView(metaView);
+        top.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
 
-        int regs = eventRegistrationCount(event.optInt("id", 0));
-        TextView badge = text("اعضا: " + JalaliDate.fa(regs), 11, true, Color.rgb(140, 205, 255));
+        int regs = event.optInt("registrations_count", eventRegistrationCount(event.optInt("id", 0)));
+        TextView badge = text("اعضا " + JalaliDate.fa(regs), 11, true, Color.rgb(200, 221, 237));
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(roundRect(Color.argb(120, 4, 65, 105), 18, 0));
-        LinearLayout badgeWrap = new LinearLayout(this); badgeWrap.setGravity(Gravity.END);
-        badgeWrap.addView(badge, new LinearLayout.LayoutParams(dp(74), dp(34)));
-        box.addView(badgeWrap);
+        badge.setBackground(roundRect(Color.rgb(23, 50, 74), 999, 0));
+        LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(dp(78), dp(34));
+        badgeLp.setMargins(dp(8), 0, 0, 0);
+        top.addView(badge, badgeLp);
+        box.addView(top);
 
         String desc = event.optString("description", "");
         if (!desc.isBlank()) {
-            TextView d = text(desc, 13, false, TEXT);
-            d.setPadding(0, dp(8), 0, dp(5));
+            TextView d = text(desc, 13, false, MUTED);
+            d.setPadding(0, dp(9), 0, 0);
             box.addView(d);
         }
 
@@ -3842,40 +3935,36 @@ public final class NativeMainActivity extends Activity {
 
         PedalActionView details = action(PedalIconView.Icon.DETAILS, "جزئیات", PedalActionView.Style.OUTLINE);
         details.setOnClickListener(v -> showEventDetail(event));
-        PedalActionView share = action(PedalIconView.Icon.SHARE, "اشتراک‌گذاری", PedalActionView.Style.OUTLINE);
-        share.setOnClickListener(v -> shareEvent(event));
-        PedalActionView nav = action(PedalIconView.Icon.ROUTE, "مسیریابی تا شروع", PedalActionView.Style.OUTLINE);
-        nav.setOnClickListener(v -> {
-            double lat = event.optDouble("meeting_lat", Double.NaN), lng = event.optDouble("meeting_lng", Double.NaN);
-            if (Double.isFinite(lat) && Double.isFinite(lng)) openNeshanPoint(lat, lng);
-            else showInlineMessage("مسیریابی", "مختصات محل شروع برای این برنامه ثبت نشده است.", ORANGE);
-        });
         actions.addView(details, actionWeightLp());
-        actions.addView(share, actionWeightLp());
-        actions.addView(nav, actionWeightLp());
+
+        if (event.optInt("registration_open", 1) == 1 && "planned".equals(status)) {
+            if (!signedIn()) {
+                PedalActionView auth = action(PedalIconView.Icon.USER, "ورود / ثبت‌نام", PedalActionView.Style.PRIMARY);
+                auth.setOnClickListener(v -> showAuthDialog("signup"));
+                actions.addView(auth, actionWeightLp());
+            } else {
+                boolean registered = isRegisteredForEvent(event.optInt("id", 0));
+                PedalActionView reg = action(registered ? PedalIconView.Icon.CLOSE : PedalIconView.Icon.PLUS,
+                        registered ? "لغو ثبت‌نام" : "ثبت‌نام",
+                        registered ? PedalActionView.Style.OUTLINE : PedalActionView.Style.PRIMARY);
+                int eventId = event.optInt("id", 0);
+                reg.setOnClickListener(v -> toggleEventRegistration(eventId, !registered, hiddenButtonProxy(reg)));
+                actions.addView(reg, actionWeightLp());
+            }
+        }
+
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        if (admin) {
+            PedalActionView edit = action(PedalIconView.Icon.EDIT, "ویرایش", PedalActionView.Style.OUTLINE);
+            edit.setOnClickListener(v -> showEventEditor(event));
+            actions.addView(edit, actionWeightLp());
+        }
         box.addView(actions);
 
-        boolean registered = isRegisteredForEvent(event.optInt("id", 0));
-        if (event.optInt("registration_open", 1) == 1 && "planned".equals(event.optString("status", "planned"))) {
-            PedalActionView reg = action(registered ? PedalIconView.Icon.CLOSE : PedalIconView.Icon.PLUS,
-                    registered ? "لغو ثبت‌نام" : "ثبت‌نام", registered ? PedalActionView.Style.OUTLINE : PedalActionView.Style.PRIMARY);
-            int eventId = event.optInt("id", 0);
-            reg.setOnClickListener(v -> toggleEventRegistration(eventId, !registered, hiddenButtonProxy(reg)));
-            box.addView(reg, fullActionLp(52));
-        }
-
-        if (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1) {
-            PedalActionView edit = action(PedalIconView.Icon.EDIT, "ویرایش برنامه", PedalActionView.Style.OUTLINE);
-            edit.setOnClickListener(v -> showEventEditor(event));
-            box.addView(edit, fullActionLp(50));
-        }
-
-        shell.addView(box, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        shell.addView(box, new FrameLayout.LayoutParams(-1, -2));
         View stripe = new View(this);
-        stripe.setBackgroundColor(event.optInt("id", 0) % 2 == 0 ? GREEN : Color.rgb(43,146,255));
-        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(dp(5), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.END);
-        slp.setMargins(0, dp(10), 0, dp(10));
+        stripe.setBackgroundColor(stripeColor);
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(dp(4), -1, Gravity.END);
         shell.addView(stripe, slp);
         content.addView(shell, cardLp());
     }
@@ -5085,6 +5174,164 @@ public final class NativeMainActivity extends Activity {
         startActivity(i);
     }
 
+    private void loadRouteSelection(int rideId, NativeRouteView routeView, NativeSpeedChartView chart,
+                                    LinearLayout statsHost, LinearLayout actionsHost, TextView state) {
+        if (rideId <= 0) return;
+        state.setText("در حال دریافت مسیر…");
+        io.execute(() -> {
+            try {
+                java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
+                params.put("ride_id", rideId);
+                params.put("point_mode", "nav");
+                JSONObject response = api.get("ride_details", params);
+                JSONObject ride = response.optJSONObject("ride");
+                if (ride == null) throw new IllegalStateException("مسیر در دسترس نیست.");
+                JSONArray points = ride.optJSONArray("points");
+                main.post(() -> {
+                    routeView.setPoints(points == null ? new JSONArray() : points);
+                    chart.setPoints(points == null ? new JSONArray() : points);
+                    renderRouteStats(statsHost, ride);
+                    actionsHost.removeAllViews();
+                    PedalActionView details = action(PedalIconView.Icon.DETAILS, "جزئیات و آلبوم", PedalActionView.Style.OUTLINE);
+                    details.setOnClickListener(v -> {
+                        Intent i = new Intent(this, NativeRideDetailActivity.class);
+                        i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, ride.optInt("id", rideId));
+                        startActivity(i);
+                    });
+                    actionsHost.addView(details, fullActionLp(50));
+                    state.setText("");
+                    VazirmatnLoader.apply(this, statsHost);
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    routeView.setPoints(new JSONArray());
+                    chart.setPoints(new JSONArray());
+                    renderRouteStats(statsHost, null);
+                    actionsHost.removeAllViews();
+                    state.setText(e.getMessage() == null ? "خطای دریافت مسیر" : e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void renderRouteStats(LinearLayout host, JSONObject ride) {
+        host.removeAllViews();
+        double km = ride == null ? 0 : ride.optDouble("distance_km", ride.optDouble("distance_m", 0) / 1000d);
+        long sec = ride == null ? 0 : ride.optLong("duration_seconds", 0);
+        JSONArray points = ride == null ? null : ride.optJSONArray("points");
+        double[] speed = routeSpeedStats(points);
+        double storedAvg = ride == null ? 0 : ride.optDouble("avg_speed_kmh", 0);
+        double avg = storedAvg > 0 && storedAvg < 80 ? storedAvg : speed[0];
+        double max = speed[1];
+        double ascent = ride == null ? 0 : ride.optDouble("ascent_m", 0);
+
+        String[][] values = {
+                {"مسافت", String.format(Locale.US, "%.2f km", km)},
+                {"زمان", formatDuration(sec)},
+                {"میانگین", String.format(Locale.US, "%.1f km/h", avg)},
+                {"حداکثر", String.format(Locale.US, "%.1f km/h", max)},
+                {"صعود", JalaliDate.fa(Math.round(ascent)) + " m"}
+        };
+        for (int i = 0; i < values.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            row.setGravity(Gravity.CENTER);
+            row.addView(memberStat(values[i][0], values[i][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            if (i + 1 < values.length) {
+                row.addView(memberStat(values[i + 1][0], values[i + 1][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            } else {
+                row.addView(new View(this), new LinearLayout.LayoutParams(0, dp(1), 1f));
+            }
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, 0, 0, dp(8));
+            host.addView(row, lp);
+        }
+    }
+
+    private double[] routeSpeedStats(JSONArray points) {
+        java.util.ArrayList<Double> vals = new java.util.ArrayList<>();
+        if (points != null) {
+            for (int i = 0; i < points.length(); i++) {
+                JSONObject p = points.optJSONObject(i);
+                if (p == null) continue;
+                double v = p.has("speed_kmh") ? p.optDouble("speed_kmh", Double.NaN)
+                        : p.optDouble("speed", Double.NaN) * 3.6;
+                if (Double.isFinite(v) && v >= 0 && v < 100) vals.add(v);
+            }
+        }
+        java.util.ArrayList<Double> moving = new java.util.ArrayList<>();
+        for (Double v : vals) if (v != null && v > 1.5) moving.add(v);
+        java.util.ArrayList<Double> base = moving.isEmpty() ? vals : moving;
+        if (base.isEmpty()) return new double[]{0, 0};
+        double sum = 0;
+        for (Double v : base) sum += v;
+        java.util.ArrayList<Double> sorted = new java.util.ArrayList<>(base);
+        java.util.Collections.sort(sorted);
+        int idx = Math.min(sorted.size() - 1, (int)Math.floor((sorted.size() - 1) * .98));
+        return new double[]{sum / base.size(), sorted.get(idx)};
+    }
+
+    private View galleryTile(JSONObject item) {
+        FrameLayout tile = new FrameLayout(this);
+        tile.setBackground(roundRect(Color.argb(107, 3, 18, 29), 22, Color.argb(46, 255, 255, 255)));
+        tile.setClipToOutline(true);
+        String src = item.optString("src", "");
+        String cap = item.optString("cap", "");
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        RemoteImageLoader.load(this, image, src, R.drawable.program_reference);
+        tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
+
+        if (!cap.isBlank()) {
+            TextView label = text(cap, 12, false, TEXT);
+            label.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            label.setPadding(dp(9), dp(7), dp(9), dp(7));
+            label.setBackground(roundRect(Color.argb(153, 3, 18, 29), 13, 0));
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+            lp.setMargins(dp(8), 0, dp(8), dp(8));
+            tile.addView(label, lp);
+        }
+        tile.setClickable(true);
+        tile.setFocusable(true);
+        tile.setOnClickListener(v -> showGalleryImage(src));
+        return tile;
+    }
+
+    private void showGalleryImage(String src) {
+        if (src == null || src.isBlank()) return;
+        Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        FrameLayout stage = new FrameLayout(this);
+        stage.setPadding(dp(8), dp(8), dp(8), dp(8));
+        stage.setBackgroundColor(Color.argb(245, 3, 14, 23));
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        RemoteImageLoader.load(this, image, src, R.drawable.program_reference);
+        stage.addView(image, new FrameLayout.LayoutParams(-1, -1));
+
+        FrameLayout close = iconSquare(PedalIconView.Icon.CLOSE, d::dismiss, "بستن");
+        FrameLayout.LayoutParams cp = new FrameLayout.LayoutParams(dp(46), dp(46), Gravity.TOP | Gravity.END);
+        cp.setMargins(0, dp(8), dp(8), 0);
+        stage.addView(close, cp);
+
+        d.setContentView(stage);
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.dimAmount = .86f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+    }
+
     private void showAboutGroupPage() {
         currentPage = "about";
         selectNav(null);
@@ -5114,26 +5361,66 @@ public final class NativeMainActivity extends Activity {
         selectNav(null);
         content.removeAllViews();
         addHero("گالری", "");
-        JSONArray photos = bootstrap == null ? null : bootstrap.optJSONArray("event_photos");
-        int shown = 0;
-        if (photos != null) {
-            for (int i = 0; i < photos.length(); i++) {
-                JSONObject p = photos.optJSONObject(i);
+
+        java.util.ArrayList<JSONObject> rows = new java.util.ArrayList<>();
+        JSONArray eventPhotos = bootstrap == null ? null : bootstrap.optJSONArray("event_photos");
+        if (eventPhotos != null) {
+            for (int i = 0; i < eventPhotos.length() && rows.size() < 60; i++) {
+                JSONObject p = eventPhotos.optJSONObject(i);
                 if (p == null) continue;
-                LinearLayout box = glassCard(20);
-                ImageView image = new ImageView(this);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setClipToOutline(true);
-                image.setBackground(roundRect(Color.TRANSPARENT, 16, Color.argb(70, 245, 249, 252)));
-                RemoteImageLoader.load(this, image, p.optString("file_name", ""), R.drawable.program_reference);
-                box.addView(image, new LinearLayout.LayoutParams(-1, dp(190)));
-                String caption = p.optString("caption", p.optString("uploader_name", ""));
-                if (!caption.isBlank()) box.addView(text(caption, 11, false, MUTED));
-                content.addView(box, cardLp());
-                shown++;
+                JSONObject x = new JSONObject();
+                try {
+                    x.put("src", p.optString("file_name", ""));
+                    x.put("cap", p.optString("caption", p.optString("uploader_name", "برنامه گروهی")));
+                    rows.add(x);
+                } catch (Exception ignored) { }
             }
         }
-        if (shown == 0) addEmpty("هنوز تصویری در گالری ثبت نشده است.");
+        JSONArray ridePhotos = bootstrap == null ? null : bootstrap.optJSONArray("ride_photos");
+        if (ridePhotos != null) {
+            for (int i = 0; i < ridePhotos.length() && rows.size() < 60; i++) {
+                JSONObject p = ridePhotos.optJSONObject(i);
+                if (p == null) continue;
+                JSONObject x = new JSONObject();
+                try {
+                    x.put("src", p.optString("file_name", ""));
+                    x.put("cap", p.optString("caption", "رکاب‌زنی"));
+                    rows.add(x);
+                } catch (Exception ignored) { }
+            }
+        }
+
+        if (rows.isEmpty()) {
+            addEmpty("هنوز تصویری در گالری ثبت نشده است.");
+        } else {
+            LinearLayout grid = new LinearLayout(this);
+            grid.setOrientation(LinearLayout.VERTICAL);
+            for (int i = 0; i < rows.size(); i += 2) {
+                LinearLayout pair = new LinearLayout(this);
+                pair.setOrientation(LinearLayout.HORIZONTAL);
+                pair.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+                View first = galleryTile(rows.get(i));
+                LinearLayout.LayoutParams a = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                a.setMargins(dp(5), 0, 0, dp(10));
+                pair.addView(first, a);
+
+                if (i + 1 < rows.size()) {
+                    View second = galleryTile(rows.get(i + 1));
+                    LinearLayout.LayoutParams b = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                    b.setMargins(0, 0, dp(5), dp(10));
+                    pair.addView(second, b);
+                } else {
+                    View spacer = new View(this);
+                    LinearLayout.LayoutParams b = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                    b.setMargins(0, 0, dp(5), dp(10));
+                    pair.addView(spacer, b);
+                }
+                grid.addView(pair, new LinearLayout.LayoutParams(-1, -2));
+            }
+            content.addView(grid);
+        }
+
         VazirmatnLoader.apply(this, content);
         animatePageIn();
     }
@@ -5448,7 +5735,7 @@ public final class NativeMainActivity extends Activity {
         PedalActionView pdf = action(PedalIconView.Icon.DETAILS, "دانلود راهنمای PDF", PedalActionView.Style.PRIMARY);
         pdf.setOnClickListener(v -> {
             try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://pedalpro.ir/assets/PedalPro-Catalog-User-Guide-4.7.40.pdf")));
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://pedalpro.ir/docs/PedalPro_User_Guide_4.7.40.pdf")));
             } catch (Exception e) {
                 toast(e.getMessage());
             }
