@@ -141,6 +141,191 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         tabButtons.add(b);
     }
 
+    /** Device-local API credentials: never present, log, or post a stored secret to bootstrap. */
+    private void renderNeshan() {
+        LinearLayout box=card();
+        box.addView(text("تنظیمات نقشه و مسیریابی نشان",18,true,TEXT));
+        box.addView(text("کلید MOBILE و کلید سرویس مسیریابی جدا هستند. ذخیره آن‌ها در Android Keystore فقط برای همین دستگاه است و به‌تنهایی SDK نشان را فعال نمی‌کند.",12,false,MUTED));
+        TextView mobileStatus=text(
+                NeshanServiceCredentials.hasMobileKey(this)?"MOBILE: ذخیره‌شده":"MOBILE: تنظیم نشده",
+                12,true,NeshanServiceCredentials.hasMobileKey(this)?GREEN:ORANGE);
+        box.addView(mobileStatus);
+        EditText mobile=input("کلید MOBILE نشان");
+        mobile.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        mobile.setSingleLine(true);
+        mobile.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        box.addView(mobile);
+        Button saveMobile=primary("ذخیره کلید MOBILE");
+        saveMobile.setOnClickListener(v->{
+            try {
+                String value=mobile.getText().toString().trim();
+                if(value.isEmpty()){toast("کلید MOBILE را وارد کنید.");return;}
+                NeshanServiceCredentials.saveMobile(this,value);
+                mobile.setText("");
+                mobileStatus.setText("MOBILE: ذخیره‌شده");
+                mobileStatus.setTextColor(GREEN);
+                toast("کلید MOBILE روی این دستگاه ذخیره شد.");
+            }catch(Exception e){toast(e.getMessage());}
+        });
+        box.addView(saveMobile);
+
+        TextView routingStatus=text(
+                NeshanServiceCredentials.hasKey(this)?"Routing API: ذخیره‌شده":"Routing API: تنظیم نشده",
+                12,true,NeshanServiceCredentials.hasKey(this)?GREEN:ORANGE);
+        routingStatus.setPadding(0,dp(10),0,0);
+        box.addView(routingStatus);
+        EditText routing=input("کلید تب سرویس‌های نشان (Routing API)");
+        routing.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        routing.setSingleLine(true);
+        routing.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        box.addView(routing);
+        Button saveRouting=primary("ذخیره کلید مسیریابی");
+        saveRouting.setOnClickListener(v->{
+            try {
+                String value=routing.getText().toString().trim();
+                if(value.isEmpty()){toast("کلید Routing API را وارد کنید.");return;}
+                NeshanServiceCredentials.save(this,value);
+                routing.setText("");
+                routingStatus.setText("Routing API: ذخیره‌شده");
+                routingStatus.setTextColor(GREEN);
+                toast("کلید مسیریابی روی این دستگاه ذخیره شد.");
+            }catch(Exception e){toast(e.getMessage());}
+        });
+        box.addView(saveRouting);
+
+        SharedPreferences prefs=getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE);
+        CheckBox followRouting=new CheckBox(this);
+        followRouting.setText("پیشنهاد مسیر خیابانی هنگام بازکردن مسیریابی زنده");
+        followRouting.setTextColor(TEXT);
+        followRouting.setChecked(prefs.getBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,false));
+        followRouting.setOnCheckedChangeListener((b,checked)->
+                prefs.edit().putBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,checked).apply());
+        box.addView(followRouting);
+        box.addView(text("کلید MOBILE ذخیره می‌شود اما APK فعلی بدون لایسنس Android SDK نشان، نقشه جایگزین XYZ را نشان می‌دهد. API مسیریابی، مسیر تأییدشده مخصوص دوچرخه نیست.",11,false,ORANGE));
+        Button delete=normal("پاک‌کردن کلیدهای نشان از این گوشی");
+        delete.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
+                .setTitle("حذف کلیدهای نشان")
+                .setMessage("هر دو کلید از حافظه امن همین گوشی حذف شوند؟")
+                .setNegativeButton("انصراف",null)
+                .setPositiveButton("حذف",(dialog,which)->{
+                    NeshanServiceCredentials.clearMobile(this);
+                    NeshanServiceCredentials.clear(this);
+                    mobile.setText("");routing.setText("");
+                    mobileStatus.setText("MOBILE: تنظیم نشده");
+                    routingStatus.setText("Routing API: تنظیم نشده");
+                    mobileStatus.setTextColor(ORANGE);routingStatus.setTextColor(ORANGE);
+                }).show());
+        box.addView(delete);
+        content.addView(box,cardLp());
+    }
+
+    /**
+     * Reflect only real Bale values already returned by the authenticated site bootstrap.
+     * No guessed Bale API action or webhook mutation: we do not know the website's
+     * bot-controller request/response contract from this Android repository.
+     */
+    private void renderBale() {
+        LinearLayout box=card();
+        box.addView(text("ربات بله",18,true,TEXT));
+        box.addView(text("این قسمت مربوط به ربات پیام‌رسان بله است، نه Robots موتور جستجو. فقط داده‌های واقعی دریافتی از API مدیریتی سایت نمایش داده می‌شوند؛ توکن و Webhook محرمانه نمایش داده نمی‌شوند.",12,false,MUTED));
+        int displayed=0;
+        String[] candidates={"bale_bot_settings","bale_settings","bale_bot","bale","bale_status","bale_webhook","bale_bots","bot_bale"};
+        for(String key:candidates) {
+            if(data==null||data.isNull(key)||!data.has(key))continue;
+            Object object=data.opt(key);
+            if(object instanceof JSONObject) {
+                displayed+=appendBaleFields(box,(JSONObject)object,key,0);
+            } else if(object instanceof JSONArray) {
+                JSONArray array=(JSONArray)object;
+                for(int i=0;i<Math.min(array.length(),15);i++) {
+                    JSONObject row=array.optJSONObject(i);
+                    if(row!=null)displayed+=appendBaleFields(box,row,key+" / "+(i+1),0);
+                }
+            } else if(object!=null) {
+                if(!isPrivateBaleField(key)) {
+                    box.addView(text(key+": "+String.valueOf(object),12,false,TEXT));
+                    displayed++;
+                }
+            }
+        }
+        JSONObject settings=data==null?null:data.optJSONObject("settings");
+        if(settings!=null)for(String key:candidates) {
+            JSONObject value=settings.optJSONObject(key);
+            if(value!=null)displayed+=appendBaleFields(box,value,key,0);
+        }
+        if(displayed==0) {
+            box.addView(text("پاسخ فعلی سایت، تنظیمات ربات بله را در bootstrap برنمی‌گرداند؛ امکان نمایش یا ویرایش معتبر آن هنوز وجود ندارد. برای انتقال دقیق، قرارداد API یا فایل تنظیمات وب لازم است.",12,false,ORANGE));
+        }else{
+            box.addView(text("وضعیت بالا از سایت خوانده شده است. ذخیره/تغییر توکن و Webhook غیرفعال است تا API واقعی سایت مشخص شود؛ هیچ مقدار فرضی به سرور ارسال نمی‌شود.",11,false,ORANGE));
+        }
+        Button refresh=normal("دریافت مجدد تنظیمات از سایت");
+        refresh.setOnClickListener(v->load("bale"));
+        box.addView(refresh);
+        content.addView(box,cardLp());
+    }
+
+    private int appendBaleFields(LinearLayout box,JSONObject values,String label,int depth){
+        if(values==null||depth>1)return 0;
+        box.addView(text(label,13,true,GREEN));
+        int shown=0;
+        java.util.Iterator<String> keys=values.keys();
+        while(keys.hasNext()&&shown<60){
+            String key=keys.next();
+            if(isPrivateBaleField(key)||values.isNull(key))continue;
+            Object value=values.opt(key);
+            if(value instanceof JSONObject) {
+                shown+=appendBaleFields(box,(JSONObject)value,key,depth+1);
+            }else if(value instanceof Boolean||value instanceof Number||value instanceof String){
+                box.addView(text(key+" : "+String.valueOf(value),12,false,TEXT));
+                shown++;
+            }
+        }
+        return shown;
+    }
+
+    private boolean isPrivateBaleField(String key){
+        String name=key==null?"":key.toLowerCase(Locale.ROOT);
+        return name.contains("token")||name.contains("secret")||name.contains("pass")
+                ||name.contains("key")||name.contains("auth")||name.contains("webhook_url")
+                ||name.contains("chat_id")||name.contains("phone")||name.contains("session");
+    }
+
+    private void renderUnmirroredSiteSettings(){
+        LinearLayout box=card();
+        box.addView(text("سایر تنظیمات واقعی سایت",18,true,TEXT));
+        box.addView(text("فیلدهای اضافی که اکنون در تنظیمات عمومی/ظاهر مدیریت نمی‌شوند، فقط برای مشاهده و بررسی تطابق نمایش داده می‌شوند. مقادیر محرمانه حذف می‌شوند.",12,false,MUTED));
+        JSONObject site=data==null?null:data.optJSONObject("site");
+        JSONObject ui=data==null?null:data.optJSONObject("ui_settings");
+        java.util.HashSet<String> known=new java.util.HashSet<>();
+        java.util.Collections.addAll(known,
+                "club_name","club_subtitle","about_title","about_body",
+                "seo_title","seo_description","seo_keywords","seo_robots","seo_extra_head",
+                "mobile_header_top_gap_px","home_eyebrow","home_tagline",
+                "home_primary_button_text","home_secondary_button_text","ride_button_text");
+        int count=appendExtraSettingFields(box,site,"site",known);
+        count+=appendExtraSettingFields(box,ui,"ui_settings",known);
+        if(count==0)box.addView(text("فیلد اضافیِ قابل مشاهده‌ای در پاسخ فعلی سایت وجود ندارد.",12,false,MUTED));
+        content.addView(box,cardLp());
+    }
+
+    private int appendExtraSettingFields(LinearLayout box,JSONObject fields,String label,java.util.Set<String> known){
+        if(fields==null)return 0;
+        int count=0;
+        java.util.Iterator<String> iter=fields.keys();
+        while(iter.hasNext()&&count<100){
+            String key=iter.next();
+            if(known.contains(key)||isPrivateBaleField(key)||fields.isNull(key))continue;
+            Object value=fields.opt(key);
+            if(value instanceof String||value instanceof Number||value instanceof Boolean){
+                String safe=String.valueOf(value);
+                if(safe.length()>220)safe=safe.substring(0,220)+"…";
+                box.addView(text(label+"."+key+" : "+safe,11,false,TEXT));
+                count++;
+            }
+        }
+        return count;
+    }
+
     private void renderGeneral() {
         JSONObject site = data.optJSONObject("site");
         if (site == null) site = new JSONObject();
