@@ -193,6 +193,32 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC15: changing chat rooms must discard reply/edit IDs and stale compose state.
+expect "$NATIVE/NativeChatActivity.java" 'private void resetComposition()' "Room-scoped chat composer reset exists"
+python3 - "$NATIVE/NativeChatActivity.java" <<'PY'
+import pathlib, re, sys
+src = pathlib.Path(sys.argv[1]).read_text()
+def method_start(name):
+    match = re.search(r'private void ' + re.escape(name) + r'\([^)]*\)\s*\{', src)
+    if not match:
+        raise AssertionError('missing ' + name)
+    return match.end()
+def block_from(offset):
+    level = 1
+    for i in range(offset, len(src)):
+        if src[i] == '{': level += 1
+        elif src[i] == '}':
+            level -= 1
+            if level == 0: return src[offset:i]
+    raise AssertionError('unterminated method')
+reset = block_from(method_start('resetComposition'))
+assert all(x in reset for x in ('replyTo=0;', 'editId=0;', 'input.setText("")', 'composeContext.setVisibility(View.GONE)', 'cancelCompose.setVisibility(View.GONE)'))
+for name in ('openGroup', 'openPrivate'):
+    body = block_from(method_start(name))
+    assert 'resetComposition();' in body, name + ' must clear composer when opening a room'
+print('PASS Chat group/private changes clear stale compose IDs and text')
+PY
+
 # RC14: chat composer stays in its own fixed pane, even with the IME open.
 expect "$NATIVE/NativeScreenBase.java" 'protected boolean useFixedContentViewport(){return false;}' "Fixed viewport is opt-in and does not affect other screens"
 expect "$NATIVE/NativeScreenBase.java" 'WindowInsetsCompat.Type.ime()' "Chat responds to soft-keyboard insets"

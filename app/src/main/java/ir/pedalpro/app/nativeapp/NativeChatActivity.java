@@ -123,7 +123,7 @@ public final class NativeChatActivity extends NativeScreenBase {
         composer.setBackground(round(android.graphics.Color.rgb(9,32,50),20,STROKE));
         content.addView(composer,cardLp());
 
-        cancel.setOnClickListener(v->{replyTo=0;editId=0;composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);input.setText("");send.setText("ارسال");});
+        cancel.setOnClickListener(v->resetComposition());
         send.setOnClickListener(v->sendMessage(send,cancel));
 
         loadMessages(true);
@@ -131,11 +131,24 @@ public final class NativeChatActivity extends NativeScreenBase {
         VazirmatnLoader.apply(this,content);
     }
 
+    /** A reply or edit ID must never be carried into another chat room. */
+    private void resetComposition(){
+        replyTo=0;
+        editId=0;
+        if(input!=null){input.setText("");input.clearFocus();}
+        if(composeContext!=null){
+            composeContext.setText("");
+            composeContext.setVisibility(View.GONE);
+        }
+        if(cancelCompose!=null)cancelCompose.setVisibility(View.GONE);
+    }
+
     private void openGroup(){
         privateRequestGeneration++; // Cancel any pending private-chat navigation.
         JSONObject group=boot==null?null:boot.optJSONObject("group");
         roomGeneration++;
         roomId=group==null?0:group.optInt("id",0);mode="group";lastId=0;messages=new JSONArray();
+        resetComposition();
         loading=false;
         pollInFlight=false;
         if(messagesHost!=null)messagesHost.removeAllViews();
@@ -159,6 +172,7 @@ public final class NativeChatActivity extends NativeScreenBase {
                     if(rid<=0){toast("گفتگو ایجاد نشد.");return;}
                     roomGeneration++;
                     roomId=rid;mode="private";lastId=0;messages=new JSONArray();
+                    resetComposition();
                     loading=false;
                     pollInFlight=false;
                     if(messagesHost!=null)messagesHost.removeAllViews();
