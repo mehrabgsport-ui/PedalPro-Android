@@ -3,6 +3,12 @@ package ir.pedalpro.app.nativeapp;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.SystemClock;
+import android.text.InputType;
+import android.widget.Button;
+import android.widget.EditText;
+import android.app.AlertDialog;
+import android.widget.Toast;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -18,6 +24,8 @@ import org.json.JSONObject;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class NativeLiveNavigationActivity extends NativeScreenBase {
     public static final String EXTRA_MODE="mode";
@@ -34,6 +42,14 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private TextView distance,bearing,status;
     private PedalIconView arrow;
     private boolean busy=false;
+    private TextView roadStatus;
+    private Button roadToggle;
+    private boolean roadEnabled;
+    private boolean directionInFlight;
+    private long lastDirectionAttempt;
+    private double lastRouteFromLat=Double.NaN,lastRouteFromLng=Double.NaN;
+    private double lastRouteToLat=Double.NaN,lastRouteToLng=Double.NaN;
+    private final ExecutorService directionsIo=Executors.newSingleThreadExecutor();
 
     private final Runnable tick=new Runnable(){
         @Override public void run(){
@@ -66,7 +82,26 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         routeView=new PedalNeshanMapSurface(this);
         content.addView(routeView,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(360)));
 
-        addCard("راهنما","خط زرد فاصله مستقیم شما تا موقعیت زنده هدف را نشان می‌دهد. موقعیت هدف هر ۳ ثانیه بروزرسانی می‌شود.");
+        LinearLayout routing=card();
+        routing.addView(text("مسیریابی خیابانی نشان",17,true,TEXT));
+        roadStatus=text("مسیر خیابانی پیشنهاد خودرو است؛ برای دوچرخه از نظر عبورپذیری و زمان سفر تأیید نشده.",12,false,MUTED);
+        roadStatus.setPadding(0,dp(8),0,dp(8));
+        routing.addView(roadStatus);
+        roadToggle=normal("فعال‌سازی مسیر خیابانی");
+        roadToggle.setOnClickListener(v->{
+            roadEnabled=!roadEnabled;
+            roadToggle.setText(roadEnabled?"غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
+            if(!roadEnabled){routeView.clearNavigationRoute();roadStatus.setText("نمایش فاصله مستقیم؛ مسیر خیابانی خاموش است.");}
+            else maybeFetchDirections();
+        });
+        routing.addView(roadToggle);
+        Button credential=normal("تنظیم کلید سرویس نشان");
+        credential.setOnClickListener(v->showDirectionsKeyDialog());
+        routing.addView(credential);
+        content.addView(routing,cardLp());
+        if(!NeshanServiceCredentials.hasKey(this))
+            roadStatus.setText("برای مسیریابی خیابانی، کلید «سرویس‌ها»ی نشان را روی این دستگاه وارد کنید. مسیر مستقیم همچنان فعال است.");
+        addCard("راهنما","خط مستقیم موقعیت هدف را نشان می‌دهد. مسیر خیابانی تنها پس از فعال‌کردن و دریافت پاسخ معتبر نشان نمایش داده می‌شود.");
         main.post(tick);
     }
 
@@ -122,6 +157,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
                     routeView.setCurrent(currentLat,currentLng);
                     updateHud();
+                    maybeFetchDirections();
                 });
     }
 
@@ -136,6 +172,95 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         routeView.setTarget(lat,lng);
         status.setText("هدف زنده: "+name+" · آخرین بروزرسانی همین حالا");
         updateHud();
+        maybeFetchDirections();
+    }
+
+    private void showDirectionsKeyDialog() {
+        EditText field=new EditText(this);
+        field.setHint("کلید بخش سرویس‌ها (نه MOBILE)");
+        field.setSingleLine(true);
+        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setPadding(dp(16),dp(14),dp(16),dp(14));
+        new AlertDialog.Builder(this)
+                .setTitle("کلید سرویس مسیریابی نشان")
+                .setMessage("کلید فقط با Android Keystore در همین گوشی رمزگذاری می‌شود. برای کاربران عمومی، اتصال امن سروری مناسب‌تر است.")
+                .setView(field)
+                .setNegativeButton("انصراف",null)
+                .setNeutralButton("پاک‌کردن کلید",(dialog,which)->{
+                    NeshanServiceCredentials.clear(this);
+                    roadEnabled=false;
+                    roadToggle.setText("فعال‌سازی مسیر خیابانی");
+                    routeView.clearNavigationRoute();
+                    roadStatus.setText("کلید سرویس حذف شد؛ فقط فاصله مستقیم نمایش داده می‌شود.");
+                })
+                .setPositiveButton("ذخیره",(dialog,which)->{
+                    try {
+                        NeshanServiceCredentials.save(this,field.getText().toString());
+                        Toast.makeText(this,"کلید سرویس در گوشی ذخیره شد.",Toast.LENGTH_SHORT).show();
+                        roadEnabled=true;
+                        roadToggle.setText("غیرفعال‌سازی مسیر خیابانی");
+                        lastDirectionAttempt=0L;
+                        maybeFetchDirections();
+                    } catch(Exception e) {
+                        roadStatus.setText(e.getMessage()==null?"ذخیره کلید انجام نشد.":e.getMessage());
+                    }
+                }).show();
+    }
+
+    private void maybeFetchDirections() {
+        if(!roadEnabled || directionInFlight || !Double.isFinite(currentLat) ||
+                !Double.isFinite(currentLng)||!Double.isFinite(targetLat)||
+                !Double.isFinite(targetLng)||isFinishing())return;
+        String secret=NeshanServiceCredentials.read(this);
+        if(secret.isEmpty()) {
+            roadStatus.setText("کلید سرویس نشان در این گوشی تنظیم نشده؛ فاصله مستقیم فعال است.");
+            return;
+        }
+        long now=SystemClock.elapsedRealtime();
+        if(now-lastDirectionAttempt<45_000L && lastDirectionAttempt>0)return;
+        boolean haveRoute=Double.isFinite(lastRouteFromLat)&&Double.isFinite(lastRouteToLat);
+        if(haveRoute) {
+            float[] from=new float[1],to=new float[1];
+            Location.distanceBetween(lastRouteFromLat,lastRouteFromLng,currentLat,currentLng,from);
+            Location.distanceBetween(lastRouteToLat,lastRouteToLng,targetLat,targetLng,to);
+            if(from[0]<80f && to[0]<80f)return;
+        }
+        lastDirectionAttempt=now;
+        directionInFlight=true;
+        final double fromLat=currentLat,fromLng=currentLng,toLat=targetLat,toLng=targetLng;
+        roadStatus.setText("در حال دریافت مسیر خیابانی پیشنهاد خودرو از نشان…");
+        directionsIo.execute(()->{
+            try {
+                NeshanDirectionsClient.Route result=NeshanDirectionsClient.fetch(secret,
+                        fromLat,fromLng,toLat,toLng);
+                main.post(()->{
+                    directionInFlight=false;
+                    if(isFinishing()||!roadEnabled)return;
+                    float[] drift=new float[1];
+                    if(Double.isFinite(targetLat))
+                        Location.distanceBetween(toLat,toLng,targetLat,targetLng,drift);
+                    if(drift[0]>150f){maybeFetchDirections();return;}
+                    routeView.setNavigationRoute(result.points);
+                    lastRouteFromLat=fromLat;lastRouteFromLng=fromLng;
+                    lastRouteToLat=toLat;lastRouteToLng=toLng;
+                    String km=result.distanceMeters>0?
+                            String.format(Locale.US,"%.1f کیلومتر",result.distanceMeters/1000.0):
+                            "مسیر موجود";
+                    String next=result.nextInstruction==null?"":result.nextInstruction.trim();
+                    roadStatus.setText("مسیر خیابانی پیشنهادی خودرو: "+km+
+                            (next.isEmpty()?"":" · "+next)+
+                            " · زمان و عبورپذیری دوچرخه تأیید نشده است.");
+                });
+            } catch(Exception e) {
+                String reason=e.getMessage()==null?"پاسخ نامعتبر از نشان":e.getMessage();
+                main.post(()->{
+                    directionInFlight=false;
+                    if(isFinishing()||!roadEnabled)return;
+                    routeView.clearNavigationRoute();
+                    roadStatus.setText("نشان: "+reason+" · فاصله مستقیم همچنان در دسترس است.");
+                });
+            }
+        });
     }
 
     private void updateHud(){
@@ -152,6 +277,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
 
     @Override protected void onDestroy(){
         main.removeCallbacks(tick);
+        directionsIo.shutdownNow();
         super.onDestroy();
     }
 }
