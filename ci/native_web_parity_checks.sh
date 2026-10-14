@@ -97,7 +97,7 @@ expect "$NATIVE/PedalNeshanMapSurface.java" 'public void setFullRideMode(boolean
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'NativeAppSettingsActivity.PREF_PREFER_ROADS' "Road routing preference centralized"
 expect "$NATIVE/NativeMainActivity.java" 'safeEventValue(event,"finish_location"' "No literal null finish locations"
 expect "$NATIVE/NativeMainActivity.java" 'i.putExtra("section", "sms")' "Full SMS admin entry"
-expect "$NATIVE/NativeSiteSettingsActivity.java" 'load("sms".equals(requested) ? "sms" : "general")' "SMS admin deep entry"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'load(isValidSection(requested) ? requested : "general")' "Full admin tab deep entry"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeAppReleaseAdminController' "Native release manager wired"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeFcmAdminController' "Native FCM manager wired"
 expect "$NATIVE/NativeAdvancedActivity.java" 'replayIndex=next+1;' "Replay advances to next frame"
