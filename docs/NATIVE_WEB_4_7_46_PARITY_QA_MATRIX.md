@@ -25,13 +25,13 @@
 | Segments and leaderboard | `NativeAdvancedActivity`, `NativeSegmentLeaderboardActivity` | CODE PRESENT; invalid submissions gated; leaderboard QA NOT VERIFIED |
 | Personal/club/global heatmap | `NativeHeatmapActivity` | CODE PRESENT; overlay and privacy QA NOT VERIFIED |
 | Training Load and fitness | `NativeAdvancedActivity` | CODE PRESENT; score/value parity NOT VERIFIED |
-| Replay and Flyover | `NativeAdvancedActivity` | CODE PRESENT; playback and 3D visual parity NOT VERIFIED |
+| Replay and Flyover | `NativeAdvancedActivity` | Playback cursor and stale-response lifecycle patched; 3D visual parity/device validation NOT VERIFIED |
 | Weather and elevation | `NativeAdvancedActivity` | CODE PRESENT; numerical parity NOT VERIFIED |
 | Offline Routes | `NativeAdvancedActivity` | CODE PRESENT; destructive cache clear now confirmed; offline tile/device QA NOT VERIFIED |
 | Maintenance | `NativeAdvancedActivity` | CODE PRESENT; task lifecycle QA NOT VERIFIED |
 | Social / Follow / Kudos / recommendations | `NativeSocialActivity` | CODE PRESENT; vector Kudos; feed/privacy QA NOT VERIFIED |
-| AI Advisor | `NativeAiActivity`, `NativeMainActivity` | CODE PRESENT; API/chat interaction QA NOT VERIFIED |
-| Group Chat | `NativeChatActivity`, `NativeMainActivity` | CODE PRESENT; private/group moderation QA NOT VERIFIED |
+| AI Advisor | `NativeAiActivity`, `NativeMainActivity` | Duplicate-send / late-history overwrite fixes committed in both entrypoints; device QA NOT VERIFIED |
+| Group Chat | `NativeChatActivity`, `NativeMainActivity` | Private/group response isolation and background poll lifecycle fixed in dedicated screen; full device/privacy QA NOT VERIFIED |
 | Challenges | `NativeMainActivity` | CODE PRESENT; full guest/member/admin QA NOT VERIFIED |
 
 ## Phase 7: administration
@@ -46,7 +46,7 @@
 | Release manager / chunked APK upload | `NativeAppReleaseAdminController` | CODE PRESENT; worker/thread handling patched; remote upload/signing QA NOT VERIFIED |
 | Release rollback | No verified native+backend contract in inspected files | **OUTSTANDING** |
 | Notifications / history | `NativeAppReleaseAdminController` | CODE PRESENT; delivery/target QA NOT VERIFIED |
-| FCM configuration and test | `NativeFcmAdminController` | CODE PRESENT; token/credentials and device QA NOT VERIFIED |
+| FCM configuration and test | `NativeFcmAdminController` | Credentials/form threading corrected; token/credentials and device QA NOT VERIFIED |
 | System status | `NativeSiteSettingsActivity` | CODE PRESENT; backend data QA NOT VERIFIED |
 
 ## Phase 8: mandatory verification gates
@@ -60,7 +60,7 @@
 
 ### Current automated coverage
 
-The push-triggered `Native RC QA` workflow includes source checks, UI contract assertions, Android unit tests, lint, and Bazaar/Myket release smoke builds. A separate `ci/native_web_parity_checks.sh` covers cross-screen invariants. These do **not** replace a signed store workflow or on-device Web-reference comparison.
+The push-triggered `Native RC QA` workflow includes source checks, UI contract assertions, Android unit tests, lint, and Bazaar/Myket release smoke builds. A separate `ci/native_web_parity_checks.sh` now covers 34 source predicates, including Replay, chat-room isolation, AI histories, and FCM form threading. These do **not** replace a signed store workflow or on-device Web-reference comparison.
 
 ### Build commands
 
