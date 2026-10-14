@@ -236,11 +236,41 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         }
         return result;
     }
+    /** Presentation-only suppression of obvious old GPS rebounds; server history unchanged. */
+    private static List<LatLng> cleanRecordedGeometry(List<LatLng> original){
+        if(original.size()<3)return original;
+        ArrayList<LatLng> keep=new ArrayList<>();
+        for(int i=0;i<original.size();i++){
+            LatLng here=original.get(i);
+            if(!keep.isEmpty()){
+                LatLng previous=keep.get(keep.size()-1);
+                float[] move=new float[1];
+                Location.distanceBetween(previous.getLatitude(),previous.getLongitude(),
+                        here.getLatitude(),here.getLongitude(),move);
+                if(move[0]<4f)continue;
+                if(i+1<original.size()){
+                    LatLng next=original.get(i+1);
+                    float[] forward=new float[1],direct=new float[1];
+                    Location.distanceBetween(here.getLatitude(),here.getLongitude(),
+                            next.getLatitude(),next.getLongitude(),forward);
+                    Location.distanceBetween(previous.getLatitude(),previous.getLongitude(),
+                            next.getLatitude(),next.getLongitude(),direct);
+                    // Out-and-back GPS bounces are not plausible path corners.
+                    if(move[0]>22f && forward[0]>22f &&
+                            direct[0] < Math.max(14f,Math.min(move[0],forward[0])*.40f))
+                        continue;
+                }
+            }
+            keep.add(here);
+        }
+        return keep;
+    }
+
     private void applyGeometry(){
         if(destroyed||!ready||map==null)return;
         if(recorded!=null){map.removePolyline(recorded);recorded=null;}
         if(suggested!=null){map.removePolyline(suggested);suggested=null;}
-        List<LatLng> history=parse(recordedPoints),route=parse(suggestedPoints);
+        List<LatLng> history=cleanRecordedGeometry(parse(recordedPoints)),route=parse(suggestedPoints);
         if(history.size()>1){
             recorded=map.addPolyline(new PolylineOptions()
                     .addAll(history).color(Color.rgb(28,215,230)).width(5f));

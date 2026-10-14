@@ -483,12 +483,14 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
 
             fusedClient = LocationServices.getFusedLocationProviderClient(this);
+            // Receive even stationary fixes to confirm the 2-fix GNSS lock;
+            // meter-based gating is applied after acquisition by GpsTrackQuality.
             LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setGranularity(Granularity.GRANULARITY_FINE)
                     .setMinUpdateIntervalMillis(900L)
                     .setMaxUpdateDelayMillis(0L)
                     .setMaxUpdateAgeMillis(0L)
-                    .setMinUpdateDistanceMeters(3f)
+                    .setMinUpdateDistanceMeters(0f)
                     .setWaitForAccurateLocation(true)
                     .build();
 
@@ -532,7 +534,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         try {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER, 1000L, 3f, this, Looper.getMainLooper());
+                        LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
             }
         } catch (Exception ignored) { }
         // NETWORK_PROVIDER is not suitable for recording bicycle distance.

@@ -171,7 +171,7 @@ expect "$NATIVE/NativeChatActivity.java" 'messagesScroll=new ScrollView(this);' 
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'private void chooseDestination()' "Saved GPS route can choose start/end"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'main.postDelayed(this,"group".equals(mode)?10000L:3000L)' "Group live location refreshes each 10 seconds"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'private void beginGroupRideIfNeeded(Button button)' "Group catch ride recording uses existing contract"
-expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" '.icon(bikeMapIcon())' "Current position displayed as native bicycle vector"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" '.icon(icon).title("رکاب‌زن")' "Current position displayed as top-down reference-style rider"
 expect "$ROOT/app/src/main/AndroidManifest.xml" 'NativeSavedRouteFollowActivity' "Saved route follower registered"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/PedalProFirebaseMessagingService.java" 'NativeMainActivity.class' "Push links open native app not WebView"
 
@@ -209,6 +209,19 @@ assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
 PY
 
+# RC21: GPS quality controls are tested in a standalone pure-Java harness.
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'initialLockFix' "Startup waits for two consecutive accurate GNSS fixes"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'GpsTrackQuality.stationaryJitter(' "Suppress jitter from standing bicycle"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'emitAcceptedPoint(new Location(candidate), false, 0.0);' "Recorded points stay unsnapped after acceptance"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" '.setMinUpdateDistanceMeters(0f)' "Receive stationary GPS fix for initial lock"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'rider.setIcon(icon)' "Marker rotates with rider GPS heading"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'cleanRecordedGeometry(parse(recordedPoints))' "Historical polyline display rejects obvious spikes"
+expect "$ROOT/app/src/main/res/drawable/pedal_cyclist_topdown.xml" 'android:viewportHeight="160"' "Top-down rider drawable is bundled"
+tmp_gps_qa="$(mktemp -d)"
+trap 'rm -rf "$tmp_gps_qa"' EXIT
+javac -d "$tmp_gps_qa" "$ROOT/app/src/main/java/ir/pedalpro/app/GpsTrackQuality.java" "$ROOT/ci/GpsTrackQualityTest.java"
+java -cp "$tmp_gps_qa" ir.pedalpro.app.GpsTrackQualityTest
+
 # RC20 chat-open endpoint was not read-only: migrate to CSRF-protected POST.
 expect "$NATIVE/NativeChatActivity.java" 'api.post("chat_open_private",new JSONObject().put("user_id",userId))' "Private chat creation uses CSRF-protected POST and JSON user_id"
 if grep -Fq 'api.get("chat_open_private"' "$NATIVE/NativeChatActivity.java"; then
@@ -226,7 +239,7 @@ expect "$NATIVE/CyclingDirectionsClient.java" '"cycling-regular".equals(data.opt
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'mapView.setNavigationRoute(route.points)' "Navigation draws bicycle approach to selected route"
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'arrivalCandidateFixTime=loc.getTime()' "Saved route arrival requires multiple GPS fixes"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'groupTargetFresh(g)' "Stale leader target never used"
-expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'drawWheel(c,p,50,89,16,8)' "Native 2.5D bicycle marker with wheel contact"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'pedal_cyclist_topdown' "Reference-style top-down cyclist drawable used as marker"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'p.put("client_point_id", java.util.UUID.randomUUID().toString());' "Stable per-point idempotency key"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'payload.optInt("ride_id",rideId) != rideId' "Offline points cannot be credited to another ride"
 python3 - "$NATIVE/NativeSavedRouteFollowActivity.java" "$NATIVE/NativeLiveNavigationActivity.java" <<'PY'
