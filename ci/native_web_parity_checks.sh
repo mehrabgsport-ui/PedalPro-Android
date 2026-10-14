@@ -179,7 +179,7 @@ expect "$NATIVE/NativeSavedRouteFollowActivity.java" '"شروع GPS و بازک�
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'beginTrackingThen(this::launchNeshanDestination)' "Recorded ride launched before external navigator"
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'api.post("start_ride"' "Reuses verified start-ride server action"
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'service.setAction(TrackingService.ACTION_START)' "Reuses existing GPS TrackingService"
-expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'if(active!=null&&active.optInt' "No second ride created for active rider"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'int id=active==null?0:active.optInt' "No second ride created for active rider"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.clearTarget();' "Drop stale group location rather than navigating to old leader point"
 
 if [[ "$failed" -ne 0 ]]; then
