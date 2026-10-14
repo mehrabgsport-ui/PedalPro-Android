@@ -1402,9 +1402,20 @@ public final class NativeMainActivity extends Activity {
         LinearLayout box=glassCard(24);box.setPadding(dp(16),dp(16),dp(16),dp(16));
 
         String name=member.optString("display_name",member.optString("username","عضو"));
-        LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.HORIZONTAL);top.setGravity(Gravity.CENTER_VERTICAL);top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        TextView avatar=text(name.trim().isEmpty()?"؟":name.trim().substring(0,1),20,true,TEXT);avatar.setGravity(Gravity.CENTER);avatar.setBackground(roundRect(Color.argb(20,255,255,255),16,Color.argb(31,255,255,255)));top.addView(avatar,new LinearLayout.LayoutParams(dp(56),dp(56)));
-        LinearLayout who=new LinearLayout(this);who.setOrientation(LinearLayout.VERTICAL);who.setGravity(Gravity.END);who.addView(text(name,16,true,TEXT));TextView role=text(member.optString("role","member"),11,false,MUTED);role.setPadding(0,dp(4),0,0);who.addView(role);LinearLayout.LayoutParams whoLp=new LinearLayout.LayoutParams(0,-2,1f);whoLp.setMargins(dp(14),0,0,0);top.addView(who,whoLp);box.addView(top);
+        LinearLayout top=new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        top.addView(memberAvatar(member,name,56),new LinearLayout.LayoutParams(dp(56),dp(56)));
+
+        LinearLayout who=new LinearLayout(this);
+        who.setOrientation(LinearLayout.VERTICAL);
+        who.setGravity(Gravity.END);
+        who.addView(text(name,16,true,TEXT));
+        String roleName="admin".equals(member.optString("role",""))?"مدیر":"عضو";
+        TextView role=text(roleName,11,false,MUTED);role.setPadding(0,dp(4),0,0);who.addView(role);
+        LinearLayout.LayoutParams whoLp=new LinearLayout.LayoutParams(0,-2,1f);whoLp.setMargins(dp(14),0,0,0);top.addView(who,whoLp);
+        box.addView(top);
 
         LinearLayout stats=new LinearLayout(this);stats.setOrientation(LinearLayout.HORIZONTAL);stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);stats.setGravity(Gravity.CENTER);
         stats.addView(memberStat("مسافت",String.format(Locale.US,"%.1f km",member.optDouble("total_distance_m",0)/1000d)),new LinearLayout.LayoutParams(0,-2,1f));
@@ -1412,21 +1423,180 @@ public final class NativeMainActivity extends Activity {
         stats.addView(memberStat("چالش",JalaliDate.fa(member.optInt("challenges_count",0))),new LinearLayout.LayoutParams(0,-2,1f));
         LinearLayout.LayoutParams statLp=new LinearLayout.LayoutParams(-1,-2);statLp.setMargins(0,dp(14),0,0);box.addView(stats,statLp);
 
-        String bike="🚲 "+member.optString("bike_brand_model","مدل ثبت نشده")+"\nنوع: "+member.optString("bike_type","—")+" · سایز: "+member.optString("bike_size","—")+" · رنگ: "+member.optString("bike_color","—");
-        TextView bikeView=text(bike,12,false,Color.rgb(212,229,239));bikeView.setPadding(dp(12),dp(10),dp(12),dp(10));bikeView.setLineSpacing(0,1.8f);bikeView.setBackground(roundRect(Color.argb(14,255,255,255),16,Color.argb(31,255,255,255)));box.addView(bikeView,fullWrapLp(10));
+        java.util.ArrayList<JSONObject> bikes=memberBikes(member);
+        box.addView(text("دوچرخه‌ها",16,true,TEXT),fullWrapLp(12));
+        if(bikes.isEmpty()){
+            box.addView(text("دوچرخه‌ای ثبت نشده است.",11,false,MUTED));
+        }else{
+            for(JSONObject bike:bikes){
+                LinearLayout bikeCard=glassCard(18);
+                String photo=bike.optString("photo_path","");
+                if(photo.isBlank())photo=bike.optString("photo_data","");
+                if(!photo.isBlank()){
+                    ImageView im=new ImageView(this);
+                    im.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    im.setClipToOutline(true);
+                    RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);
+                    bikeCard.addView(im,new LinearLayout.LayoutParams(-1,dp(150)));
+                }else{
+                    TextView ph=text("🚲",42,false,MUTED);ph.setGravity(Gravity.CENTER);
+                    bikeCard.addView(ph,new LinearLayout.LayoutParams(-1,dp(130)));
+                }
+                TextView bt=text(bike.optString("brand_model","دوچرخه"),14,true,TEXT);bt.setPadding(0,dp(8),0,0);bikeCard.addView(bt);
+                bikeCard.addView(text(bikeTextNative(bike),11,false,MUTED));
+                box.addView(bikeCard,cardLp());
+            }
+        }
 
         box.addView(text("چالش‌های این عضو",16,true,TEXT),fullWrapLp(12));
         JSONArray challenges=bootstrap==null?null:bootstrap.optJSONArray("challenges");int cc=0;
-        if(challenges!=null)for(int i=0;i<challenges.length()&&cc<6;i++){JSONObject c=challenges.optJSONObject(i);if(c==null||c.optInt("creator_user_id",0)!=member.optInt("id",0)||!"public".equals(c.optString("visibility")))continue;Button b=normalButton(c.optString("title","چالش"));b.setOnClickListener(v->{d.dismiss();showChallenges();});box.addView(b,fullActionLp(44));cc++;}
+        if(challenges!=null)for(int i=0;i<challenges.length()&&cc<6;i++){
+            JSONObject ch=challenges.optJSONObject(i);
+            if(ch==null||ch.optInt("creator_user_id",0)!=member.optInt("id",0)||!"public".equals(ch.optString("visibility")))continue;
+            Button b=normalButton(ch.optString("title","چالش"));
+            b.setOnClickListener(v->{d.dismiss();showChallengeDetail(ch);});
+            box.addView(b,fullActionLp(44));cc++;
+        }
         if(cc==0)box.addView(text("چالش عمومی ندارد.",11,false,MUTED));
 
         box.addView(text("رکاب‌زنی‌های اخیر",16,true,TEXT),fullWrapLp(12));
         JSONArray rides=bootstrap==null?null:bootstrap.optJSONArray("rides");int rc=0;
-        if(rides!=null)for(int i=0;i<rides.length()&&rc<6;i++){JSONObject r=rides.optJSONObject(i);if(r==null||r.optInt("owner_user_id",0)!=member.optInt("id",0)||!"completed".equals(r.optString("status")))continue;int rideId=r.optInt("id",0);Button b=normalButton(r.optString("title","رکاب‌زنی")+" · "+String.format(Locale.US,"%.1f km",r.optDouble("distance_km",0)));b.setOnClickListener(v->{d.dismiss();Intent x=new Intent(this,NativeRideDetailActivity.class);x.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,rideId);startActivity(x);});box.addView(b,fullActionLp(44));rc++;}
+        if(rides!=null)for(int i=0;i<rides.length()&&rc<6;i++){
+            JSONObject r=rides.optJSONObject(i);
+            if(r==null||r.optInt("owner_user_id",0)!=member.optInt("id",0)||!"completed".equals(r.optString("status")))continue;
+            int rideId=r.optInt("id",0);
+            Button b=normalButton(r.optString("title","رکاب‌زنی")+" · "+String.format(Locale.US,"%.1f km",r.optDouble("distance_km",0)));
+            b.setOnClickListener(v->{d.dismiss();Intent x=new Intent(this,NativeRideDetailActivity.class);x.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,rideId);startActivity(x);});
+            box.addView(b,fullActionLp(44));rc++;
+        }
         if(rc==0)box.addView(text("رکاب‌زنی عمومی ثبت‌شده‌ای ندارد.",11,false,MUTED));
 
+        addMemberSocialLinks(box,member);
+
         sc.addView(box);
-        d.setContentView(sc);d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=Math.min(dp(760),getResources().getDisplayMetrics().widthPixels-dp(16));lp.height=Math.min(dp(760),Math.round(getResources().getDisplayMetrics().heightPixels*.84f));lp.gravity=Gravity.CENTER;lp.dimAmount=.72f;w.setAttributes(lp);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);}VazirmatnLoader.apply(this,box);
+        d.setContentView(sc);d.show();
+        Window w=d.getWindow();
+        if(w!=null){
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());
+            lp.width=Math.min(dp(760),getResources().getDisplayMetrics().widthPixels-dp(16));
+            lp.height=Math.min(dp(760),Math.round(getResources().getDisplayMetrics().heightPixels*.84f));
+            lp.gravity=Gravity.CENTER;lp.dimAmount=.72f;w.setAttributes(lp);w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this,box);
+    }
+
+    private java.util.ArrayList<JSONObject> memberBikes(JSONObject member) {
+        java.util.ArrayList<JSONObject> rows=new java.util.ArrayList<>();
+        if(member==null)return rows;
+        int uid=member.optInt("id",0);
+        JSONArray all=bootstrap==null?null:bootstrap.optJSONArray("member_bikes");
+        if(all!=null){
+            for(int i=0;i<all.length();i++){
+                JSONObject b=all.optJSONObject(i);
+                if(b!=null&&b.optInt("user_id",0)==uid)rows.add(b);
+            }
+        }
+        if(!rows.isEmpty())return rows;
+        if(member.optString("bike_brand_model","").isBlank()&&member.optString("bike_type","").isBlank()&&
+                member.optString("bike_size","").isBlank()&&member.optString("bike_color","").isBlank()&&
+                member.optString("bike_photo_path","").isBlank())return rows;
+        JSONObject legacy=new JSONObject();
+        try{
+            legacy.put("user_id",uid);
+            legacy.put("brand_model",member.optString("bike_brand_model",""));
+            legacy.put("bike_type",member.optString("bike_type",""));
+            legacy.put("frame_size",member.optString("bike_size",""));
+            legacy.put("wheel_size","");
+            legacy.put("color",member.optString("bike_color",""));
+            legacy.put("photo_path",member.optString("bike_photo_path",""));
+            legacy.put("is_primary",1);
+            rows.add(legacy);
+        }catch(Exception ignored){}
+        return rows;
+    }
+
+    private JSONObject primaryBike(java.util.ArrayList<JSONObject> bikes) {
+        if(bikes==null||bikes.isEmpty())return null;
+        for(JSONObject b:bikes)if(b!=null&&b.optInt("is_primary",0)==1)return b;
+        return bikes.get(0);
+    }
+
+    private FrameLayout memberAvatar(JSONObject member,String name,int size) {
+        FrameLayout avatar=new FrameLayout(this);
+        GradientDrawable bg=new GradientDrawable();bg.setShape(GradientDrawable.OVAL);bg.setColor(Color.rgb(23,50,74));
+        avatar.setBackground(bg);avatar.setClipToOutline(true);
+        String path=member==null?"":member.optString("avatar_path","");
+        if(!path.isBlank()){
+            ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            RemoteImageLoader.load(this,im,path,R.drawable.pedalpro_app_icon);
+            avatar.addView(im,new FrameLayout.LayoutParams(-1,-1));
+        }else{
+            TextView letter=text(name==null||name.trim().isEmpty()?"؟":name.trim().substring(0,1),17,true,GREEN);
+            letter.setGravity(Gravity.CENTER);avatar.addView(letter,new FrameLayout.LayoutParams(-1,-1));
+        }
+        return avatar;
+    }
+
+    private View memberBikeThumb(JSONObject bike) {
+        FrameLayout thumb=new FrameLayout(this);
+        thumb.setBackground(roundRect(Color.rgb(7,19,29),9,Color.rgb(41,67,92)));
+        thumb.setClipToOutline(true);
+        String photo=bike==null?"":bike.optString("photo_path","");
+        if(photo.isBlank()&&bike!=null)photo=bike.optString("photo_data","");
+        if(!photo.isBlank()){
+            ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);
+            thumb.addView(im,new FrameLayout.LayoutParams(-1,-1));
+        }else{
+            TextView ph=text("🚲",22,false,MUTED);ph.setGravity(Gravity.CENTER);
+            thumb.addView(ph,new FrameLayout.LayoutParams(-1,-1));
+        }
+        return thumb;
+    }
+
+    private String bikeTextNative(JSONObject bike) {
+        if(bike==null)return "دوچرخه ثبت نشده";
+        java.util.ArrayList<String> parts=new java.util.ArrayList<>();
+        String brand=bike.optString("brand_model","").trim();if(!brand.isBlank())parts.add(brand);
+        String type=bike.optString("bike_type","").trim();if(!type.isBlank())parts.add(type);
+        String frame=bike.optString("frame_size","").trim();if(!frame.isBlank())parts.add("فریم "+frame);
+        String wheel=bike.optString("wheel_size","").trim();if(!wheel.isBlank())parts.add("چرخ "+wheel);
+        String color=bike.optString("color","").trim();if(!color.isBlank())parts.add(color);
+        return parts.isEmpty()?"دوچرخه بدون مشخصات":android.text.TextUtils.join(" · ",parts);
+    }
+
+    private void addMemberSocialLinks(LinearLayout box,JSONObject member) {
+        String[][] links={
+                {"Instagram",member.optString("instagram_profile","")},
+                {"Telegram",member.optString("telegram_profile","")},
+                {"ایتا",member.optString("eitaa_profile","")},
+                {"بله",member.optString("bale_profile","")},
+                {"Strava",member.optString("strava_profile","")},
+                {"Relive",member.optString("relive_profile","")}
+        };
+        boolean any=false;
+        for(String[] row:links)if(row[1]!=null&&!row[1].trim().isBlank()){any=true;break;}
+        if(!any)return;
+        box.addView(text("شبکه‌های اجتماعی و حساب‌های ورزشی",16,true,TEXT),fullWrapLp(12));
+        for(String[] row:links){
+            String value=row[1]==null?"":row[1].trim();if(value.isBlank())continue;
+            Button b=normalButton(row[0]);
+            String url=socialProfileUrl(row[0],value);
+            b.setOnClickListener(v->openExternalUrl(url));
+            box.addView(b,fullActionLp(44));
+        }
+    }
+
+    private String socialProfileUrl(String service,String value) {
+        String v=value==null?"":value.trim();
+        if(v.startsWith("http://")||v.startsWith("https://"))return v;
+        while(v.startsWith("@"))v=v.substring(1);
+        if("Instagram".equals(service))return "https://instagram.com/"+v;
+        if("Telegram".equals(service))return "https://t.me/"+v;
+        if("ایتا".equals(service))return "https://eitaa.com/"+v;
+        if("بله".equals(service))return "https://ble.ir/"+v;
+        return v;
     }
 
     private View memberStat(String label,String value){
@@ -1765,6 +1935,8 @@ public final class NativeMainActivity extends Activity {
         for (int i = 0; i < members.length(); i++) {
             JSONObject m = members.optJSONObject(i);
             if (m == null) continue;
+            java.util.ArrayList<JSONObject> bikes = memberBikes(m);
+            JSONObject primary = primaryBike(bikes);
 
             LinearLayout box = card();
             box.setOrientation(LinearLayout.HORIZONTAL);
@@ -1775,30 +1947,17 @@ public final class NativeMainActivity extends Activity {
             box.setFocusable(true);
 
             String name = m.optString("display_name", m.optString("username", "عضو"));
-            String avatarPath = m.optString("avatar_path", "");
-            FrameLayout avatar = new FrameLayout(this);
-            GradientDrawable avatarBg = new GradientDrawable();
-            avatarBg.setShape(GradientDrawable.OVAL);
-            avatarBg.setColor(Color.rgb(23, 50, 74));
-            avatar.setBackground(avatarBg);
-            avatar.setClipToOutline(true);
-            if (!avatarPath.isBlank()) {
-                ImageView image = new ImageView(this);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                RemoteImageLoader.load(this, image, avatarPath, R.drawable.pedalpro_app_icon);
-                avatar.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            } else {
-                TextView letter = text(name.trim().isEmpty() ? "؟" : name.trim().substring(0, 1), 17, true, GREEN);
-                letter.setGravity(Gravity.CENTER);
-                avatar.addView(letter, new FrameLayout.LayoutParams(-1, -1));
-            }
-            box.addView(avatar, new LinearLayout.LayoutParams(dp(54), dp(54)));
+            box.addView(memberAvatar(m, name, 54), new LinearLayout.LayoutParams(dp(54), dp(54)));
+
+            View bikeThumb = memberBikeThumb(primary);
+            LinearLayout.LayoutParams bikeLp = new LinearLayout.LayoutParams(dp(74), dp(50));
+            bikeLp.setMargins(dp(8), 0, dp(8), 0);
+            box.addView(bikeThumb, bikeLp);
 
             LinearLayout copy = new LinearLayout(this);
             copy.setOrientation(LinearLayout.VERTICAL);
             copy.setGravity(Gravity.END);
-            TextView title = text(name, 15, true, TEXT);
-            copy.addView(title);
+            copy.addView(text(name, 15, true, TEXT));
 
             String role = "admin".equals(m.optString("role", "")) ? "مدیر" : "عضو";
             String line = role + " · " + JalaliDate.fa(m.optInt("rides_count", 0)) + " رکاب‌زنی · " +
@@ -1807,15 +1966,13 @@ public final class NativeMainActivity extends Activity {
             meta.setPadding(0, dp(4), 0, 0);
             copy.addView(meta);
 
-            String bike = m.optString("bike_type", "");
-            if (bike.isBlank()) bike = m.optString("bike_brand_model", "دوچرخه ثبت نشده");
-            TextView bikeView = text(bike, 10, false, MUTED);
+            String bikeLine = bikeTextNative(primary);
+            if (bikes.size() > 1) bikeLine += " · +" + JalaliDate.fa(bikes.size() - 1) + " دوچرخه";
+            TextView bikeView = text(bikeLine, 10, false, MUTED);
             bikeView.setPadding(0, dp(4), 0, 0);
             copy.addView(bikeView);
 
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
-            cp.setMargins(dp(12), 0, 0, 0);
-            box.addView(copy, cp);
+            box.addView(copy, new LinearLayout.LayoutParams(0, -2, 1f));
             box.setOnClickListener(v -> showMemberDialog(m));
             content.addView(box, cardLp());
         }
