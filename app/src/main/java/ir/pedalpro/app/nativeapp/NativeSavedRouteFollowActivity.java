@@ -291,10 +291,22 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     dist[0]>Math.max(35f,loc.getAccuracy()*1.5f))return;
                 arrived=true;
                 if(toBeginning){
-                    new AlertDialog.Builder(this).setTitle("به ابتدای مسیر رسیدی")
-                        .setMessage("اکنون مسیر GPS رکاب‌زن قبلی روی نقشه نمایش داده می‌شود.")
-                        .setPositiveButton("دنبال‌کردن مسیر", (d,w)->startFollow())
-                        .setNegativeButton("بعداً",null).show();
+                    // Switch to the recorded polyline after an accurate start fix.
+                    // The existing TrackingService continues the same ride.
+                    if(recording()){
+                        activateFollowing();
+                        android.widget.Toast.makeText(this,
+                                "به ابتدای مسیر رسیدی؛ دنبال‌کردن مسیر اصلی فعال شد.",
+                                android.widget.Toast.LENGTH_LONG).show();
+                    }else{
+                        status.setText("به ابتدای مسیر رسیدی. برای ثبت ادامه مسیر GPS را فعال کن.");
+                        new AlertDialog.Builder(this).setTitle("به ابتدای مسیر رسیدی")
+                            .setMessage("مسیر اصلی آماده است. ثبت ادامه رکاب‌زنی نیازمند روشن‌شدن GPS است.")
+                            .setPositiveButton("شروع GPS و دنبال‌کردن مسیر",(d,w)->
+                                    beginTrackingThen(this::activateFollowing))
+                            .setNeutralButton("نمایش بدون ثبت",(d,w)->activateFollowing())
+                            .setNegativeButton("بعداً",null).show();
+                    }
                 } else status.setText("به انتهای مسیر رسیدی.");
             });
     }
