@@ -27,7 +27,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private long replayDelayMs=650L;
     private NativeRouteView replayMap;
     private TextView replayMeta;
-    private Button replayPlay;
+    private PedalActionView replayPlay;
     private android.widget.SeekBar replaySlider;
 
     private JSONArray flyPoints=new JSONArray();
@@ -37,7 +37,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private int flyStep=1;
     private NativeRouteView flyMap;
     private TextView flyMeta;
-    private Button flyPlay;
+    private PedalActionView flyPlay;
 
     private final Runnable replayTick=new Runnable(){
         @Override public void run(){
@@ -408,7 +408,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         controls.setOrientation(LinearLayout.HORIZONTAL);
         controls.setGravity(android.view.Gravity.CENTER_VERTICAL);
         controls.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        replayPlay=normal("▶ پخش");
+        replayPlay=new PedalActionView(this,PedalIconView.Icon.PLAY,"پخش",PedalActionView.Style.OUTLINE);
         replaySlider=new android.widget.SeekBar(this);
         android.widget.Spinner speed=simpleSpinner(new String[]{"1×","2×","4×"});
         controls.addView(replayPlay,new LinearLayout.LayoutParams(dp(92),dp(46)));
@@ -425,7 +425,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         replayPlay.setOnClickListener(v->{
             if(replayRunning){stopReplayNative();return;}
             if(replayPoints==null||replayPoints.length()==0){loadReplayNative(rideId(ride),load);return;}
-            replayRunning=true;replayPlay.setText("⏸ مکث");main.removeCallbacks(replayTick);main.post(replayTick);
+            replayRunning=true;
+            replayPlay.setLabel("مکث");
+            replayPlay.iconView().setIcon(PedalIconView.Icon.PAUSE);
+            main.removeCallbacks(replayTick);main.post(replayTick);
         });
         replaySlider.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(android.widget.SeekBar seekBar,int progress,boolean fromUser){if(fromUser){stopReplayNative();replayPaintNative(progress);}}
@@ -473,7 +476,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
 
     private void stopReplayNative(){
         replayRunning=false;main.removeCallbacks(replayTick);
-        if(replayPlay!=null)replayPlay.setText("▶ پخش");
+        if(replayPlay!=null){
+            replayPlay.setLabel("پخش");
+            replayPlay.iconView().setIcon(PedalIconView.Icon.PLAY);
+        }
     }
 
     private void renderFlyoverNative(){
@@ -485,7 +491,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
 
         LinearLayout actions=new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        flyPlay=normal("▶ پخش");
+        flyPlay=new PedalActionView(this,PedalIconView.Icon.PLAY,"پخش",PedalActionView.Style.OUTLINE);
         android.widget.Spinner speed=simpleSpinner(new String[]{"1×","2×","4×"});
         actions.addView(flyPlay,new LinearLayout.LayoutParams(0,dp(46),1f));
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(92),dp(46));sp.setMargins(dp(8),0,0,0);actions.addView(speed,sp);
@@ -500,7 +506,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         flyPlay.setOnClickListener(v->{
             if(flyRunning){stopFlyNative();return;}
             if(flyPoints==null||flyPoints.length()==0){loadFlyNative(rideId(ride),load);return;}
-            flyRunning=true;flyPlay.setText("⏸ توقف");main.removeCallbacks(flyTick);main.post(flyTick);
+            flyRunning=true;
+            flyPlay.setLabel("توقف");
+            flyPlay.iconView().setIcon(PedalIconView.Icon.PAUSE);
+            main.removeCallbacks(flyTick);main.post(flyTick);
         });
         speed.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
             @Override public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){flyStep=position==0?1:position==1?2:4;}
@@ -540,7 +549,12 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void stopFlyNative(){
-        flyRunning=false;main.removeCallbacks(flyTick);if(flyPlay!=null)flyPlay.setText("▶ پخش");
+        flyRunning=false;
+        main.removeCallbacks(flyTick);
+        if(flyPlay!=null){
+            flyPlay.setLabel("پخش");
+            flyPlay.iconView().setIcon(PedalIconView.Icon.PLAY);
+        }
     }
 
     private void renderAnalysis(){
