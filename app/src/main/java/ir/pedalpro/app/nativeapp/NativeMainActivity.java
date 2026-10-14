@@ -1438,8 +1438,12 @@ public final class NativeMainActivity extends Activity {
         selectNav(navHome);
         content.removeAllViews();
 
+        LinearLayout heroOuter = new LinearLayout(this);
+        heroOuter.setOrientation(LinearLayout.VERTICAL);
+        heroOuter.setPadding(dp(8), dp(10), dp(8), dp(12));
+
         LinearLayout hero = glassCard(38);
-        hero.setPadding(dp(18), dp(28), dp(18), dp(42));
+        hero.setPadding(dp(15), dp(17), dp(15), dp(15));
 
         TextView eyebrow = text(uiString("home_eyebrow", "گروه دوچرخه سواری"), 17, true, TEXT);
         hero.addView(eyebrow);
@@ -1474,7 +1478,8 @@ public final class NativeMainActivity extends Activity {
         LinearLayout.LayoutParams routesLp = fullActionLp(70);
         routesLp.setMargins(0, dp(8), 0, 0);
         hero.addView(routes, routesLp);
-        content.addView(hero, cardLp());
+        heroOuter.addView(hero, new LinearLayout.LayoutParams(-1, -2));
+        content.addView(heroOuter, cardLp());
 
         content.addView(buildHomeQuickGrid(), fullWrapLp(4));
 
