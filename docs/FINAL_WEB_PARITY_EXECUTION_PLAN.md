@@ -35,10 +35,15 @@ Status: IN PROGRESS
 - Gallery.
 - About.
 - Full user guide and PDF target.
+- Canonical event cards and event-detail modal, registration/attendance and event gallery.
+- Canonical ride selector with ride-details API, map, metrics and speed chart.
+- Mobile members list/detail and merged event/ride gallery.
+- About page mobile glass layout and canonical guide PDF target.
+- Verified Native RC QA and Android Store Release Build.
 - Current batch complete: mobile single-column home report, corrected guide PDF target, member cards linked to native member detail.
 
 ## Phase 4 — Account and personal data
-Status: PENDING
+Status: IN PROGRESS
 - Login/signup/reset modal parity.
 - Profile editor.
 - Phone verification and admin manual phone.
