@@ -6782,25 +6782,12 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showSmsPage() {
-        currentPage = "sms";
         if (!signedIn()) { showLogin(); return; }
         boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
         if (!admin) { showHome(); return; }
-        selectNav(null);
-        content.removeAllViews();
-        addHero("پیامک", "");
-        LinearLayout box = glassCard(24);
-        JSONObject status = bootstrap == null ? null : bootstrap.optJSONObject("sms_status");
-        if (status != null) {
-            box.addView(text("ارائه‌دهنده: " + status.optString("provider", "FarazSMS"), 13, true, TEXT));
-            box.addView(text(status.optBoolean("configured", false) ? "API تنظیم شده" : "API ناقص", 12, false, status.optBoolean("configured", false) ? GREEN : ORANGE));
-            box.addView(text("خط فعال: " + status.optString("sender", "ثبت نشده"), 12, false, MUTED));
-        } else {
-            box.addView(text("وضعیت پیامک از سرور دریافت نشده است.", 12, false, MUTED));
-        }
-        content.addView(box, cardLp());
-        VazirmatnLoader.apply(this, content);
-        animatePageIn();
+        Intent i = new Intent(this, NativeSiteSettingsActivity.class);
+        i.putExtra("section", "sms");
+        startActivity(i);
     }
 
     private View liveRiderCard(JSONObject ride, Dialog sheet) {
