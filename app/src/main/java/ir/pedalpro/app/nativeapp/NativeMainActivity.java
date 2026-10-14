@@ -1754,42 +1754,74 @@ public final class NativeMainActivity extends Activity {
         currentPage = "club";
         selectNav(null);
         content.removeAllViews();
-        addHero("اعضای باشگاه", "");
+        addHero("اعضا", "");
 
-        JSONArray members = bootstrap.optJSONArray("members");
+        JSONArray members = bootstrap == null ? null : bootstrap.optJSONArray("members");
         if (members == null || members.length() == 0) {
-            addEmpty("عضوی برای نمایش دریافت نشد.");
+            addEmpty("هنوز عضوی ثبت نشده است.");
             return;
         }
+
         for (int i = 0; i < members.length(); i++) {
             JSONObject m = members.optJSONObject(i);
             if (m == null) continue;
+
             LinearLayout box = card();
+            box.setOrientation(LinearLayout.HORIZONTAL);
+            box.setGravity(Gravity.CENTER_VERTICAL);
+            box.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            box.setPadding(dp(14), dp(14), dp(14), dp(14));
             box.setClickable(true);
             box.setFocusable(true);
+
             String name = m.optString("display_name", m.optString("username", "عضو"));
-            box.addView(text(name, 15, true, TEXT));
-            String username = m.optString("username", "");
-            String role = m.optString("role", "");
-            box.addView(text((username.isBlank() ? "" : "@" + username) + (role.isBlank() ? "" : " · " + role), 11, false, MUTED));
+            String avatarPath = m.optString("avatar_path", "");
+            FrameLayout avatar = new FrameLayout(this);
+            GradientDrawable avatarBg = new GradientDrawable();
+            avatarBg.setShape(GradientDrawable.OVAL);
+            avatarBg.setColor(Color.rgb(23, 50, 74));
+            avatar.setBackground(avatarBg);
+            avatar.setClipToOutline(true);
+            if (!avatarPath.isBlank()) {
+                ImageView image = new ImageView(this);
+                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                RemoteImageLoader.load(this, image, avatarPath, R.drawable.pedalpro_app_icon);
+                avatar.addView(image, new FrameLayout.LayoutParams(-1, -1));
+            } else {
+                TextView letter = text(name.trim().isEmpty() ? "؟" : name.trim().substring(0, 1), 17, true, GREEN);
+                letter.setGravity(Gravity.CENTER);
+                avatar.addView(letter, new FrameLayout.LayoutParams(-1, -1));
+            }
+            box.addView(avatar, new LinearLayout.LayoutParams(dp(54), dp(54)));
 
-            LinearLayout stats = new LinearLayout(this);
-            stats.setOrientation(LinearLayout.HORIZONTAL);
-            stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-            stats.setGravity(Gravity.CENTER);
-            stats.addView(memberStat("مسافت", String.format(Locale.US, "%.1f km", m.optDouble("total_distance_m", 0) / 1000d)), new LinearLayout.LayoutParams(0, -2, 1f));
-            stats.addView(memberStat("رکاب‌زنی", JalaliDate.fa(m.optInt("rides_count", 0))), new LinearLayout.LayoutParams(0, -2, 1f));
-            stats.addView(memberStat("چالش", JalaliDate.fa(m.optInt("challenges_count", 0))), new LinearLayout.LayoutParams(0, -2, 1f));
-            LinearLayout.LayoutParams statsLp = new LinearLayout.LayoutParams(-1, -2);
-            statsLp.setMargins(0, dp(10), 0, 0);
-            box.addView(stats, statsLp);
+            LinearLayout copy = new LinearLayout(this);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            copy.setGravity(Gravity.END);
+            TextView title = text(name, 15, true, TEXT);
+            copy.addView(title);
 
-            TextView open = text("مشاهده پروفایل و فعالیت‌ها ‹", 11, true, Color.rgb(22, 228, 239));
-            open.setPadding(0, dp(10), 0, 0);
-            box.addView(open);
+            String role = "admin".equals(m.optString("role", "")) ? "مدیر" : "عضو";
+            String line = role + " · " + JalaliDate.fa(m.optInt("rides_count", 0)) + " رکاب‌زنی · " +
+                    String.format(Locale.US, "%.1f km", m.optDouble("total_distance_m", 0) / 1000d);
+            TextView meta = text(line, 11, false, MUTED);
+            meta.setPadding(0, dp(4), 0, 0);
+            copy.addView(meta);
+
+            String bike = m.optString("bike_type", "");
+            if (bike.isBlank()) bike = m.optString("bike_brand_model", "دوچرخه ثبت نشده");
+            TextView bikeView = text(bike, 10, false, MUTED);
+            bikeView.setPadding(0, dp(4), 0, 0);
+            copy.addView(bikeView);
+
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(0, -2, 1f);
+            cp.setMargins(dp(12), 0, 0, 0);
+            box.addView(copy, cp);
             box.setOnClickListener(v -> showMemberDialog(m));
             content.addView(box, cardLp());
         }
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
     private void showChallenges() {
@@ -6083,91 +6115,201 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void showEventDetail(JSONObject event) {
-        content.removeAllViews();
-        currentPage="event_detail";
-        selectNav(navActivities);
-        addHero(event.optString("title","جزئیات برنامه"),JalaliDate.format(event.optString("event_date",""),true));
+        if (event == null) return;
 
-        String cover=eventCover(event);
-        ImageView image=new ImageView(this);
-        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        image.setClipToOutline(true);
-        image.setBackground(roundRect(Color.TRANSPARENT,24,Color.argb(100,245,249,252)));
-        RemoteImageLoader.load(this,image,cover,R.drawable.program_reference);
-        content.addView(image,new LinearLayout.LayoutParams(-1,dp(220)));
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        LinearLayout card=glassCard(24);
-        card.addView(text("محل شروع: "+event.optString("meeting_location","—"),13,true,TEXT));
-        if(!event.optString("finish_location","").isBlank())card.addView(text("پایان: "+event.optString("finish_location"),12,false,MUTED));
-        if(!event.optString("route_name","").isBlank())card.addView(text("مسیر: "+event.optString("route_name"),12,false,MUTED));
-        if(event.optDouble("planned_distance",0)>0)card.addView(text("مسافت برنامه: "+JalaliDate.fa(Math.round(event.optDouble("planned_distance",0)))+" کیلومتر",12,false,MUTED));
-        if(!event.optString("description","").isBlank())card.addView(text(event.optString("description"),13,false,TEXT));
-        content.addView(card,cardLp());
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout box = glassCard(24);
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
 
-        LinearLayout participants=glassCard(24);
-        participants.addView(text("شرکت‌کنندگان",17,true,TEXT));
-        JSONArray regs=bootstrap.optJSONArray("registrations");
-        int count=0; boolean mine=false; JSONObject me=bootstrap.optJSONObject("user"); int uid=me==null?0:me.optInt("id",0);
-        if(regs!=null)for(int i=0;i<regs.length();i++){
-            JSONObject r=regs.optJSONObject(i);
-            if(r!=null&&r.optInt("event_id",0)==event.optInt("id",0)){
-                count++; if(r.optInt("user_id",0)==uid)mine=true;
-                participants.addView(text("• "+r.optString("display_name","عضو")+(r.optInt("attended",0)==1?" · حاضر":""),12,false,TEXT));
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        TextView title = text(event.optString("title", "جزئیات برنامه"), 20, true, TEXT);
+        head.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        FrameLayout close = iconSquare(PedalIconView.Icon.CLOSE, dialog::dismiss, "بستن");
+        head.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        box.addView(head);
+
+        LinearLayout notice = new LinearLayout(this);
+        notice.setOrientation(LinearLayout.VERTICAL);
+        notice.setPadding(dp(12), dp(11), dp(12), dp(11));
+        notice.setBackground(roundRect(Color.rgb(10, 31, 44), 12, Color.rgb(40, 81, 106)));
+        TextView when = text(JalaliDate.format(event.optString("event_date", ""), true), 13, true, TEXT);
+        notice.addView(when);
+        String meeting = event.optString("meeting_location", "");
+        if (!meeting.isBlank()) notice.addView(text("📍 " + meeting, 12, false, TEXT));
+        String routeName = event.optString("route_name", "");
+        if (!routeName.isBlank()) notice.addView(text("🛣️ " + routeName, 12, false, TEXT));
+        String desc = event.optString("description", "");
+        if (!desc.isBlank()) notice.addView(text(desc, 12, false, TEXT));
+        LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
+        noticeLp.setMargins(0, dp(12), 0, 0);
+        box.addView(notice, noticeLp);
+
+        TextView participantsTitle = text("شرکت‌کنندگان", 17, true, TEXT);
+        participantsTitle.setPadding(0, dp(14), 0, dp(7));
+        box.addView(participantsTitle);
+
+        JSONArray regs = bootstrap == null ? null : bootstrap.optJSONArray("registrations");
+        JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        int uid = me == null ? 0 : me.optInt("id", 0);
+        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+        boolean mine = false;
+        int count = 0;
+        if (regs != null) {
+            for (int i = 0; i < regs.length(); i++) {
+                JSONObject r = regs.optJSONObject(i);
+                if (r == null || r.optInt("event_id", 0) != event.optInt("id", 0)) continue;
+                count++;
+                if (r.optInt("user_id", 0) == uid) mine = true;
+
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                TextView who = text(r.optString("display_name", "عضو"), 12, false, TEXT);
+                row.addView(who, new LinearLayout.LayoutParams(0, dp(42), 1f));
+
+                if (admin) {
+                    CheckBox attended = new CheckBox(this);
+                    attended.setText("حاضر بود");
+                    attended.setTextColor(MUTED);
+                    attended.setChecked(r.optInt("attended", 0) == 1);
+                    int regId = r.optInt("id", 0);
+                    attended.setOnCheckedChangeListener((button, checked) -> saveAttendance(regId, checked));
+                    row.addView(attended, new LinearLayout.LayoutParams(-2, dp(42)));
+                } else {
+                    TextView state = text(r.optInt("attended", 0) == 1 ? "✓ حاضر" : "ثبت‌نام", 11, false, MUTED);
+                    state.setGravity(Gravity.CENTER);
+                    row.addView(state, new LinearLayout.LayoutParams(dp(72), dp(42)));
+                }
+                box.addView(row);
+                View divider = new View(this);
+                divider.setBackgroundColor(Color.rgb(32, 54, 77));
+                box.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
             }
         }
-        if(count==0)participants.addView(text("هنوز کسی ثبت‌نام نکرده است.",12,false,MUTED));
-        content.addView(participants,cardLp());
+        if (count == 0) box.addView(text("هنوز کسی ثبت‌نام نکرده است.", 12, false, MUTED));
 
-        LinearLayout gallery=glassCard(24);
-        gallery.addView(text("آلبوم تصاویر",17,true,TEXT));
-        JSONArray photos=bootstrap.optJSONArray("event_photos");
-        int pc=0;
-        if(photos!=null)for(int i=0;i<photos.length()&&pc<20;i++){
-            JSONObject p=photos.optJSONObject(i);
-            if(p!=null&&p.optInt("event_id",0)==event.optInt("id",0)){
-                ImageView im=new ImageView(this);
-                im.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                im.setClipToOutline(true);
-                im.setBackground(roundRect(Color.TRANSPARENT,18,Color.argb(80,245,249,252)));
-                RemoteImageLoader.load(this,im,p.optString("file_name",""),R.drawable.program_reference);
-                LinearLayout.LayoutParams ilp=new LinearLayout.LayoutParams(-1,dp(170));ilp.setMargins(0,dp(8),0,0);gallery.addView(im,ilp);
-                String cap=p.optString("caption",p.optString("uploader_name",""));
-                if(!cap.isBlank()){TextView ct=text(cap,10,false,MUTED);ct.setPadding(0,dp(3),0,0);gallery.addView(ct);}
-                pc++;
+        double lat = event.optDouble("meeting_lat", Double.NaN);
+        double lng = event.optDouble("meeting_lng", Double.NaN);
+        if (Double.isFinite(lat) && Double.isFinite(lng)) {
+            NativeRouteView map = new NativeRouteView(this);
+            map.setTarget(lat, lng);
+            LinearLayout.LayoutParams mapLp = new LinearLayout.LayoutParams(-1, dp(250));
+            mapLp.setMargins(0, dp(12), 0, 0);
+            box.addView(map, mapLp);
+        }
+
+        JSONObject eventRide = null;
+        JSONArray rides = bootstrap == null ? null : bootstrap.optJSONArray("rides");
+        if (rides != null) {
+            for (int i = 0; i < rides.length(); i++) {
+                JSONObject r = rides.optJSONObject(i);
+                if (r != null && r.optInt("event_id", 0) == event.optInt("id", 0)) {
+                    eventRide = r;
+                    break;
+                }
             }
         }
-        if(pc==0)gallery.addView(text("هنوز تصویری بارگذاری نشده است.",12,false,MUTED));
-        boolean canUpload=bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1||mine;
-        if(canUpload){
-            PedalActionView upload=action(PedalIconView.Icon.PLUS,"افزودن عکس به آلبوم",PedalActionView.Style.OUTLINE);
-            upload.setOnClickListener(v->{pendingEventPhotoId=event.optInt("id",0);pickImage(REQ_EVENT_PHOTO);});
-            gallery.addView(upload,fullActionLp(50));
+        if (eventRide != null) {
+            final int rideId = eventRide.optInt("id", 0);
+            PedalActionView openRide = action(PedalIconView.Icon.DETAILS, "مشاهده مسیر ثبت‌شده", PedalActionView.Style.OUTLINE);
+            openRide.setOnClickListener(v -> {
+                dialog.dismiss();
+                Intent i = new Intent(this, NativeRideDetailActivity.class);
+                i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, rideId);
+                startActivity(i);
+            });
+            box.addView(openRide, fullActionLp(50));
         }
-        content.addView(gallery,cardLp());
 
-        boolean registered=isRegisteredForEvent(event.optInt("id",0));
-        if(event.optInt("registration_open",1)==1&&"planned".equals(event.optString("status","planned"))){
-            PedalActionView reg=action(registered?PedalIconView.Icon.CLOSE:PedalIconView.Icon.PLUS,registered?"لغو ثبت‌نام":"ثبت‌نام",registered?PedalActionView.Style.OUTLINE:PedalActionView.Style.PRIMARY);
-            reg.setOnClickListener(v->toggleEventRegistration(event.optInt("id",0),!registered,hiddenButtonProxy(reg)));
-            content.addView(reg,fullActionLp(54));
-        }
-        PedalActionView share=action(PedalIconView.Icon.SHARE,"اشتراک‌گذاری",PedalActionView.Style.OUTLINE);
-        share.setOnClickListener(v->shareEvent(event));content.addView(share,fullActionLp(54));
+        TextView galleryTitle = text("آلبوم تصاویر", 17, true, TEXT);
+        galleryTitle.setPadding(0, dp(14), 0, dp(7));
+        box.addView(galleryTitle);
 
-        double lat=event.optDouble("meeting_lat",Double.NaN),lng=event.optDouble("meeting_lng",Double.NaN);
-        if(Double.isFinite(lat)&&Double.isFinite(lng)){
-            PedalActionView nav=action(PedalIconView.Icon.ROUTE,"مسیریابی تا ابتدای مسیر",PedalActionView.Style.PRIMARY);
-            nav.setOnClickListener(v->openNeshanPoint(lat,lng));content.addView(nav,fullActionLp(56));
+        java.util.ArrayList<JSONObject> photos = new java.util.ArrayList<>();
+        JSONArray allPhotos = bootstrap == null ? null : bootstrap.optJSONArray("event_photos");
+        if (allPhotos != null) {
+            for (int i = 0; i < allPhotos.length(); i++) {
+                JSONObject p = allPhotos.optJSONObject(i);
+                if (p == null || p.optInt("event_id", 0) != event.optInt("id", 0)) continue;
+                JSONObject x = new JSONObject();
+                try {
+                    x.put("src", p.optString("file_name", ""));
+                    x.put("cap", p.optString("caption", p.optString("uploader_name", "")));
+                    photos.add(x);
+                } catch (Exception ignored) { }
+            }
         }
-        if(bootstrap.optBoolean("is_admin",false)||bootstrap.optInt("is_admin",0)==1){
-            PedalActionView edit=action(PedalIconView.Icon.EDIT,"ویرایش برنامه",PedalActionView.Style.OUTLINE);
-            edit.setOnClickListener(v->showEventEditor(event));content.addView(edit,fullActionLp(52));
+
+        if (photos.isEmpty()) {
+            box.addView(text("هنوز عکسی بارگذاری نشده است.", 12, false, MUTED));
+        } else {
+            for (int i = 0; i < photos.size(); i += 2) {
+                LinearLayout pair = new LinearLayout(this);
+                pair.setOrientation(LinearLayout.HORIZONTAL);
+                pair.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                LinearLayout.LayoutParams firstLp = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                firstLp.setMargins(dp(4), 0, 0, dp(8));
+                pair.addView(galleryTile(photos.get(i)), firstLp);
+                if (i + 1 < photos.size()) {
+                    LinearLayout.LayoutParams secondLp = new LinearLayout.LayoutParams(0, dp(132), 1f);
+                    secondLp.setMargins(0, 0, dp(4), dp(8));
+                    pair.addView(galleryTile(photos.get(i + 1)), secondLp);
+                } else {
+                    pair.addView(new View(this), new LinearLayout.LayoutParams(0, dp(132), 1f));
+                }
+                box.addView(pair);
+            }
         }
-        PedalActionView back=action(PedalIconView.Icon.BACK,"بازگشت به برنامه‌ها",PedalActionView.Style.OUTLINE);
-        back.setOnClickListener(v->showActivities());content.addView(back,fullActionLp(52));
-        VazirmatnLoader.apply(this,content);animatePageIn();
+
+        boolean canUpload = me != null && (admin || mine);
+        if (canUpload) {
+            PedalActionView upload = action(PedalIconView.Icon.PLUS, "بارگذاری عکس", PedalActionView.Style.PRIMARY);
+            upload.setOnClickListener(v -> {
+                dialog.dismiss();
+                pendingEventPhotoId = event.optInt("id", 0);
+                pickImage(REQ_EVENT_PHOTO);
+            });
+            box.addView(upload, fullActionLp(50));
+        }
+
+        scroll.addView(box);
+        dialog.setContentView(scroll);
+        dialog.show();
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = Math.min(dp(760), getResources().getDisplayMetrics().widthPixels - dp(16));
+            lp.height = Math.min(dp(860), Math.round(getResources().getDisplayMetrics().heightPixels * .92f));
+            lp.gravity = Gravity.CENTER;
+            lp.dimAmount = .72f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this, box);
     }
 
+
+    private void saveAttendance(int registrationId, boolean attended) {
+        if (registrationId <= 0) return;
+        io.execute(() -> {
+            try {
+                api.post("attendance", new JSONObject().put("id", registrationId).put("attended", attended));
+                main.post(() -> toast("وضعیت حضور ثبت شد"));
+            } catch (Exception e) {
+                main.post(() -> toast(e.getMessage()));
+            }
+        });
+    }
 
     private void showEventEditor(JSONObject event) {
         boolean editing=event!=null;
