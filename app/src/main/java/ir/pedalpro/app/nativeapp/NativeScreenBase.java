@@ -275,6 +275,7 @@ abstract class NativeScreenBase extends Activity {
                 main.post(()->{
                     signedIn=user!=null;
                     headerAccount.setLabel(signedIn?"حساب کاربری":"ورود");
+                    headerAccount.iconView().setVisibility(signedIn?View.GONE:View.VISIBLE);
                     headerAdminSettings.setVisibility(isAdmin?View.VISIBLE:View.GONE);
                     webHeader.setPadding(dp(10),dp(gap),dp(10),dp(14));
                     rideDockLabel.setText(finalRide+"\nرکاب");
