@@ -5312,11 +5312,11 @@ public final class NativeMainActivity extends Activity {
         nav.setPadding(dp(10), dp(16), dp(10), dp(10));
         nav.setBackground(bottomGradient());
 
-        navHome = bottomGlyphItem("⌂", "خانه", this::showHome);
-        navActivities = bottomGlyphItem("🗓️", "فعالیت‌ها", this::showActivities);
+        navHome = bottomGlyphItem(PedalIconView.Icon.HOME, "خانه", this::showHome);
+        navActivities = bottomGlyphItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها", this::showActivities);
         navRide = centerRideItem();
-        navRoutes = bottomGlyphItem("📍", "مسیرها", this::showRoutes);
-        navMe = bottomGlyphItem("👤", "من", this::showMe);
+        navRoutes = bottomGlyphItem(PedalIconView.Icon.ROUTE, "مسیرها", this::showRoutes);
+        navMe = bottomGlyphItem(PedalIconView.Icon.USER, "من", this::showMe);
 
         nav.addView(navHome, bottomWeightLp(1f, 90));
         nav.addView(navActivities, bottomWeightLp(1f, 90));
@@ -5335,7 +5335,7 @@ public final class NativeMainActivity extends Activity {
 
     
 
-    private View bottomGlyphItem(String glyph, String label, Runnable run) {
+    private View bottomGlyphItem(PedalIconView.Icon iconType, String label, Runnable run) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
@@ -5344,9 +5344,7 @@ public final class NativeMainActivity extends Activity {
         host.setPadding(dp(6), dp(10), dp(6), dp(8));
         host.setContentDescription(label);
 
-        TextView icon = text(glyph, 24, false, Color.rgb(238, 248, 255));
-        icon.setGravity(Gravity.CENTER);
-        icon.setIncludeFontPadding(false);
+        PedalIconView icon = new PedalIconView(this, iconType, Color.rgb(238, 248, 255));
         host.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         TextView tv = text(label, 11, true, Color.rgb(238, 248, 255));
