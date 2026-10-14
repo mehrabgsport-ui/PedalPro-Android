@@ -248,6 +248,20 @@ public final class NativeRouteView extends View {
 
     public int pointCount() { return points.size(); }
 
+    /** Presentation-only export for SDK polyline; original tracked GPS remains untouched. */
+    public JSONArray exportPoints() {
+        JSONArray out=new JSONArray();
+        int stride=Math.max(1,points.size()/4500);
+        for(int i=0;i<points.size();i+=stride){
+            P v=points.get(i);
+            JSONObject coordinate=new JSONObject();
+            try{coordinate.put("lat",v.lat);coordinate.put("lng",v.lng);}
+            catch(Exception ignored){continue;}
+            out.put(coordinate);
+        }
+        return out;
+    }
+
     public void setExternalBasemap(boolean useNativeProvider) {
         externalBasemap = useNativeProvider;
         setBackgroundColor(useNativeProvider ? Color.TRANSPARENT : Color.rgb(6, 19, 31));
