@@ -133,7 +133,7 @@ public final class NativeMainActivity extends Activity {
     private boolean serverOnline = false;
     private String launchPage = "";
     private int launchEventId = 0;
-    private NativeRouteView activeRideRouteView;
+    private PedalNeshanMapSurface activeRideRouteView;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
     private android.net.Uri pendingProfileAvatarUri;
@@ -1927,7 +1927,7 @@ public final class NativeMainActivity extends Activity {
         stats.addView(wrapMetric(rideSpeed, "km/h"), weightHeightLp(dp(100)));
         content.addView(stats, cardLp());
 
-        activeRideRouteView = new NativeRouteView(this);
+        activeRideRouteView = new PedalNeshanMapSurface(this);
         content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
         loadActiveRideRoute();
 
@@ -2099,7 +2099,7 @@ public final class NativeMainActivity extends Activity {
         FrameLayout mapWrap = new FrameLayout(this);
         mapWrap.setBackground(roundRect(Color.rgb(6, 19, 31), 24, Color.argb(51, 255, 255, 255)));
         mapWrap.setClipToOutline(true);
-        NativeRouteView routeView = new NativeRouteView(this);
+        PedalNeshanMapSurface routeView = new PedalNeshanMapSurface(this);
         mapWrap.addView(routeView, new FrameLayout.LayoutParams(-1, -1));
         shell.addView(mapWrap, new LinearLayout.LayoutParams(-1, dp(290)));
 
@@ -5965,7 +5965,7 @@ public final class NativeMainActivity extends Activity {
         startActivity(i);
     }
 
-    private void loadRouteSelection(int rideId, NativeRouteView routeView, NativeSpeedChartView chart,
+    private void loadRouteSelection(int rideId, PedalNeshanMapSurface routeView, NativeSpeedChartView chart,
                                     LinearLayout statsHost, LinearLayout actionsHost, TextView state) {
         if (rideId <= 0) return;
         state.setText("در حال دریافت مسیر…");
@@ -7127,7 +7127,7 @@ public final class NativeMainActivity extends Activity {
         double lat = event.optDouble("meeting_lat", Double.NaN);
         double lng = event.optDouble("meeting_lng", Double.NaN);
         if (Double.isFinite(lat) && Double.isFinite(lng)) {
-            NativeRouteView map = new NativeRouteView(this);
+            PedalNeshanMapSurface map = new PedalNeshanMapSurface(this);
             map.setTarget(lat, lng);
             LinearLayout.LayoutParams mapLp = new LinearLayout.LayoutParams(-1, dp(250));
             mapLp.setMargins(0, dp(12), 0, 0);
