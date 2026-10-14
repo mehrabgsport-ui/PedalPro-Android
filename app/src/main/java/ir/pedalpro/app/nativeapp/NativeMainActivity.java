@@ -4703,7 +4703,30 @@ public final class NativeMainActivity extends Activity {
         baleInfo.addView(text("اتصال به ربات بله",17,true,TEXT));
         baleInfo.addView(text("اعلان برنامه‌ها، رکوردها و مدال‌ها از طریق ربات بله ارسال می‌شود.",11,false,MUTED));
         PedalActionView baleButton=action(PedalIconView.Icon.CHAT,"مدیریت اتصال به ربات بله",PedalActionView.Style.OUTLINE);
-        baleButton.setOnClickListener(v->showProfileEditor());
+        baleButton.setOnClickListener(v->{
+            JSONObject invite=bootstrap==null?null:bootstrap.optJSONObject("bale_invite");
+            if(invite==null){
+                JSONObject me=bootstrap==null?null:bootstrap.optJSONObject("user");
+                invite=me==null?null:me.optJSONObject("bale_invite");
+            }
+            if(invite!=null&&invite.optBoolean("connected",false)){
+                toast("حساب شما به ربات بله متصل است.");
+                return;
+            }
+            String serverUrl=invite==null?"":invite.optString("url","").trim();
+            try{
+                Uri link=Uri.parse(serverUrl);
+                String host=link.getHost()==null?"":link.getHost().toLowerCase(Locale.ROOT);
+                if(("https".equalsIgnoreCase(link.getScheme())&&
+                    (host.equals("ble.ir")||host.endsWith(".ble.ir")||
+                     host.equals("bale.ai")||host.endsWith(".bale.ai")))){
+                    startActivity(new Intent(Intent.ACTION_VIEW,link));
+                    return;
+                }
+            }catch(Exception ignored){}
+            toast("لینک شخصی اتصال هنوز از سرور دریافت نشده؛ شماره موبایل را تأیید کنید.");
+            showProfileEditor();
+        });
         baleInfo.addView(baleButton,fullActionLp(48));
         content.addView(baleInfo,cardLp());
         LinearLayout accountGrid=new LinearLayout(this);
