@@ -2,6 +2,7 @@ package ir.pedalpro.app.nativeapp;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.Intent;
 import android.location.Location;
 import android.os.SystemClock;
 import android.text.InputType;
