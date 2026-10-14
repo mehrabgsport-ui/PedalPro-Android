@@ -182,6 +182,17 @@ expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'service.setAction(Tracking
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'int id=active==null?0:active.optInt' "No second ride created for active rider"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.clearTarget();' "Drop stale group location rather than navigating to old leader point"
 
+# RC13: last-mile functional protections, without modifying GPS persistence.
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'beginTrackingThen(this::activateFollowing)' "At saved-route start, GPS is required for tracked auto-follow"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'if(recording()){' "Existing GPS recording auto-continues at route start"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'arrivalCandidateFixTime' "Group arrival requires distinct fixes"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'fixAge>12000L' "Stale GPS cannot confirm group arrival"
+expect "$NATIVE/NativeChatActivity.java" 'private boolean appendMessages(JSONArray incoming)' "Chat drops duplicate live events"
+expect "$NATIVE/NativeChatActivity.java" 'if(changed||receiptsChanged)renderMessages();' "Idle chat polls avoid expensive redraws"
+expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boolean attended, CheckBox control)' "Attendance waits for server acknowledgement"
+expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
+expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
