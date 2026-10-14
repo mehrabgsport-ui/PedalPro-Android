@@ -14,6 +14,7 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      NESHAN_MOBILE_API_KEY: ${{ secrets.NESHAN_MOBILE_API_KEY }}
 
     steps:
       - name: Checkout
@@ -40,21 +41,13 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Configure licensed Neshan Native Map (if authorized)
-        env:
-          NESHAN_ANDROID_LICENCE_BASE64: ${{ secrets.NESHAN_ANDROID_LICENCE_BASE64 }}
+      - name: Neshan MOBILE API key check
         shell: bash
         run: |
-          set -euo pipefail
-          if [ -n "${NESHAN_ANDROID_LICENCE_BASE64:-}" ]; then
-            mkdir -p app/src/main/res/raw
-            printf '%s' "$NESHAN_ANDROID_LICENCE_BASE64" | base64 --decode > app/src/main/res/raw/neshan.licence
-            test -s app/src/main/res/raw/neshan.licence
-            echo "PEDALPRO_NESHAN_SDK=true" >> "$GITHUB_ENV"
-            echo "Licensed Neshan SDK build selected."
+          if [ -n "${NESHAN_MOBILE_API_KEY:-}" ]; then
+            echo "Current Neshan MapLibre SDK selected."
           else
-            echo "PEDALPRO_NESHAN_SDK=false" >> "$GITHUB_ENV"
-            echo "::warning::NESHAN_ANDROID_LICENCE_BASE64 unavailable; this APK uses clearly labelled XYZ fallback, NOT Neshan."
+            echo "::warning::NESHAN_MOBILE_API_KEY unset: output will use labelled XYZ fallback."
           fi
 
       - name: Configure signing key
@@ -75,7 +68,7 @@ jobs:
       - name: Build release APKs
         run: |
           gradle :app:assembleBazaarRelease :app:assembleMyketRelease \
-            -PpedalproNeshanAndroidSdk="$PEDALPRO_NESHAN_SDK" --stacktrace
+            --stacktrace
 
       - name: Sign APKs
         env:

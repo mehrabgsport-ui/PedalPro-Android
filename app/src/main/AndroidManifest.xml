@@ -30,6 +30,8 @@
         android:icon="@drawable/pedalpro_app_icon"
         android:label="PedalPro"
         android:theme="@style/Theme.PedalPro">
+        <meta-data android:name="org.maplibre.android.API_KEY"
+                   android:value="${neshanMobileApiKey}" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
