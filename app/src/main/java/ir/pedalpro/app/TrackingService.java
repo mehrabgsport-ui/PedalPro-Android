@@ -879,6 +879,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private void emitAcceptedPoint(Location point, boolean roadMatched, double confidence) {
         try {
             JSONObject p = locationJson(point);
+            p.put("client_point_id", java.util.UUID.randomUUID().toString());
             p.put("road_matched", roadMatched);
             if (roadMatched) {
                 p.put("road_match_provider", "neshan");
@@ -1108,6 +1109,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private synchronized void appendPending(JSONObject point) {
         try {
             JSONArray arr = new JSONArray(prefs.getString("pending", "[]"));
+            if (!point.has("ride_id")) point.put("ride_id",prefs.getInt("ride_id",0));
             arr.put(point);
             if (arr.length() > 3000 && arr.length() % 200 == 1) {
                 // Never truncate the oldest unsent ride points: those are the
@@ -1179,6 +1181,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
         try {
             int rideId = prefs.getInt("ride_id", 0);
             JSONObject payload = new JSONObject(point.toString());
+            if (payload.optInt("ride_id",rideId) != rideId) {
+                broadcastStatus("صف ارسال GPS متعلق به رکاب دیگری است و حفظ شد",true);
+                return new SendResult(false,null);
+            }
             payload.put("ride_id", rideId);
 
             URL url = new URL(API + "?action=track_point");

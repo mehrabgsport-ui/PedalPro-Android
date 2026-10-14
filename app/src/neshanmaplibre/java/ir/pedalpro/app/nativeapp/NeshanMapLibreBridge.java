@@ -150,31 +150,44 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         }else updateCamera(false);
     }
 
-    /** Reuse PedalPro's existing vector bicycle icon for the actual GPS marker. */
+
+    /** Isometric painted bicycle; bottom wheel contacts the GPS route anchor. */
     private org.maplibre.android.annotations.Icon bikeMapIcon(){
         if(riderIcon!=null)return riderIcon;
-        int side=(int)(58*activity.getResources().getDisplayMetrics().density);
-        side=Math.max(58,Math.min(side,160));
+        int side=(int)(88*activity.getResources().getDisplayMetrics().density);
+        side=Math.max(88,Math.min(side,220));
         Bitmap bitmap=Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
-        Canvas canvas=new Canvas(bitmap);
-        Paint halo=new Paint(Paint.ANTI_ALIAS_FLAG);
-        halo.setColor(Color.rgb(8,39,57));
-        canvas.drawCircle(side/2f,side/2f,side*.46f,halo);
-        halo.setColor(Color.rgb(23,226,235));
-        halo.setStyle(Paint.Style.STROKE);
-        halo.setStrokeWidth(side*.055f);
-        canvas.drawCircle(side/2f,side/2f,side*.43f,halo);
-        PedalIconView bicycle=new PedalIconView(activity,PedalIconView.Icon.RIDE,Color.WHITE);
-        int iconSize=(int)(side*.72f);
-        int measure=View.MeasureSpec.makeMeasureSpec(iconSize,View.MeasureSpec.EXACTLY);
-        bicycle.measure(measure,measure);
-        bicycle.layout(0,0,iconSize,iconSize);
-        canvas.save();
-        canvas.translate((side-iconSize)/2f,(side-iconSize)/2f);
-        bicycle.draw(canvas);
-        canvas.restore();
+        Canvas c=new Canvas(bitmap);
+        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
+        c.save();c.scale(side/100f,side/100f);
+        p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(92,0,12,24));
+        c.drawOval(35,88,66,98,p);
+        drawWheel(c,p,50,77,16,8);
+        drawWheel(c,p,50,26,11,6);
+        android.graphics.Path frame=new android.graphics.Path();
+        frame.moveTo(50,76);frame.lineTo(37,50);frame.lineTo(50,27);
+        frame.moveTo(37,50);frame.lineTo(64,52);frame.lineTo(50,76);
+        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(6);p.setColor(Color.rgb(4,35,51));c.drawPath(frame,p);
+        p.setStrokeWidth(3.4f);p.setColor(Color.rgb(26,217,233));c.drawPath(frame,p);
+        p.setStrokeWidth(1.3f);p.setColor(Color.WHITE);c.drawLine(37,50,50,27,p);
+        p.setStrokeWidth(4);p.setColor(Color.rgb(8,50,65));
+        c.drawLine(32,30,68,30,p);c.drawLine(37,43,55,43,p);
+        p.setColor(Color.rgb(254,185,91));c.drawLine(34,34,44,51,p);c.drawLine(65,34,55,51,p);
+        p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(249,194,109));c.drawOval(42,14,59,31,p);
+        p.setColor(Color.rgb(7,66,91));c.drawOval(40,33,60,57,p);
+        p.setColor(Color.rgb(24,205,230));c.drawOval(43,35,54,48,p);
+        c.restore();
         riderIcon=IconFactory.getInstance(activity).fromBitmap(bitmap);
         return riderIcon;
+    }
+
+    private static void drawWheel(Canvas c,Paint p,float x,float y,float rx,float ry){
+        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(5.5f);p.setColor(Color.rgb(5,33,48));
+        c.drawOval(x-rx,y-ry,x+rx,y+ry,p);
+        p.setStrokeWidth(2.0f);p.setColor(Color.rgb(180,228,234));
+        c.drawOval(x-rx+2,y-ry+2,x+rx-2,y+ry-2,p);
+        p.setStrokeWidth(1f);c.drawLine(x-rx+3,y,x+rx-3,y,p);
     }
 
     private void updateRiderMarker(boolean force){

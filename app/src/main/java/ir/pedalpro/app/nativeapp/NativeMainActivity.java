@@ -5111,6 +5111,7 @@ public final class NativeMainActivity extends Activity {
 
                 JSONObject point = new JSONObject()
                         .put("ride_id", rideId)
+                        .put("client_point_id", java.util.UUID.randomUUID().toString())
                         .put("lat", fix.getLatitude())
                         .put("lng", fix.getLongitude())
                         .put("altitude", fix.hasAltitude() ? fix.getAltitude() : JSONObject.NULL)
