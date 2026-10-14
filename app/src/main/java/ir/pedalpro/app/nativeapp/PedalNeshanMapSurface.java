@@ -26,6 +26,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private static final String TAG = "PedalNeshanMap";
     private final NativeRouteView overlay;
     private View neshanMap;
+    private LinearLayout mapControls;
     private double lastLat = Double.NaN, lastLng = Double.NaN;
     private int lastZoom = -1;
     private boolean trafficEnabled = true;
@@ -154,6 +155,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         controls.setOrientation(LinearLayout.VERTICAL);
         controls.setPadding(dp(5),dp(5),dp(5),dp(5));
         controls.setBackground(panelBackground());
+        mapControls=controls;
         controls.addView(control("+","بزرگ‌نمایی نقشه",()->overlay.zoomBy(1)));
         controls.addView(control("−","کوچک‌نمایی نقشه",()->overlay.zoomBy(-1)));
         controls.addView(control("◎","نمایش کامل مسیر",overlay::recenter));
@@ -198,6 +200,17 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     }
 
     private int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+.5f);}
+
+    /** Presentation-only control arrangement for the full-screen riding map. */
+    public void setFullRideMode(boolean enabled) {
+        if(mapControls==null)return;
+        FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(44),-2,
+                enabled ? Gravity.BOTTOM|Gravity.START : Gravity.TOP|Gravity.END);
+        if(enabled)lp.setMargins(dp(12),0,0,dp(218));
+        else lp.setMargins(0,dp(10),dp(10),0);
+        mapControls.setLayoutParams(lp);
+        mapControls.setElevation(dp(9));
+    }
 
     public boolean isNeshanEnabled(){return neshanMap!=null;}
     public void setPoints(JSONArray rows){overlay.setPoints(rows);}
