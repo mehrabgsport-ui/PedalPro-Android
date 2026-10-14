@@ -26,10 +26,16 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     private JSONObject data;
     private final ArrayList<Button> tabButtons = new ArrayList<>();
     private String activeTab = "general";
+    private NativeAppReleaseAdminController appReleaseAdmin;
+    private NativeFcmAdminController fcmAdmin;
 
     @Override protected String screenTitle() { return "تنظیمات سایت"; }
 
-    @Override protected void onScreenReady() { load("general"); }
+    @Override protected void onScreenReady() {
+        appReleaseAdmin = new NativeAppReleaseAdminController(this, api, io);
+        fcmAdmin = new NativeFcmAdminController(this, api, io);
+        load("general");
+    }
 
     private void load(String tab) {
         activeTab = tab == null ? "general" : tab;
@@ -97,12 +103,12 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     private void addTab(LinearLayout row, String key, String label) {
         Button b = normal(label);
         b.setTag(key);
-        b.setTextColor(key.equals(activeTab) ? Color.rgb(4,36,24) : TEXT);
+        b.setTextColor(key.equals(activeTab) ? Color.rgb(5,34,53) : TEXT);
         if (key.equals(activeTab)) {
             android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable(
-                    android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                    new int[]{Color.rgb(23,201,145), Color.rgb(46,230,166)});
-            g.setCornerRadius(dp(12));
+                    android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(20,223,237), Color.rgb(36,185,237)});
+            g.setCornerRadius(dp(999));
             b.setBackground(g);
         }
         b.setOnClickListener(v -> load(key));
@@ -358,18 +364,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     }
 
     private void renderAppManager() {
-        LinearLayout release=card();release.addView(text("مدیریت نسخه اپلیکیشن",18,true,TEXT));
-        TextView state=text("در حال بررسی وضعیت…",12,false,MUTED);release.addView(state);
-        Button refresh=normal("↻ بررسی وضعیت");
-        refresh.setOnClickListener(v->loadReleaseStatus(state,refresh));
-        release.addView(refresh);content.addView(release,cardLp());loadReleaseStatus(state,refresh);
-
-        LinearLayout notif=card();notif.addView(text("ارسال اعلان به اعضا",18,true,TEXT));
-        EditText title=input("عنوان اعلان"),body=input("متن اعلان"),target=input("مخاطب: all / members / admins / user"),userId=input("شناسه کاربر (برای user)"),url=input("لینک داخلی اختیاری");
-        body.setSingleLine(false);body.setMinLines(3);target.setText("all");
-        Button send=primary("ارسال اعلان");
-        send.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("title",title.getText().toString());p.put("body",body.getText().toString());p.put("target",target.getText().toString());p.put("user_id",intValue(userId,0));p.put("url",url.getText().toString());}catch(Exception ignored){}postAndReload("app_notification_send",p,send,"اعلان ارسال شد");});
-        notif.addView(title);notif.addView(body);notif.addView(target);notif.addView(userId);notif.addView(url);notif.addView(send);content.addView(notif,cardLp());
+        appReleaseAdmin.render(content, data);
     }
 
     private void loadReleaseStatus(TextView state,Button b){
@@ -377,13 +372,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     }
 
     private void renderPush(){
-        LinearLayout box=card();box.addView(text("Firebase Cloud Messaging",18,true,TEXT));
-        TextView state=text("در حال دریافت وضعیت Push…",12,false,MUTED);box.addView(state);
-        Button refresh=normal("بررسی وضعیت");
-        refresh.setOnClickListener(v->loadFcmStatus(state,refresh));
-        Button test=primary("ارسال تست به خودم");
-        test.setOnClickListener(v->postAndReload("fcm_test",new JSONObject(),test,"اعلان تست ارسال شد"));
-        box.addView(refresh);box.addView(test);content.addView(box,cardLp());loadFcmStatus(state,refresh);
+        fcmAdmin.render(content);
     }
 
     private void loadFcmStatus(TextView state,Button b){
@@ -398,6 +387,16 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         box.addView(text("برنامه‌ها: "+(data.optJSONArray("events")==null?0:data.optJSONArray("events").length()),12,false,TEXT));
         Button reload=primary("بروزرسانی اطلاعات");
         reload.setOnClickListener(v->load("system"));box.addView(reload);content.addView(box,cardLp());
+    }
+
+    void reloadActiveTab() {
+        load(activeTab);
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,android.content.Intent intent) {
+        super.onActivityResult(requestCode,resultCode,intent);
+        if(appReleaseAdmin!=null && appReleaseAdmin.onActivityResult(requestCode,resultCode,intent)) return;
+        if(fcmAdmin!=null) fcmAdmin.onActivityResult(requestCode,resultCode,intent);
     }
 
     private void postAndReload(String action,JSONObject payload,Button button,String success){
