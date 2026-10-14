@@ -199,7 +199,7 @@ expect "$NATIVE/CyclingDirectionsClient.java" '"cycling-regular".equals(data.opt
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'mapView.setNavigationRoute(route.points)' "Navigation draws bicycle approach to selected route"
 expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'arrivalCandidateFixTime=loc.getTime()' "Saved route arrival requires multiple GPS fixes"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'groupTargetFresh(g)' "Stale leader target never used"
-expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'drawWheel(c,p,50,77,16,8)' "Native 2.5D bicycle marker with wheel contact"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'drawWheel(c,p,50,89,16,8)' "Native 2.5D bicycle marker with wheel contact"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'p.put("client_point_id", java.util.UUID.randomUUID().toString());' "Stable per-point idempotency key"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'payload.optInt("ride_id",rideId) != rideId' "Offline points cannot be credited to another ride"
 python3 - "$NATIVE/NativeSavedRouteFollowActivity.java" "$NATIVE/NativeLiveNavigationActivity.java" <<'PY'

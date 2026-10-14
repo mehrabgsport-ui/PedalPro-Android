@@ -152,7 +152,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
             if(!roadEnabled)routeView.clearNavigationRoute();
         }
         if(roadToggle!=null)roadToggle.setText(roadEnabled?
-                "غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
+                "غیرفعال‌سازی مسیر دوچرخه":"فعال‌سازی مسیر دوچرخه");
 
         main.removeCallbacks(tick);
         main.post(tick);

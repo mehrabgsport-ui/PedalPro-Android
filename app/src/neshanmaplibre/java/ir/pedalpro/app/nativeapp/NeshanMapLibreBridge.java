@@ -162,12 +162,12 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
         c.save();c.scale(side/100f,side/100f);
         p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(92,0,12,24));
-        c.drawOval(35,88,66,98,p);
-        drawWheel(c,p,50,77,16,8);
+        c.drawOval(35,91,66,99,p);
+        drawWheel(c,p,50,89,16,8);
         drawWheel(c,p,50,26,11,6);
         android.graphics.Path frame=new android.graphics.Path();
-        frame.moveTo(50,76);frame.lineTo(37,50);frame.lineTo(50,27);
-        frame.moveTo(37,50);frame.lineTo(64,52);frame.lineTo(50,76);
+        frame.moveTo(50,89);frame.lineTo(37,50);frame.lineTo(50,27);
+        frame.moveTo(37,50);frame.lineTo(64,52);frame.lineTo(50,89);
         p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(6);p.setColor(Color.rgb(4,35,51));c.drawPath(frame,p);
         p.setStrokeWidth(3.4f);p.setColor(Color.rgb(26,217,233));c.drawPath(frame,p);
         p.setStrokeWidth(1.3f);p.setColor(Color.WHITE);c.drawLine(37,50,50,27,p);
