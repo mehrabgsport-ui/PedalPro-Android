@@ -158,6 +158,23 @@ expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLib
 expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'map.addPolyline(new PolylineOptions()' "Native route overlays"
 expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'styles/' "Official Neshan map styles"
 
+expect "$NATIVE/NativeMainActivity.java" 'private void installNativeSplash()' "Native startup follows actual bootstrap"
+expect "$NATIVE/NativeMainActivity.java" 'report.setOrientation(LinearLayout.HORIZONTAL)' "Home stats share a horizontal row"
+expect "$NATIVE/NativeMainActivity.java" '"عضویت در پدال پرو"' "Home top CTA is membership"
+expect "$NATIVE/NativeMainActivity.java" '"ثبت‌نام در برنامه"' "Registration CTA is inside upcoming program card"
+expect "$NATIVE/NativeMainActivity.java" 'private void enterPage(String next)' "Navigation history and position retention"
+expect "$NATIVE/NativeMainActivity.java" 'private void addMemberMedals(' "Member medals visible"
+expect "$NATIVE/NativeMainActivity.java" 'new SocialNetworkIconView(' "Social marks are brand-specific vectors"
+expect "$NATIVE/NativeMainActivity.java" 'new Intent(this,NativeChatActivity.class)' "Unified group/private chat screen"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'imagePath = input("مسیر تصویر موجود در سایت (image_path)")' "Medal image references managed"
+expect "$NATIVE/NativeChatActivity.java" 'messagesScroll=new ScrollView(this);' "Bounded chat message viewport"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'private void chooseDestination()' "Saved GPS route can choose start/end"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'main.postDelayed(this,"group".equals(mode)?10000L:3000L)' "Group live location refreshes each 10 seconds"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'private void beginGroupRideIfNeeded(Button button)' "Group catch ride recording uses existing contract"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" '.icon(bikeMapIcon())' "Current position displayed as native bicycle vector"
+expect "$ROOT/app/src/main/AndroidManifest.xml" 'NativeSavedRouteFollowActivity' "Saved route follower registered"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/PedalProFirebaseMessagingService.java" 'NativeMainActivity.class' "Push links open native app not WebView"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1

@@ -117,3 +117,28 @@ VIDEO evidence: `1000152337.mp4` displayed an OSM raster map flickering into nav
 | Route drawing | Two distinct native polylines; current rider marker | Position projection and performance on device |
 | Tracking integrity | No TrackingService, GPS filter, distance/calorie, or user data changes | Paused/offline/on-device verification |
 | Complete route guidance | Current Neshan Map SDK is a renderer, not a built-in bicycle navigation engine | True turn-by-turn bicycle rules and Web UX remain not verified |
+
+## RC11 — user review checklist 1–18 (2026-10-14)
+
+| # | Requirement | Source status | Mandatory remaining acceptance |
+|---|---|---|---|
+| 1 | Member profiles opacity, social icons, earned medals | Implemented presentation | Real member/bootstrap and UI test |
+| 2 | Medal image upload and locked grayscale | Partial: render images, grayscale, edit image_path | No verified medal image upload API or server image storage |
+| 3 | Web-style initial splash | Implemented using existing official app art and bootstrap progress | Pixel parity screenshot and launch performance |
+| 4 | Home stats three columns | Implemented | Small-screen typography test |
+| 5 | Bottom tab bar original vector and opacity | Updated | Visual screenshot/device test |
+| 6 | Original PedalPro brand logo | Reuses original `pedalpro_app_icon.webp` instead of custom `pedalpro_logo.xml` | Check clipping across densities |
+| 7 | Account page and Bale self-link | Partial: RTL account controls, server-issued self-invite when available | Web account API/auth response/role and complete layout parity |
+| 8 | Group+private chat, scroll and notifications | NativeChatActivity now opens from main; bounded list, FCM native entry | Real FCM event delivery to all group/private recipients requires backend |
+| 9 | Drawer vector icons/font/opacity | Code updated | Screenshot and smoothness tests |
+| 10 | Admin group start/finish/attendance credit | Partial: admin event selector start_ride + confirmation | Server attendance late credit + overlapping personal ride de-dup NOT certified |
+| 11 | Rider bicycle marker | Native MapLibre icon uses existing PedalIconView bike vector | Real map tilt/heading alignment |
+| 12 | Join CTA and upcoming event register button | Implemented | Status/registration_open and auth testing |
+| 13 | Android Back history | Implemented history with scroll and exit dialog | Gesture Back/predictive test across screens |
+| 14 | Justified event description & padding | Implemented, lint-guarded | Visual RTL screenshot |
+| 15 | Header opacity and manager-only gear | Implemented native role visibility; existing permission check | Server admin RBAC to be audited |
+| 16 | Recorded route and Neshan start/end navigation | Partial: polylines, external destination, 2-stage in-app follower | Official Neshan cannot be presumed to import arbitrary cycling GPX / auto-turn |
+| 17 | Group live reroute, arrival/cancel and ride | Partial: 10-s polling, 10-s route cache, arrival alert, start-ride controls | Real location/accuracy/pause background + personal/group credit overlap |
+| 18 | Full Bale bot management/templates/connected users/mass send | Blocked: no authenticated web bot controller or HTTP request/response schema | Must get actual site's PHP/API source and server-side admin RBAC; no invented endpoints |
+
+No existing `TrackingService` GPS filter or persisted user data was modified in RC11. Neither main nor market listings were updated.

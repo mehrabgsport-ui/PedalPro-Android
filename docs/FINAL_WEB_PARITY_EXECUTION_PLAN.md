@@ -245,3 +245,12 @@ Each phase is split into small commits. After each batch:
 
 ### RC9 correction — official current Neshan SDK (2026-10-14)
 Documentation supplied by the owner under `/legacy/installation/` is explicitly expired. Its licence file and `org.neshan.mapsdk.MapView` must not be relied upon. The current Neshan Android SDK uses MapLibre Native `org.neshan.maplibre:android-sdk-opengl:13.4.1` and MOBILE API key manifest metadata. A new MapLibre bridge supports provider vector styling, native camera bearing/pitch, tracked and proposed polylines, and Android lifecycle; no WebView/GPS changes. A GitHub Actions secret `NESHAN_MOBILE_API_KEY` is required for a genuine Neshan SDK APK. Source integration does not equal device validation or Neshan map deployment until this secret is configured and the licensed map loads.
+
+### RC11 — owner issues 1–18 (2026-10-14)
+- Backup created: `backup/pre-18-items-20261014` from signed RC10 baseline. Main and the website backend remained unchanged; PR #29 Draft.
+- Native opacity and vector UI controls, original existing PedalPro logo resource, three-column stats, readable splash bound to actual bootstrap, program card registration, right-justified description, and Back stack have code changes.
+- Member social/medal display, actual vector app marks, profile controls, group/private chat scroll and FCM native deeplink corrected.
+- Neshan recorded-route camera fits polyline, GPS bike marker, native route start/end follower with external Neshan destination, and group follower 10s interval with arrival/cancel and independent tracking start implemented.
+- Admin group event selection uses already existing `start_ride.event_id` and a second finish confirmation. **Server event-distance credits, GPS overlap prevention, late attendance and caloric distribution cannot be certified without website API implementation.**
+- Bale self-invite only uses actual server-issued link when provided; full bot admin save/send/webhook/templates **blocked due to unavailable PHP backend contract**. Medal image preview/path edit uses existing `image_path`; upload bytes blocked because no verified server upload endpoint. No guessed action added.
+- RC11 `2.0.0-native-rc11` / code 55; source CI/build and real-device QA are separate gates. Never mark website pixel parity completed without reference source and on-device screenshots.
