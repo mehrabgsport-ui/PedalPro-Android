@@ -180,8 +180,15 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     JSONObject g=d.optJSONObject("group");
                     if(g==null||!g.optBoolean("has_location",false)){
                         main.post(()->{
-                            status.setText("موقعیت زنده گروه در دسترس نیست.");
+                            // Never continue navigating to a stale leader fix.
+                            targetLat=Double.NaN;
+                            targetLng=Double.NaN;
+                            routeView.clearTarget();
                             routeView.clearNavigationRoute();
+                            invalidateDirectionCache();
+                            distance.setText("— km");
+                            bearing.setText("جهت: —");
+                            status.setText("موقعیت زنده گروه در دسترس نیست؛ ثبت GPS شما ادامه دارد.");
                         });
                     }else{
                         double lat=g.optDouble("last_lat",Double.NaN),lng=g.optDouble("last_lng",Double.NaN);
