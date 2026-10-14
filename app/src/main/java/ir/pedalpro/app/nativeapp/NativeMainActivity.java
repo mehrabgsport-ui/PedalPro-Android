@@ -129,6 +129,8 @@ public final class NativeMainActivity extends Activity {
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
     private boolean serverOnline = false;
+    private String launchPage = "";
+    private int launchEventId = 0;
     private NativeRouteView activeRideRouteView;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
@@ -202,6 +204,9 @@ public final class NativeMainActivity extends Activity {
         super.onCreate(state);
         session = new SessionStore(this);
         api = new PedalProApiClient(this);
+        launchPage = getIntent().getStringExtra("page");
+        if (launchPage == null) launchPage = "";
+        launchEventId = getIntent().getIntExtra("event_id", 0);
         cyclingSensors = new CyclingSensorManager(this, new CyclingSensorManager.Listener() {
             @Override public void onStatus(String json) { renderCyclingStatus(json); }
             @Override public void onMeasurement(String json) { renderCyclingMeasurement(json); }
@@ -299,8 +304,21 @@ public final class NativeMainActivity extends Activity {
                     } else {
                         setTopStatus("متصل · " + user.optString("display_name", user.optString("username", "PedalPro")), GREEN);
                     }
-                    if (firstLaunch) showHome();
-                    else refreshVisibleScreen();
+                    if (firstLaunch) {
+                        if (launchEventId > 0) {
+                            JSONObject requested = findEvent(launchEventId);
+                            if (requested != null) showEventDetail(requested);
+                            else showActivities();
+                            launchEventId = 0;
+                        } else if ("activities".equals(launchPage)) {
+                            showActivities();
+                        } else if ("routes".equals(launchPage)) {
+                            showRoutes();
+                        } else {
+                            showHome();
+                        }
+                        launchPage = "";
+                    } else refreshVisibleScreen();
                 });
             } catch (Exception e) {
                 main.post(() -> {
