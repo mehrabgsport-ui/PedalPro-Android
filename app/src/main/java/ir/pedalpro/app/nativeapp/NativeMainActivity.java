@@ -1957,6 +1957,40 @@ public final class NativeMainActivity extends Activity {
             gate.addView(accuracy);
             gate.addView(check, fullActionLp(52));
             gate.addView(start, fullActionLp(58));
+            if(admin){
+                PedalActionView groupStart=action(PedalIconView.Icon.GROUP,
+                        "شروع برنامه گروهی",PedalActionView.Style.PRIMARY);
+                groupStart.setOnClickListener(v->{
+                    int selectedId=eventIds.optInt(eventSpinner.getSelectedItemPosition(),0);
+                    if(selectedId<=0){
+                        toast("ابتدا برنامه گروهی موردنظر را انتخاب کنید.");
+                        return;
+                    }
+                    if(pendingFreshFix==null){
+                        toast("ابتدا منتظر تثبیت GPS بمانید.");
+                        return;
+                    }
+                    JSONObject event=findEvent(selectedId);
+                    new android.app.AlertDialog.Builder(this)
+                        .setTitle("شروع برنامه گروهی")
+                        .setMessage("برنامه «"+(event==null?"":event.optString("title",""))+
+                                "» از همین لحظه شروع می‌شود. ثبت موقعیت گروه از GPS مدیر خواهد بود.")
+                        .setNegativeButton("انصراف",null)
+                        .setPositiveButton("شروع برنامه",(dialog,which)->{
+                            JSONArray audience=new JSONArray();
+                            for(CheckBox checkBox:viewerChecks)
+                                if(checkBox.isChecked()&&checkBox.getTag() instanceof Integer)
+                                    audience.put((Integer)checkBox.getTag());
+                            createRideAndStartTracking(hiddenButtonProxy(groupStart),state,
+                                    challengeIds.optInt(challengeSpinner.getSelectedItemPosition(),0),
+                                    selectedId,
+                                    bikeIds.optInt(bikeSpinner.getSelectedItemPosition(),0),
+                                    event==null?"برنامه گروهی":event.optString("title","برنامه گروهی"),
+                                    true,audience);
+                        }).show();
+                });
+                gate.addView(groupStart,fullActionLp(56));
+            }
             content.addView(gate, cardLp());
 
             Button checkProxy = hiddenButtonProxy(check);
