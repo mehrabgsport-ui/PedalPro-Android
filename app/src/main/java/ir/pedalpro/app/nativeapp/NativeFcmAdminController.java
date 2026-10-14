@@ -183,12 +183,13 @@ final class NativeFcmAdminController {
         String a=appId.getText().toString().trim();
         String k=apiKey.getText().toString().trim();
         String s=sender.getText().toString().trim();
+        final String credentials=serviceAccountJson;
 
         if(p.isBlank()||a.isBlank()||k.isBlank()||s.isBlank()){
             activity.toast("ابتدا google-services.json را انتخاب کن یا چهار مقدار Firebase را کامل وارد کن.");
             return;
         }
-        if(on&&serviceAccountJson.isBlank()&&!serviceSaved){
+        if(on&&credentials.isBlank()&&!serviceSaved){
             activity.toast("برای فعال‌سازی Push، فایل Service Account JSON را هم انتخاب کن.");
             return;
         }
@@ -202,10 +203,10 @@ final class NativeFcmAdminController {
                         .put("app_id",a)
                         .put("api_key",k)
                         .put("sender_id",s)
-                        .put("service_account_json",serviceAccountJson);
+                        .put("service_account_json",credentials);
                 api.post("fcm_settings_save",payload);
-                serviceAccountJson="";
                 activity.runOnUiThread(()->{
+                    serviceAccountJson="";
                     b.setEnabled(true);
                     activity.toast(on?"Push Firebase ذخیره و فعال شد":"تنظیمات Firebase ذخیره شد");
                     loadStatus();
@@ -250,17 +251,22 @@ final class NativeFcmAdminController {
     }
 
     private void clear(){
+        // Read Android form fields on the main thread before clearing the remote credentials.
+        final String projectId=project.getText().toString().trim();
+        final String applicationId=appId.getText().toString().trim();
+        final String publicKey=apiKey.getText().toString().trim();
+        final String senderId=sender.getText().toString().trim();
         io.execute(()->{
             try{
                 api.post("fcm_settings_save",new JSONObject()
                         .put("enabled",false)
-                        .put("project_id",project.getText().toString().trim())
-                        .put("app_id",appId.getText().toString().trim())
-                        .put("api_key",apiKey.getText().toString().trim())
-                        .put("sender_id",sender.getText().toString().trim())
+                        .put("project_id",projectId)
+                        .put("app_id",applicationId)
+                        .put("api_key",publicKey)
+                        .put("sender_id",senderId)
                         .put("clear_service_account",true));
-                serviceAccountJson="";
                 activity.runOnUiThread(()->{
+                    serviceAccountJson="";
                     activity.toast("Service Account حذف شد");
                     loadStatus();
                 });
