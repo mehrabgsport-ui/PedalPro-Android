@@ -11,6 +11,11 @@ if (neshanEnabled && !file('src/main/res/raw/neshan.licence').exists()) {
 
 android {
     namespace 'ir.pedalpro.app'
+    sourceSets {
+        main {
+            if (neshanEnabled) java.srcDir 'src/neshan/java'
+        }
+    }
     compileSdk 36
     buildFeatures { buildConfig true }
 
@@ -19,8 +24,8 @@ android {
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 51
-        versionName '2.0.0-native-rc7'
+        versionCode 52
+        versionName '2.0.0-native-rc8'
         // Override with -PpedalproMapTileTemplate='https://licensed-host/{z}/{x}/{y}.png'
         // OSM tiles are a development fallback; production must respect provider terms.
         def mapTemplate = providers.gradleProperty('pedalproMapTileTemplate')

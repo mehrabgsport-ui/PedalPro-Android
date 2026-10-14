@@ -96,3 +96,13 @@ gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
 | GPS data change | No changes to TrackingService, filters, ride-point writes, speed/distance/calories | Compare route logs on device PENDING |
 
 VIDEO evidence: `1000152337.mp4` displayed an OSM raster map flickering into navy-black regions and no visible pitch during a stopped GPS state. The reference Web 4.7.46 and Neshan `neshan.licence` remain unavailable; no Neshan cartography/true bicycle routing claim.
+
+### RC8 native map acceptance (2026-10-14)
+| Requirement | Implemented | Evidence still needed |
+|---|---|---|
+| Native Neshan MapView | `LicensedNeshanMapBridge` uses `org.neshan.mapsdk.MapView` directly | CI APK must contain licensed SDK; actual licence secret may be missing |
+| Native pitch & heading | `setTilt(55)`, `setBearing` | Device test with moving bicycle |
+| Native recorded vs suggested geometry | Two independent Neshan SDK `Polyline` layers | Device projection/zoom validation |
+| Map gestures | Overlay hidden in SDK mode; native gestures exposed | Pan/zoom/recenter device QA |
+| License/security | Build gated by non-committed `neshan.licence`; service API token not hardcoded | Confirm SHA1 and official SDK permissions |
+| Fallback | Explicitly labelled XYZ, not shown as Neshan | Only for diagnostic / unlicensed testing |

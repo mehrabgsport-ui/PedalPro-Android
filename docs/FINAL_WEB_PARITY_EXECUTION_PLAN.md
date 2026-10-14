@@ -235,3 +235,10 @@ Each phase is split into small commits. After each batch:
 - Documented official licensed Neshan `MapView.setBearing` and `MapView.setTilt` used only when SDK actually present. No licence was included in source or unsigned/signed default build, which remains XYZ fallback.
 - All GPS/TrackingService/backend calculations remain untouched.
 - RC7 `versionCode 51` / `versionName 2.0.0-native-rc7`. Structural QA and signed Bazaar/Myket workflow must pass at final HEAD; real-phone acceptance STILL PENDING.
+
+### RC8 — genuine Neshan Android MapView integration (2026-10-14)
+- Official `org.neshan.mapsdk.MapView` is implemented in `src/neshan/java` compiled **only when** a valid `neshan.licence` is supplied via private CI secret `NESHAN_ANDROID_LICENCE_BASE64`. No licence in public GitHub.
+- SDK MapView, its camera/bearing/tilt, recorded/road polylines and native markers replace the XYZ canvas layer when licensed; full-screen controls and RTL telemetry preserved.
+- Existing public XYZ raster remains an **explicitly labelled fallback**, not a Neshan map. Locally stored MOBILE key cannot substitute for SDK license.
+- CI optionally enables the SDK based on the secret, builds signed Bazaar and Myket artifacts, never publishes. TrackingService/GPS and backend untouched.
+- RC8 `2.0.0-native-rc8` / versionCode 52; licensed-build and real-phone certification require a matching official licence.

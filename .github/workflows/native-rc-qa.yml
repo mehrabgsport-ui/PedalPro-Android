@@ -36,13 +36,30 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Configure licensed Neshan Native Map (if authorized)
+        env:
+          NESHAN_ANDROID_LICENCE_BASE64: ${{ secrets.NESHAN_ANDROID_LICENCE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${NESHAN_ANDROID_LICENCE_BASE64:-}" ]; then
+            mkdir -p app/src/main/res/raw
+            printf '%s' "$NESHAN_ANDROID_LICENCE_BASE64" | base64 --decode > app/src/main/res/raw/neshan.licence
+            test -s app/src/main/res/raw/neshan.licence
+            echo "PEDALPRO_NESHAN_SDK=true" >> "$GITHUB_ENV"
+            echo "Licensed Neshan SDK build selected."
+          else
+            echo "PEDALPRO_NESHAN_SDK=false" >> "$GITHUB_ENV"
+            echo "::warning::NESHAN_ANDROID_LICENCE_BASE64 unavailable; this APK uses clearly labelled XYZ fallback, NOT Neshan."
+          fi
+
       - name: Source architecture checks
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'android:name=".nativeapp.NativeMainActivity"' app/src/main/AndroidManifest.xml
-          grep -q 'versionCode 51' app/build.gradle
-          grep -q "versionName '2.0.0-native-rc7'" app/build.gradle
+          grep -q 'versionCode 52' app/build.gradle
+          grep -q "versionName '2.0.0-native-rc8'" app/build.gradle
           ! grep -q 'new WebView' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
           ! grep -q 'WeatherUiModel' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
           test -f app/src/main/java/ir/pedalpro/app/nativeapp/LowPowerRideActivity.java
@@ -72,13 +89,13 @@ jobs:
 
       - name: Unit tests
         run: |
-          gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             --stacktrace
+          gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             -PpedalproNeshanAndroidSdk="$PEDALPRO_NESHAN_SDK" --stacktrace
 
       - name: Android lint
         id: lint
         continue-on-error: true
         run: |
-          gradle             :app:lintBazaarRelease             :app:lintMyketRelease             --stacktrace
+          gradle             :app:lintBazaarRelease             :app:lintMyketRelease             -PpedalproNeshanAndroidSdk="$PEDALPRO_NESHAN_SDK" --stacktrace
 
       - name: Dump lint report
         if: always()
@@ -93,7 +110,7 @@ jobs:
 
       - name: Unsigned release smoke build
         run: |
-          gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             --stacktrace
+          gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             -PpedalproNeshanAndroidSdk="$PEDALPRO_NESHAN_SDK" --stacktrace
 
       - name: APK manifest smoke checks
         shell: bash
@@ -107,12 +124,12 @@ jobs:
           "$AAPT" dump badging "$BAZAAR" | tee /tmp/bazaar-badging.txt
           "$AAPT" dump badging "$MYKET" | tee /tmp/myket-badging.txt
           grep -q "package: name='ir.pedalpro.app'" /tmp/bazaar-badging.txt
-          grep -q "versionCode='51'" /tmp/bazaar-badging.txt
-          grep -q "versionName='2.0.0-native-rc7'" /tmp/bazaar-badging.txt
+          grep -q "versionCode='52'" /tmp/bazaar-badging.txt
+          grep -q "versionName='2.0.0-native-rc8'" /tmp/bazaar-badging.txt
           grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/bazaar-badging.txt
           grep -q "package: name='ir.pedalpro.app'" /tmp/myket-badging.txt
-          grep -q "versionCode='51'" /tmp/myket-badging.txt
-          grep -q "versionName='2.0.0-native-rc7'" /tmp/myket-badging.txt
+          grep -q "versionCode='52'" /tmp/myket-badging.txt
+          grep -q "versionName='2.0.0-native-rc8'" /tmp/myket-badging.txt
           grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/myket-badging.txt
 
       - name: Enforce lint success

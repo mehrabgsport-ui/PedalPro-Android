@@ -65,7 +65,7 @@ expect "$NATIVE/PedalNeshanMapSurface.java" 'public void setNavigationRoute(JSON
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'NeshanDirectionsClient.fetch(secret' "Moving-group route refresh"
 expect "$NATIVE/NativeLiveNavigationActivity.java" '45_000L' "Directions requests are throttled"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.clearNavigationRoute();' "Straight-distance fallback"
-expect "$NATIVE/PedalNeshanMapSurface.java" 'setTrafficEnabled' "Neshan traffic layer control"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'sdkBridge.setTraffic(trafficEnabled)' "Neshan traffic layer control"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'setMapStyle' "Neshan day/night map control"
 expect "$NATIVE/NativeRouteView.java" 'setExternalBasemap(boolean useNativeProvider)' "Transparent Neshan-compatible track overlay"
 expect "$NATIVE/NativeMainActivity.java" 'activeRideRouteView = new PedalNeshanMapSurface(this);' "Active ride uses unified map surface"
@@ -143,9 +143,18 @@ expect "$NATIVE/PedalMapTiles.java" 'static final int TILE = 512;' "Raster tiles
 expect "$NATIVE/PedalMapTiles.java" 'needed.sort(Comparator.comparingDouble' "Center-priority tile scheduling"
 expect "$NATIVE/PedalMapTiles.java" 'for(int level=1;level<=2' "Low-resolution parent tile placeholders"
 expect "$NATIVE/PedalMapTiles.java" 'for(View view:WATCHERS)' "Visible maps redraw after shared tile completion"
-expect "$NATIVE/PedalNeshanMapSurface.java" 'setSdkCameraFloat("setTilt",follow?55f:90f)' "Licensed Neshan map receives real SDK tilt"
-expect "$NATIVE/PedalNeshanMapSurface.java" 'setSdkCameraFloat("setBearing",bearing)' "Licensed Neshan map receives real SDK bearing"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'sdkBridge.setNavigation(overlay.isNavigationMode(),overlay.isHeadingUpEnabled()' "Licensed Neshan camera controlled through native bridge"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'if(sdkBridge!=null)applySdkNavigationCamera();' "Licensed heading updates delivered to SDK bridge"
 
+expect "$NATIVE/PedalNeshanMapSurface.java" 'LicensedNeshanMapBridge' "Actual SDK bridge is selected when licensed"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'overlay.setVisibility(View.GONE)' "No misprojected Canvas overlay or stolen SDK gestures"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'sdkBridge.setRecordedTrack(rows)' "Recorded GPS route uses native SDK polyline"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'sdkBridge.setSuggestedRoute(rows)' "Proposed directions use separate SDK polyline"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'sdkBridge.setCurrent(lat,lng)' "Current rider location updates SDK marker"
+expect "$ROOT/app/src/neshan/java/ir/pedalpro/app/nativeapp/LicensedNeshanMapBridge.java" 'map.setTilt(needsPitch?55f:90f' "Real native Neshan MapView tilt"
+expect "$ROOT/app/src/neshan/java/ir/pedalpro/app/nativeapp/LicensedNeshanMapBridge.java" 'map.setBearing(desired,.35f)' "Real native Neshan MapView bearing"
+expect "$ROOT/app/build.gradle" "java.srcDir 'src/neshan/java'" "Licensed-only Android source set"
+expect "$ROOT/app/build.gradle" "neshan.licence" "Explicit Neshan SDK licence gating"
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
