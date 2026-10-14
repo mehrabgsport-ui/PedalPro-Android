@@ -131,7 +131,7 @@ final class NativeRidePrivacyDialog {
                     activity.runOnUiThread(()->{
                         save.setEnabled(true);
                         save.setText("ذخیره");
-                        activity.showToast(e.getMessage());
+                        activity.toast(e.getMessage());
                     });
                 }
             });
