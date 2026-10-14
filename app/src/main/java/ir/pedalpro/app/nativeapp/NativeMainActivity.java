@@ -5449,8 +5449,12 @@ public final class NativeMainActivity extends Activity {
         i.setAction(TrackingService.ACTION_START);
         i.putExtra("ride_id", rideId);
         i.putExtra("csrf", session.csrf());
-        i.putExtra("max_accuracy", 25d);
-        i.putExtra("max_speed_kmh", 100d);
+        JSONObject rideConfig=bootstrap==null?null:bootstrap.optJSONObject("ride_config");
+        double accuracy=rideConfig==null?25d:rideConfig.optDouble("gps_max_accuracy_m",25d);
+        if(!Double.isFinite(accuracy))accuracy=25d;
+        // Server setting bounded by the existing V5 safety envelope.
+        i.putExtra("max_accuracy",Math.max(25d,Math.min(35d,accuracy)));
+        i.putExtra("max_speed_kmh",100d);
         if (Build.VERSION.SDK_INT >= 26) ContextCompat.startForegroundService(this, i);
         else startService(i);
     }

@@ -193,6 +193,22 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC19: admin late attendance, join timestamp, and server GPS accuracy configuration.
+expect "$NATIVE/NativeMainActivity.java" 'api.post("event_late_add"' "Admin can add a late member with server timestamp"
+expect "$NATIVE/NativeMainActivity.java" 'promptRetrospectiveAttendance(regId,attended)' "Retroactive attendance requires a timestamp"
+expect "$NATIVE/NativeMainActivity.java" 'request.put("attended_at",attendedAt)' "Attendance sends true arrival time"
+expect "$NATIVE/NativeMainActivity.java" 'rideConfig.optDouble("gps_max_accuracy_m",25d)' "Ride accuracy reads server configuration"
+python3 - "$NATIVE/NativeMainActivity.java" <<'PY'
+from pathlib import Path
+import sys
+s=Path(sys.argv[1]).read_text()
+assert 'saveAttendance(regId, checked, attended, "")' in s
+assert 'promptRetrospectiveAttendance(regId,attended)' in s
+assert 'api.post("event_late_add",new JSONObject()' in s
+assert 'showLateMemberPicker(event, dialog)' in s
+print('PASS RC19 late-member check-in and historical attendance timestamp UI')
+PY
+
 # RC18 bicycle-only navigation and route-bound GNSS identifiers.
 expect "$NATIVE/CyclingDirectionsClient.java" 'api.get("pp_cycling_directions",query)' "Backend bicycle-only routing adapter"
 expect "$NATIVE/CyclingDirectionsClient.java" '"cycling-regular".equals(data.optString("profile"))' "Car profiles are never treated as bike routes"
