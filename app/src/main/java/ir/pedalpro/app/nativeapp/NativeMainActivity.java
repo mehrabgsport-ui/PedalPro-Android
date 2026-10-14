@@ -1557,7 +1557,7 @@ public final class NativeMainActivity extends Activity {
                     ImageView im=new ImageView(this);
                     im.setScaleType(ImageView.ScaleType.CENTER_CROP);
                     im.setClipToOutline(true);
-                    RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);
+                    RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);
                     bikeCard.addView(im,new LinearLayout.LayoutParams(-1,dp(150)));
                 }else{
                     TextView ph=text("🚲",42,false,MUTED);ph.setGravity(Gravity.CENTER);
@@ -1668,7 +1668,7 @@ public final class NativeMainActivity extends Activity {
         if(photo.isBlank()&&bike!=null)photo=bike.optString("photo_data","");
         if(!photo.isBlank()){
             ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);
+            RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);
             thumb.addView(im,new FrameLayout.LayoutParams(-1,-1));
         }else{
             TextView ph=text("🚲",22,false,MUTED);ph.setGravity(Gravity.CENTER);
@@ -4390,7 +4390,7 @@ public final class NativeMainActivity extends Activity {
                 ImageView im = new ImageView(this);
                 im.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 im.setClipToOutline(true);
-                RemoteImageLoader.load(this, im, photo, R.drawable.pedalpro_logo);
+                RemoteImageLoader.load(this, im, photo, R.drawable.pedalpro_app_icon);
                 LinearLayout.LayoutParams imLp = new LinearLayout.LayoutParams(-1, dp(170));
                 imLp.setMargins(0, 0, 0, dp(12));
                 box.addView(im, imLp);
@@ -4480,7 +4480,7 @@ public final class NativeMainActivity extends Activity {
             brand.setText(bike.optString("brand_model", ""));frame.setText(bike.optString("frame_size", ""));wheel.setText(bike.optString("wheel_size", ""));color.setText(bike.optString("color", ""));weight.setText(bike.optString("weight_kg", ""));primary.setChecked(bike.optInt("is_primary", 0) == 1);
             String photo=bike.optString("photo_path","");
             if(photo.isBlank())photo=bike.optString("photo_data","");
-            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
+            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
         }
         box.addView(brand);box.addView(type);box.addView(frame);box.addView(wheel);box.addView(color);box.addView(weight);box.addView(primary);
         if (editing) {
@@ -5681,7 +5681,7 @@ public final class NativeMainActivity extends Activity {
         webHeader.setBackground(headerGradient());
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_logo);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         webHeader.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(54)));
@@ -6025,7 +6025,7 @@ public final class NativeMainActivity extends Activity {
         panel.setElevation(dp(20));
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_logo);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(-1, dp(92));
@@ -6550,7 +6550,7 @@ public final class NativeMainActivity extends Activity {
         about.setBackground(roundRect(Color.argb(10, 255, 255, 255), 24, Color.argb(36, 255, 255, 255)));
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_logo);
+        logo.setImageResource(R.drawable.pedalpro_app_icon);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         about.addView(logo, new LinearLayout.LayoutParams(dp(210), dp(150)));
