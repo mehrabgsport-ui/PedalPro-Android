@@ -57,6 +57,18 @@ expect "$NATIVE/NativeMainActivity.java" 'i.putExtra("section", "sms")' "Full SM
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'load("sms".equals(requested) ? "sms" : "general")' "SMS admin deep entry"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeAppReleaseAdminController' "Native release manager wired"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeFcmAdminController' "Native FCM manager wired"
+expect "$NATIVE/NativeAdvancedActivity.java" 'replayIndex=next+1;' "Replay advances to next frame"
+expect "$NATIVE/NativeAdvancedActivity.java" 'generation!=replayLoadGeneration' "Replay ignores stale tab responses"
+expect "$NATIVE/NativeAdvancedActivity.java" 'generation!=flyLoadGeneration' "Flyover ignores stale tab responses"
+expect "$NATIVE/NativeAdvancedActivity.java" '@Override protected void onStop()' "Replay/Flyover stop offscreen"
+expect "$NATIVE/NativeAiActivity.java" 'if(!conversationInteracted)renderHistory(finalItems)' "AI history does not replace pending messages"
+expect "$NATIVE/NativeAiActivity.java" 'final String selectedMode=String.valueOf(mode.getSelectedItem())' "AI mode captured on UI thread"
+expect "$NATIVE/NativeMainActivity.java" 'Boolean.TRUE.equals(host.getTag())' "Home AI prevents stale history overwrite"
+expect "$NATIVE/NativeChatActivity.java" 'final int selectedRoom=roomId;' "Chat room id captured before worker"
+expect "$NATIVE/NativeChatActivity.java" 'generation!=roomGeneration||selectedRoom!=roomId' "Chat rejects stale room responses"
+expect "$NATIVE/NativeChatActivity.java" 'if(isFinishing()||!isChatVisible)return;' "Chat polling stops offscreen"
+expect "$NATIVE/NativeFcmAdminController.java" 'final String credentials=serviceAccountJson;' "Firebase credentials snapshotted"
+expect "$NATIVE/NativeSocialActivity.java" 'PedalIconView.Icon.HEART' "Kudos native icon"
 
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
