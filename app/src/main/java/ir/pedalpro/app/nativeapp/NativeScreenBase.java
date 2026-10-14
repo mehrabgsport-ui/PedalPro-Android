@@ -58,6 +58,10 @@ abstract class NativeScreenBase extends Activity {
     private View headerAdminSettings;
     private TextView rideDockLabel;
     private boolean signedIn=false;
+    private View bottomNav;
+
+    /** Chat can own a fixed-height pane instead of nesting another page scroll. */
+    protected boolean useFixedContentViewport(){return false;}
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -89,20 +93,23 @@ abstract class NativeScreenBase extends Activity {
 
         ViewCompat.setOnApplyWindowInsetsListener(root,(v,insets)->{
             androidx.core.graphics.Insets bars=insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            v.setPadding(0,bars.top,0,bars.bottom);
+            if(useFixedContentViewport()){
+                androidx.core.graphics.Insets keyboard=insets.getInsets(WindowInsetsCompat.Type.ime());
+                boolean keyboardOpen=insets.isVisible(WindowInsetsCompat.Type.ime())&&keyboard.bottom>bars.bottom;
+                if(bottomNav!=null)bottomNav.setVisibility(keyboardOpen?View.GONE:View.VISIBLE);
+                v.setPadding(0,bars.top,0,Math.max(bars.bottom,keyboard.bottom));
+            }else{
+                v.setPadding(0,bars.top,0,bars.bottom);
+            }
             return insets;
         });
 
         root.addView(buildWebHeader(),new LinearLayout.LayoutParams(-1,-2));
 
-        ScrollView scroll=new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-
         LinearLayout scroller=new LinearLayout(this);
         scroller.setOrientation(LinearLayout.VERTICAL);
         scroller.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        scroller.setPadding(dp(14),dp(12),dp(14),dp(112));
+        scroller.setPadding(dp(14),dp(12),dp(14),useFixedContentViewport()?dp(8):dp(112));
 
         LinearLayout pageHead=new LinearLayout(this);
         pageHead.setOrientation(LinearLayout.VERTICAL);
@@ -119,11 +126,20 @@ abstract class NativeScreenBase extends Activity {
 
         content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        scroller.addView(content,new LinearLayout.LayoutParams(-1,-2));
-
-        scroll.addView(scroller);
-        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
-        root.addView(buildWebBottomNav(),new LinearLayout.LayoutParams(-1,dp(128)));
+        content.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        if(useFixedContentViewport()){
+            scroller.addView(content,new LinearLayout.LayoutParams(-1,0,1f));
+            root.addView(scroller,new LinearLayout.LayoutParams(-1,0,1f));
+        }else{
+            scroller.addView(content,new LinearLayout.LayoutParams(-1,-2));
+            ScrollView scroll=new ScrollView(this);
+            scroll.setFillViewport(true);
+            scroll.setClipToPadding(false);
+            scroll.addView(scroller);
+            root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
+        }
+        bottomNav=buildWebBottomNav();
+        root.addView(bottomNav,new LinearLayout.LayoutParams(-1,dp(128)));
 
         frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
         setContentView(frame);

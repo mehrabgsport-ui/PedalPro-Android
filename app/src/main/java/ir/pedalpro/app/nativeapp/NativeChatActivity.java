@@ -33,6 +33,7 @@ public final class NativeChatActivity extends NativeScreenBase {
     private int lastRenderedCount;
     private EditText input;
     private TextView composeContext;
+    private Button cancelCompose;
     private int replyTo;
     private int editId;
     private boolean loading;
@@ -50,10 +51,11 @@ public final class NativeChatActivity extends NativeScreenBase {
         }
     };
 
+    @Override protected boolean useFixedContentViewport(){return true;}
     @Override protected String screenTitle(){return "ارتباطات";}
 
     @Override protected void onScreenReady(){
-        setSubtitle("چت گروهی و خصوصی · Native",MUTED);
+        setSubtitle("چت گروهی و خصوصی",MUTED);
         content.addView(text("در حال دریافت گفتگوها…",13,false,MUTED),cardLp());
         io.execute(()->{
             try{
@@ -86,7 +88,8 @@ public final class NativeChatActivity extends NativeScreenBase {
             JSONObject t=threads.optJSONObject(i);if(t==null)continue;
             String name=t.optString("other_name",t.optString("display_name","گفتگوی خصوصی"));
             int other=t.optInt("other_id",0);
-            Button b=normal(name);
+            int unread=Math.max(0,t.optInt("unread_count",0));
+            Button b=normal(name+(unread>0?" · "+JalaliDate.fa(unread):""));
             b.setOnClickListener(v->openPrivate(other));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(150),dp(48));lp.setMargins(dp(5),0,0,0);tabs.addView(b,lp);
         }
@@ -105,15 +108,17 @@ public final class NativeChatActivity extends NativeScreenBase {
         messagesHost.setOrientation(LinearLayout.VERTICAL);
         messagesHost.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         messagesScroll.addView(messagesHost);
-        int height=Math.min(dp(465),Math.round(getResources().getDisplayMetrics().heightPixels*.48f));
-        messagesCard.addView(messagesScroll,new LinearLayout.LayoutParams(-1,height));
-        content.addView(messagesCard,cardLp());
+        messagesCard.addView(messagesScroll,new LinearLayout.LayoutParams(-1,0,1f));
+        LinearLayout.LayoutParams messageLp=new LinearLayout.LayoutParams(-1,0,1f);
+        messageLp.setMargins(0,dp(8),0,dp(8));
+        content.addView(messagesCard,messageLp);
 
         LinearLayout composer=card();
         composeContext=text("",11,false,ACCENT);composeContext.setVisibility(View.GONE);
-        input=input("پیام…");input.setMinLines(2);
+        input=input("پیام…");input.setMinLines(2);input.setMaxLines(4);
         Button send=primary("ارسال");
         Button cancel=normal("لغو پاسخ / ویرایش");cancel.setVisibility(View.GONE);
+        cancelCompose=cancel;
         composer.addView(composeContext);composer.addView(input);composer.addView(send);composer.addView(cancel);
         composer.setBackground(round(android.graphics.Color.rgb(9,32,50),20,STROKE));
         content.addView(composer,cardLp());
@@ -134,7 +139,6 @@ public final class NativeChatActivity extends NativeScreenBase {
         loading=false;
         pollInFlight=false;
         if(messagesHost!=null)messagesHost.removeAllViews();
-        lastRenderedCount=0;
         lastRenderedCount=0;
         setSubtitle(group==null?"چت گروهی":group.optString("title","چت گروهی"),GREEN);
         loadMessages(true);
@@ -158,6 +162,7 @@ public final class NativeChatActivity extends NativeScreenBase {
                     loading=false;
                     pollInFlight=false;
                     if(messagesHost!=null)messagesHost.removeAllViews();
+                    lastRenderedCount=0;
                     setSubtitle(other==null?"گفتگوی خصوصی":other.optString("display_name","گفتگوی خصوصی"),GREEN);
                     loadMessages(true);
                 });
@@ -362,8 +367,20 @@ public final class NativeChatActivity extends NativeScreenBase {
         row.addView(bubble,bp);messagesHost.addView(row,cardLp());
     }
 
-    private void beginReply(JSONObject m){replyTo=m.optInt("id",0);editId=0;composeContext.setVisibility(View.VISIBLE);composeContext.setText("پاسخ به "+m.optString("sender_name","پیام"));input.requestFocus();}
-    private void beginEdit(JSONObject m){editId=m.optInt("id",0);replyTo=0;composeContext.setVisibility(View.VISIBLE);composeContext.setText("ویرایش پیام");input.setText(m.optString("body",""));input.requestFocus();}
+    private void beginReply(JSONObject m){
+        replyTo=m.optInt("id",0);editId=0;
+        composeContext.setVisibility(View.VISIBLE);
+        composeContext.setText("پاسخ به "+m.optString("sender_name","پیام"));
+        if(cancelCompose!=null)cancelCompose.setVisibility(View.VISIBLE);
+        input.requestFocus();
+    }
+    private void beginEdit(JSONObject m){
+        editId=m.optInt("id",0);replyTo=0;
+        composeContext.setVisibility(View.VISIBLE);
+        composeContext.setText("ویرایش پیام");
+        if(cancelCompose!=null)cancelCompose.setVisibility(View.VISIBLE);
+        input.setText(m.optString("body",""));input.requestFocus();
+    }
 
     private void sendMessage(Button send,Button cancel){
         String body=input.getText().toString().trim();if(body.isBlank()||roomId<=0)return;

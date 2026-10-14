@@ -193,6 +193,14 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC14: chat composer stays in its own fixed pane, even with the IME open.
+expect "$NATIVE/NativeScreenBase.java" 'protected boolean useFixedContentViewport(){return false;}' "Fixed viewport is opt-in and does not affect other screens"
+expect "$NATIVE/NativeScreenBase.java" 'WindowInsetsCompat.Type.ime()' "Chat responds to soft-keyboard insets"
+expect "$NATIVE/NativeScreenBase.java" 'if(useFixedContentViewport()){' "Chat bypasses outer page ScrollView"
+expect "$NATIVE/NativeChatActivity.java" 'protected boolean useFixedContentViewport(){return true;}' "Native chat uses fixed screen body"
+expect "$NATIVE/NativeChatActivity.java" 'new LinearLayout.LayoutParams(-1,0,1f)' "Chat messages expand into remaining viewport"
+expect "$NATIVE/NativeChatActivity.java" 'cancelCompose.setVisibility(View.VISIBLE)' "Reply and edit can always be cancelled"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
