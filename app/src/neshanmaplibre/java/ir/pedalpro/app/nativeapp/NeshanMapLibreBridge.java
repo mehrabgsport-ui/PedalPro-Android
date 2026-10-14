@@ -62,7 +62,6 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
             if(destroyed)return;
             map=m;
             map.getUiSettings().setCompassEnabled(false);
-            map.getUiSettings().setZoomControlsEnabled(false);
             map.addOnMoveListener(new MapLibreMap.OnMoveListener(){
                 @Override public void onMoveBegin(MoveGestureDetector detector){manualPan=true;}
                 @Override public void onMove(MoveGestureDetector detector){}
