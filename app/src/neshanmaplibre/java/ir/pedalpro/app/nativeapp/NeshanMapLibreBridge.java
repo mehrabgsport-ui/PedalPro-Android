@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
+import androidx.core.content.ContextCompat;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -53,7 +55,8 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private long lastCameraMs,lastMarkerMs,lastLineMs;
     private double lastCameraLat=Double.NaN,lastCameraLng=Double.NaN;
     private Marker rider,goal;
-    private org.maplibre.android.annotations.Icon riderIcon;
+    private final android.util.SparseArray<org.maplibre.android.annotations.Icon> riderIcons = new android.util.SparseArray<>();
+    private int currentRiderDirectionBucket = Integer.MIN_VALUE;
     private Polyline recorded,suggested;
     private JSONArray recordedPoints,suggestedPoints;
     private boolean started,resumed;
@@ -137,6 +140,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         if(!enabled)manualPan=false;
         if(enabled&&!wasNavigation)manualPan=false;
         updateCamera(true);
+        updateRiderMarker(true);
     }
 
     @Override public void setCurrent(double latitude,double longitude){
@@ -151,52 +155,47 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     }
 
 
-    /** Isometric painted bicycle; bottom wheel contacts the GPS route anchor. */
-    private org.maplibre.android.annotations.Icon bikeMapIcon(){
-        if(riderIcon!=null)return riderIcon;
-        int side=(int)(88*activity.getResources().getDisplayMetrics().density);
-        side=Math.max(88,Math.min(side,220));
+    /**
+     * Reference-style 2D overhead rider. The bike wheels share the same vertical
+     * axis, and the transparent sprite is centered on the accepted GPS fix.
+     */
+    private org.maplibre.android.annotations.Icon bikeMapIcon(int bucket){
+        org.maplibre.android.annotations.Icon previous=riderIcons.get(bucket);
+        if(previous!=null)return previous;
+        int side=(int)(68*activity.getResources().getDisplayMetrics().density);
+        side=Math.max(68,Math.min(side,192));
         Bitmap bitmap=Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
-        Canvas c=new Canvas(bitmap);
-        Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setStrokeCap(Paint.Cap.ROUND);p.setStrokeJoin(Paint.Join.ROUND);
-        c.save();c.scale(side/100f,side/100f);
-        p.setStyle(Paint.Style.FILL);p.setColor(Color.argb(92,0,12,24));
-        c.drawOval(35,91,66,99,p);
-        drawWheel(c,p,50,89,16,8);
-        drawWheel(c,p,50,26,11,6);
-        android.graphics.Path frame=new android.graphics.Path();
-        frame.moveTo(50,89);frame.lineTo(37,50);frame.lineTo(50,27);
-        frame.moveTo(37,50);frame.lineTo(64,52);frame.lineTo(50,89);
-        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(6);p.setColor(Color.rgb(4,35,51));c.drawPath(frame,p);
-        p.setStrokeWidth(3.4f);p.setColor(Color.rgb(26,217,233));c.drawPath(frame,p);
-        p.setStrokeWidth(1.3f);p.setColor(Color.WHITE);c.drawLine(37,50,50,27,p);
-        p.setStrokeWidth(4);p.setColor(Color.rgb(8,50,65));
-        c.drawLine(32,30,68,30,p);c.drawLine(37,43,55,43,p);
-        p.setColor(Color.rgb(254,185,91));c.drawLine(34,34,44,51,p);c.drawLine(65,34,55,51,p);
-        p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(249,194,109));c.drawOval(42,14,59,31,p);
-        p.setColor(Color.rgb(7,66,91));c.drawOval(40,33,60,57,p);
-        p.setColor(Color.rgb(24,205,230));c.drawOval(43,35,54,48,p);
-        c.restore();
-        riderIcon=IconFactory.getInstance(activity).fromBitmap(bitmap);
-        return riderIcon;
-    }
-
-    private static void drawWheel(Canvas c,Paint p,float x,float y,float rx,float ry){
-        p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(5.5f);p.setColor(Color.rgb(5,33,48));
-        c.drawOval(x-rx,y-ry,x+rx,y+ry,p);
-        p.setStrokeWidth(2.0f);p.setColor(Color.rgb(180,228,234));
-        c.drawOval(x-rx+2,y-ry+2,x+rx-2,y+ry-2,p);
-        p.setStrokeWidth(1f);c.drawLine(x-rx+3,y,x+rx-3,y,p);
+        Canvas canvas=new Canvas(bitmap);
+        Drawable drawable=ContextCompat.getDrawable(activity,ir.pedalpro.app.R.drawable.pedal_cyclist_topdown);
+        if(drawable==null)throw new IllegalStateException("Cyclist marker drawable missing");
+        drawable=drawable.mutate();
+        drawable.setBounds(Math.round(side*.24f),Math.round(side*.09f),
+                Math.round(side*.76f),Math.round(side*.91f));
+        canvas.save();
+        canvas.rotate(bucket*10f,side/2f,side/2f);
+        drawable.draw(canvas);
+        canvas.restore();
+        org.maplibre.android.annotations.Icon icon=IconFactory.getInstance(activity).fromBitmap(bitmap);
+        riderIcons.put(bucket,icon);
+        return icon;
     }
 
     private void updateRiderMarker(boolean force){
-        if(!ready||!Double.isFinite(lat))return;
+        if(!ready||map==null||!Double.isFinite(lat))return;
         long now=SystemClock.elapsedRealtime();
         if(!force&&now-lastMarkerMs<450)return;
+        double mapBearing=map.getCameraPosition()==null?0:map.getCameraPosition().bearing;
+        double rotation=validHeading?heading-mapBearing:0d;
+        int bucket=((int)Math.round(rotation/10.0)%36+36)%36;
+        org.maplibre.android.annotations.Icon icon=bikeMapIcon(bucket);
         if(rider==null)rider=map.addMarker(new MarkerOptions()
-                .position(new LatLng(lat,lng)).icon(bikeMapIcon()).title("رکاب‌زن"));
-        else {rider.setPosition(new LatLng(lat,lng));map.updateMarker(rider);}
+                .position(new LatLng(lat,lng)).icon(icon).title("رکاب‌زن"));
+        else {
+            rider.setPosition(new LatLng(lat,lng));
+            if(bucket!=currentRiderDirectionBucket)rider.setIcon(icon);
+            map.updateMarker(rider);
+        }
+        currentRiderDirectionBucket=bucket;
         lastMarkerMs=now;
     }
 
