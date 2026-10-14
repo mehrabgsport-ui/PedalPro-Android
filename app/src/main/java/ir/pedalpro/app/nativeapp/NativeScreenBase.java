@@ -316,7 +316,7 @@ abstract class NativeScreenBase extends Activity {
         x.setPadding(dp(16),dp(15),dp(16),dp(15));
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(41,23,54,77),Color.argb(56,8,28,45)});
+                new int[]{Color.argb(245,15,42,61),Color.argb(251,6,27,45)});
         g.setCornerRadius(dp(26));
         g.setStroke(dp(1),Color.argb(54,255,255,255));
         x.setBackground(g);
@@ -328,7 +328,7 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout x=card();
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(56,19,64,93),Color.argb(71,8,30,46)});
+                new int[]{Color.argb(239,16,82,96),Color.argb(248,8,42,59)});
         g.setCornerRadius(dp(26));
         g.setStroke(dp(1),accent);
         x.setBackground(g);
@@ -363,7 +363,7 @@ abstract class NativeScreenBase extends Activity {
         e.setTextSize(13);
         e.setSingleLine(false);
         e.setPadding(dp(12),dp(11),dp(12),dp(11));
-        e.setBackground(round(Color.argb(122,5,25,40),15,Color.argb(46,255,255,255)));
+        e.setBackground(round(Color.argb(247,5,25,40),15,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
         lp.setMargins(0,dp(6),0,dp(6));
         e.setLayoutParams(lp);
@@ -387,7 +387,7 @@ abstract class NativeScreenBase extends Activity {
 
     protected Button normal(String s){
         Button b=plainButton(s,13);
-        b.setBackground(round(Color.argb(18,255,255,255),17,Color.argb(46,255,255,255)));
+        b.setBackground(round(Color.argb(236,14,38,54),17,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
         lp.setMargins(0,dp(8),0,0);
         b.setLayoutParams(lp);
@@ -444,7 +444,7 @@ abstract class NativeScreenBase extends Activity {
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(87,24,59,82),Color.argb(107,8,31,49)});
+                new int[]{Color.argb(251,19,49,71),Color.argb(253,8,31,50)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1),Color.argb(51,255,255,255));
         return g;
@@ -453,7 +453,7 @@ abstract class NativeScreenBase extends Activity {
     private GradientDrawable bottomGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(102,24,59,82),Color.argb(122,8,31,49)});
+                new int[]{Color.argb(251,15,47,68),Color.argb(253,5,27,44)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
         g.setStroke(dp(1),Color.argb(61,255,255,255));
         return g;
