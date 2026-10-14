@@ -3,6 +3,7 @@ package ir.pedalpro.app.nativeapp;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.location.Location;
@@ -45,6 +46,8 @@ public final class NativeRouteView extends View {
     private int navigationZoom = 16;
     private float navigationBearing;
     private boolean hasNavigationBearing;
+    private final Matrix viewTransform = new Matrix();
+    private final Matrix inverseViewTransform = new Matrix();
     private int cameraZoom = 15;
     private double cameraLat = Double.NaN;
     private double cameraLng = Double.NaN;
@@ -87,9 +90,7 @@ public final class NativeRouteView extends View {
         tapDetector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { return true; }
             @Override public boolean onDoubleTap(MotionEvent e) {
-                ensureUserCamera();
-                userZoom = Math.min(18, userZoom + 1);
-                invalidate();
+                zoomBy(1);
                 return true;
             }
             @Override public void onLongPress(MotionEvent e) {
@@ -140,13 +141,13 @@ public final class NativeRouteView extends View {
                 if (e.getPointerCount() == 1 && (scaleDetector == null || !scaleDetector.isInProgress())) {
                     float dx = e.getX() - lastTouchX, dy = e.getY() - lastTouchY;
                     if (Math.abs(dx) + Math.abs(dy) > dp(1)) {
-                        // Inverse of the display-only bearing/pitch transform.
-                        // Do not feed these camera offsets into GPS tracking.
-                        if (navigationMode && headingUpEnabled && hasNavigationBearing && !externalBasemap) {
-                            double angle = Math.toRadians(navigationBearing);
-                            float originalDx = dx, originalDy = dy;
-                            dx = (float)(Math.cos(angle)*originalDx - Math.sin(angle)*originalDy);
-                            dy = (float)((Math.sin(angle)*originalDx + Math.cos(angle)*originalDy)/.86);
+                        // Unproject BOTH touch points: true projective tilt has
+                        // nonlinear scale, so rotation-only deltas drift on drag.
+                        if(navigationMode && !userCamera && !externalBasemap) {
+                            float[] before={lastTouchX,lastTouchY},after={e.getX(),e.getY()};
+                            inverseViewTransform.mapPoints(before);
+                            inverseViewTransform.mapPoints(after);
+                            dx=after[0]-before[0];dy=after[1]-before[1];
                         }
                         ensureUserCamera();
                         if (userCamera) {
@@ -296,6 +297,29 @@ public final class NativeRouteView extends View {
         if(navigationMode && !userCamera)invalidate();
     }
 
+    /**
+     * Raster presentation-only projective camera. Unlike RC6's flat Y squeeze,
+     * the 4-point homography makes streets converge toward the distant horizon.
+     * The licensed provider SDK must supply its own native 3D camera.
+     */
+    private void calculateTransform(float w,float h,boolean tilted,boolean bearingUp) {
+        viewTransform.reset();
+        if(tilted) {
+            float[] source={0,0,w,0,w,h,0,h};
+            float[] dest={w*.12f,-h*.06f,w*.88f,-h*.06f,
+                    w*1.08f,h*1.08f,-w*.08f,h*1.08f};
+            Matrix pitch=new Matrix();
+            pitch.setPolyToPoly(source,0,dest,0,4);
+            if(bearingUp) {
+                Matrix rotate=new Matrix();
+                rotate.setRotate(-navigationBearing,w*.5f,h*.5f);
+                viewTransform.setConcat(pitch,rotate);
+            }else viewTransform.set(pitch);
+        }
+        if(!viewTransform.invert(inverseViewTransform))
+            inverseViewTransform.reset();
+    }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         final float w = getWidth(), h = getHeight();
@@ -303,7 +327,7 @@ public final class NativeRouteView extends View {
 
         Bounds b = bounds();
         if (b == null) {
-            canvas.drawText("در انتظار دریافت اولین نقطه GPS…", dp(16), h / 2f, text);
+            canvas.drawText("در انتظار موقعیت معتبر برای نمایش نقشه…", dp(16), h / 2f, text);
             return;
         }
 
@@ -317,18 +341,19 @@ public final class NativeRouteView extends View {
                     - PedalMapTiles.worldY(b.maxLat, cameraZoom);
             if (spanX <= w - pad * 2 && spanY <= h - pad * 2) break;
         }
-        if (navigationMode && currentPoint != null && !userCamera) {
-            // Screen-space look-ahead: the rider is below center so the road ahead
-            // remains visible. Shift the Mercator camera, not the canvas/tiles:
-            // avoids expensive overscan and keeps track/road overlays aligned.
+        boolean follow=navigationMode && currentPoint!=null && !userCamera;
+        boolean pitched=follow && !externalBasemap;
+        boolean headingUp=pitched && headingUpEnabled && hasNavigationBearing;
+        calculateTransform(w,h,pitched,headingUp);
+        if(follow) {
             cameraZoom=navigationZoom;
-            boolean rotate=headingUpEnabled && hasNavigationBearing && !externalBasemap;
-            double angle=rotate?Math.toRadians(navigationBearing):0d;
-            double ahead=h*.18d;
-            double centerX=PedalMapTiles.worldX(currentPoint.lng,cameraZoom)+Math.sin(angle)*ahead;
-            double centerY=PedalMapTiles.worldY(currentPoint.lat,cameraZoom)
-                    -Math.cos(angle)*ahead/(rotate?.86d:1d);
+            float[] riderAt={w*.5f,h*.68f};
+            if(pitched)inverseViewTransform.mapPoints(riderAt);
             double world=PedalMapTiles.TILE*(double)(1<<cameraZoom);
+            double centerX=PedalMapTiles.worldX(currentPoint.lng,cameraZoom)
+                    -(riderAt[0]-w*.5f);
+            double centerY=PedalMapTiles.worldY(currentPoint.lat,cameraZoom)
+                    -(riderAt[1]-h*.5f);
             cameraLng=centerX/world*360d-180d;
             double mercator=Math.PI*(1d-2d*Math.max(0d,Math.min(world,centerY))/world);
             cameraLat=Math.toDegrees(Math.atan(Math.sinh(mercator)));
@@ -341,16 +366,13 @@ public final class NativeRouteView extends View {
         // The XYZ fallback has a lightweight visual 2.5D pitch; the external SDK
         // supplies its own transform and must not be distorted by Canvas rotation.
         int mapSave=canvas.save();
-        boolean headingUp=navigationMode && headingUpEnabled && hasNavigationBearing && !externalBasemap;
-        if(headingUp){
-            canvas.rotate(-navigationBearing,w*.5f,h*.5f);
-            canvas.scale(1f,.86f,w*.5f,h*.5f);
-        }
+        if(pitched)canvas.concat(viewTransform);
         if (externalBasemap) {
             if (cameraListener != null) cameraListener.onCameraChanged(cameraLat,cameraLng,cameraZoom);
         } else {
             PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,
-                    headingUp ? 1.50f : 1.0f, headingUp ? navigationBearing : 0f);
+                    pitched ? 1.50f : 1.0f, headingUp ? navigationBearing : 0f,
+                    pitched ? inverseViewTransform : null);
         }
         Path p = new Path();
         boolean first = true;
