@@ -2084,14 +2084,10 @@ public final class NativeMainActivity extends Activity {
         tools.addView(live,new LinearLayout.LayoutParams(-1,dp(49)));
         tools.addView(low,new LinearLayout.LayoutParams(-1,dp(49)));
         tools.addView(details,new LinearLayout.LayoutParams(-1,dp(49)));
-        PedalActionView neshan=action(PedalIconView.Icon.SETTINGS,
-                "تنظیمات نشان و کلیدهای API",PedalActionView.Style.OUTLINE);
-        neshan.setOnClickListener(v->openNativeAppSettings());
-        tools.addView(neshan,new LinearLayout.LayoutParams(-1,dp(49)));
         bottom.addView(tools,new LinearLayout.LayoutParams(-1,-2));
 
         PedalActionView menu=action(PedalIconView.Icon.SETTINGS,
-                "ابزارهای رکاب و تنظیمات نشان",PedalActionView.Style.OUTLINE);
+                "ابزارهای رکاب",PedalActionView.Style.OUTLINE);
         menu.setOnClickListener(v->tools.setVisibility(
                 tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
         LinearLayout.LayoutParams menuLp=new LinearLayout.LayoutParams(-1,dp(46));
@@ -4570,7 +4566,6 @@ public final class NativeMainActivity extends Activity {
         PedalActionView bikes=action(PedalIconView.Icon.RIDE,"دوچرخه‌های من",PedalActionView.Style.OUTLINE);bikes.setOnClickListener(v->showBikes());content.addView(bikes,fullActionLp(52));
         PedalActionView fitness=action(PedalIconView.Icon.CHART,"وضعیت بدن",PedalActionView.Style.OUTLINE);fitness.setOnClickListener(v->showFitness());content.addView(fitness,fullActionLp(52));
         PedalActionView safety=action(PedalIconView.Icon.SHIELD,"ایمنی و حریم خصوصی",PedalActionView.Style.OUTLINE);safety.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(safety,fullActionLp(52));
-        PedalActionView settings=action(PedalIconView.Icon.SETTINGS,"تنظیمات اپلیکیشن و کلیدهای نشان",PedalActionView.Style.OUTLINE);settings.setOnClickListener(v->openNativeAppSettings());content.addView(settings,fullActionLp(52));
         PedalActionView refresh=action(PedalIconView.Icon.REFRESH,"بروزرسانی اطلاعات",PedalActionView.Style.OUTLINE);refresh.setOnClickListener(v->refreshAndRender(this::showMe));content.addView(refresh,fullActionLp(50));
         PedalActionView logout=action(PedalIconView.Icon.CLOSE,"خروج از حساب",PedalActionView.Style.OUTLINE);logout.setAccent(RED);logout.setOnClickListener(v->io.execute(()->{try{api.logout();}catch(Exception ignored){session.clear();}main.post(()->{bootstrap=null;activeRide=null;showLogin();});}));content.addView(logout,fullActionLp(50));
         VazirmatnLoader.apply(this,content);animatePageIn();
@@ -5455,7 +5450,7 @@ public final class NativeMainActivity extends Activity {
         });
         webHeader.addView(headerAccount, new LinearLayout.LayoutParams(dp(105), dp(46)));
 
-        headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage, "تنظیمات سایت");
+        headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage, "همه تنظیمات سایت و اپلیکیشن");
         headerAdminSettings.setVisibility(View.GONE);
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(46), dp(46));
         sp.setMargins(dp(6), 0, 0, 0);
@@ -5878,11 +5873,10 @@ public final class NativeMainActivity extends Activity {
 
         if (signedIn()) {
             body.addView(drawerSection("حساب من", "👤",
-                    new String[]{"👤", "⚙", "⚙", "⬆", "ⓘ", "📘"},
-                    new String[]{"پروفایل من", "تنظیمات اپلیکیشن و نشان", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
+                    new String[]{"👤", "⚙", "⬆", "ⓘ", "📘"},
+                    new String[]{"پروفایل من", "تنظیمات تلفن همراه", "نسخه اپلیکیشن", "درباره ما", "راهنمای استفاده"},
                     new Runnable[]{
                             () -> { d.dismiss(); showProfileEditor(); },
-                            () -> { d.dismiss(); openNativeAppSettings(); },
                             () -> { d.dismiss(); showPhoneSettingsPage(); },
                             () -> { d.dismiss(); showAppVersionPage(); },
                             () -> { d.dismiss(); showAboutGroupPage(); },
@@ -5896,19 +5890,6 @@ public final class NativeMainActivity extends Activity {
                             () -> { d.dismiss(); showAboutGroupPage(); },
                             () -> { d.dismiss(); showGuidePage(); }
                     }, false));
-        }
-
-        boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
-        if (admin) {
-            View adminSection = drawerSection("مدیریت", "⚙",
-                    new String[]{"⚙", "✉"},
-                    new String[]{"تنظیمات سایت", "پیامک"},
-                    new Runnable[]{
-                            () -> { d.dismiss(); showSiteSettingsPage(); },
-                            () -> { d.dismiss(); showSmsPage(); }
-                    }, false);
-            adminSection.setBackground(roundRect(Color.argb(8, 255, 174, 54), 15, Color.argb(43, 255, 190, 79)));
-            body.addView(adminSection);
         }
 
         sc.addView(body);
@@ -6520,7 +6501,11 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void openNativeAppSettings(){
-        startActivity(new Intent(this,NativeAppSettingsActivity.class));
+        if (bootstrap != null && (bootstrap.optBoolean("is_admin",false) || bootstrap.optInt("is_admin",0)==1)) {
+            showSiteSettingsPage();
+        } else {
+            showPhoneSettingsPage();
+        }
     }
 
     private void showPhoneSettingsPage() {
@@ -6601,9 +6586,6 @@ public final class NativeMainActivity extends Activity {
         PedalActionView app = action(PedalIconView.Icon.SETTINGS, "مجوزهای Android برای PedalPro", PedalActionView.Style.OUTLINE);
         app.setOnClickListener(v -> openAppSettingsNative());
         shell.addView(app, fullActionLp(50));
-        PedalActionView appInside = action(PedalIconView.Icon.SETTINGS,"تنظیمات داخل اپ و نشان",PedalActionView.Style.PRIMARY);
-        appInside.setOnClickListener(v->openNativeAppSettings());
-        shell.addView(appInside,fullActionLp(52));
 
         LinearLayout notice = new LinearLayout(this);
         notice.setOrientation(LinearLayout.VERTICAL);
