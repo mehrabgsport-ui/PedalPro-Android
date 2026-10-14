@@ -52,6 +52,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private float currentAccuracy=Float.MAX_VALUE;
     private Location recentFix;
     private boolean startingGroupTracking;
+    private boolean autoGroupTrackingAttempted;
+    private Button groupTrackingButton;
     private boolean screenVisible;
     private TextView roadStatus;
     private Button roadToggle;
@@ -106,10 +108,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 finish();
             });
             content.addView(cancel,cardLp());
-            Button tracking=primary("شروع / بررسی ثبت GPS هنگام رسیدن به گروه");
-            tracking.setOnClickListener(v->beginGroupRideIfNeeded(tracking));
-            content.addView(tracking,cardLp());
-            addCard("ثبت رکاب‌زنی","اگر رکاب‌زنی فعال داشته باشید همان رکورد ادامه می‌یابد. در غیر این صورت، با دکمه بالا ثبت GPS جدید شروع می‌شود؛ خروج از مسیریابی آن را متوقف نمی‌کند.");
+            groupTrackingButton=primary("بررسی / راه‌اندازی دوباره ثبت GPS");
+            groupTrackingButton.setOnClickListener(v->beginGroupRideIfNeeded(groupTrackingButton));
+            content.addView(groupTrackingButton,cardLp());
+            addCard("ثبت رکاب‌زنی","به‌محض دریافت موقعیت GPS معتبر، ثبت رکاب‌زنی هنگام رسیدن به گروه خودکار شروع می‌شود. اگر رکورد فعالی در سرور وجود داشته باشد همان ادامه می‌یابد. با دکمه بالا نیز می‌توانید وضعیت GPS را بررسی کنید.");
         }
 
         LinearLayout routing=card();
@@ -241,6 +243,14 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
                     currentAccuracy=loc.hasAccuracy()?loc.getAccuracy():Float.MAX_VALUE;
                     recentFix=loc;
+                    if("group".equals(mode)&&!autoGroupTrackingAttempted&&
+                            !startingGroupTracking&&currentAccuracy<=35f&&
+                            groupTrackingButton!=null&&
+                            !getSharedPreferences(TrackingService.PREFS,MODE_PRIVATE)
+                                .getBoolean("active",false)){
+                        autoGroupTrackingAttempted=true;
+                        beginGroupRideIfNeeded(groupTrackingButton);
+                    }
                     routeView.setCurrent(currentLat,currentLng);
                     if(loc.hasBearing() && loc.hasSpeed() && loc.getSpeed()>1.3f)
                         routeView.setHeadingDegrees(loc.getBearing());
@@ -269,30 +279,20 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
             try{
                 JSONObject b=api.bootstrap();
                 JSONObject active=b.optJSONObject("my_active_ride");
-                if(active!=null&&active.optInt("id",0)>0){
-                    main.post(()->{
-                        startingGroupTracking=false;button.setEnabled(true);
-                        status.setText("رکاب‌زنی قبلی شما هنوز فعال است؛ ادامه یا توقف آن را در صفحه رکاب‌زنی مدیریت کنید.");
-                    });
-                    return;
+                int id=active==null?0:active.optInt("id",0);
+                if(id<=0){
+                    JSONObject created=api.post("start_ride",new JSONObject()
+                            .put("title","رسیدن به گروه")
+                            .put("event_id",0)
+                            .put("challenge_id",0)
+                            .put("bike_id",0)
+                            .put("public_tracking",false)
+                            .put("viewer_user_ids",new JSONArray()));
+                    id=created.optInt("ride_id",0);
                 }
-                JSONObject created=api.post("start_ride",new JSONObject()
-                        .put("title","رسیدن به گروه")
-                        .put("event_id",0)
-                        .put("challenge_id",0)
-                        .put("bike_id",0)
-                        .put("public_tracking",false)
-                        .put("viewer_user_ids",new JSONArray()));
-                int id=created.optInt("ride_id",0);
                 if(id<=0)throw new IllegalStateException("شناسه معتبر از سرور دریافت نشد");
-                try{
-                    api.post("track_point",new JSONObject().put("ride_id",id)
-                        .put("lat",fix.getLatitude()).put("lng",fix.getLongitude())
-                        .put("altitude",fix.hasAltitude()?fix.getAltitude():JSONObject.NULL)
-                        .put("speed_kmh",fix.hasSpeed()?fix.getSpeed()*3.6d:0d)
-                        .put("accuracy",fix.getAccuracy())
-                        .put("timestamp",System.currentTimeMillis()));
-                }catch(Exception ignored){}
+                // TrackingService owns track-point writes and de-duplication. Reuse
+                // the authenticated active ride instead of writing a duplicate first point.
                 Intent start=new Intent(this,TrackingService.class);
                 start.setAction(TrackingService.ACTION_START);
                 start.putExtra("ride_id",id);
@@ -303,7 +303,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 else startService(start);
                 main.post(()->{
                     startingGroupTracking=false;button.setEnabled(true);
-                    status.setText("ثبت رکاب‌زنی GPS فعال شد؛ مسیریابی گروهی ادامه دارد.");
+                    status.setText("ثبت GPS برای رسیدن به گروه فعال شد؛ همان رکاب‌زنی در پس‌زمینه ادامه دارد.");
                 });
             }catch(Exception e){
                 main.post(()->{
