@@ -13,6 +13,8 @@ public final class NativeAiActivity extends NativeScreenBase {
     private LinearLayout messages;
     private EditText input;
     private Spinner mode;
+    private Button sendButton;
+    private boolean conversationInteracted;
 
     @Override protected String screenTitle(){return "مشاور هوش مصنوعی";}
 
@@ -29,11 +31,11 @@ public final class NativeAiActivity extends NativeScreenBase {
         mode.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,modes));
         input=input("سؤال یا درخواست خود را بنویسید…");
         input.setMinLines(3);
-        Button send=primary("ارسال");
-        send.setOnClickListener(v->send());
+        sendButton=primary("ارسال");
+        sendButton.setOnClickListener(v->send());
         composer.addView(mode);
         composer.addView(input);
-        composer.addView(send);
+        composer.addView(sendButton);
         content.addView(composer,cardLp());
 
         loadHistory();
@@ -46,7 +48,10 @@ public final class NativeAiActivity extends NativeScreenBase {
                 JSONArray items=d.optJSONArray("items");
                 if(items==null)items=d.optJSONArray("messages");
                 JSONArray finalItems=items;
-                main.post(()->renderHistory(finalItems));
+                main.post(()->{
+                    // A late history response must not erase messages sent during loading.
+                    if(!conversationInteracted)renderHistory(finalItems);
+                });
             }catch(Exception ignored){}
         });
     }
@@ -65,32 +70,43 @@ public final class NativeAiActivity extends NativeScreenBase {
         }
     }
 
-    private void addBubble(String who,String body,boolean mine){
+    private LinearLayout addBubble(String who,String body,boolean mine){
         LinearLayout box=card();
         box.addView(text(who,11,true,mine?GREEN:ACCENT));
         box.addView(text(body,14,false,TEXT));
         messages.addView(box,cardLp());
+        return box;
     }
 
     private void send(){
         String prompt=input.getText().toString().trim();
-        if(prompt.isBlank())return;
+        if(prompt.isBlank()||!sendButton.isEnabled())return;
+        final String selectedMode=String.valueOf(mode.getSelectedItem());
+        conversationInteracted=true;
+        sendButton.setEnabled(false);
+        sendButton.setText("در حال ارسال…");
         input.setText("");
-        addBubble("شما",prompt,true);
+        final LinearLayout pending=addBubble("شما",prompt,true);
         setSubtitle("در حال دریافت پاسخ…",ORANGE);
         io.execute(()->{
             try{
                 JSONObject d=api.post("ai_chat",new JSONObject()
                         .put("message",prompt)
-                        .put("mode",String.valueOf(mode.getSelectedItem()))
+                        .put("mode",selectedMode)
                         .put("use_profile_context",true));
                 String answer=d.optString("answer","پاسخی دریافت نشد.");
                 main.post(()->{
                     addBubble("PedalPro",answer,false);
+                    sendButton.setEnabled(true);
+                    sendButton.setText("ارسال");
                     setSubtitle("مشاور PedalPro · Native",GREEN);
                 });
             }catch(Exception e){
                 main.post(()->{
+                    messages.removeView(pending);
+                    if(input.getText().toString().isBlank())input.setText(prompt);
+                    sendButton.setEnabled(true);
+                    sendButton.setText("ارسال");
                     setSubtitle("خطا در دریافت پاسخ",RED);
                     toast(e.getMessage());
                 });
