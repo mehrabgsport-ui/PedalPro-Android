@@ -3710,17 +3710,9 @@ public final class NativeMainActivity extends Activity {
                 box.addView(metaView);
             }
 
-            LinearLayout actions = new LinearLayout(this);
-            actions.setOrientation(LinearLayout.HORIZONTAL);
-            actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
             PedalActionView edit = action(PedalIconView.Icon.EDIT,"ویرایش",PedalActionView.Style.OUTLINE);
             edit.setOnClickListener(v -> showBikeEditor(captured));
-            PedalActionView delete = action(PedalIconView.Icon.CLOSE,"حذف",PedalActionView.Style.OUTLINE);
-            delete.setAccent(RED);
-            delete.setOnClickListener(v -> deleteBike(captured.optInt("id", 0), hiddenButtonProxy(delete)));
-            actions.addView(edit, actionWeightLp());
-            actions.addView(delete, actionWeightLp());
-            box.addView(actions);
+            box.addView(edit, fullActionLp(50));
 
             content.addView(box, cardLp());
         }
@@ -3737,22 +3729,8 @@ public final class NativeMainActivity extends Activity {
         LinearLayout box = glassCard(24);
         EditText brand = input("برند / مدل");
         EditText type = input("نوع دوچرخه");
-        type.setFocusable(false);
-        type.setClickable(true);
-        type.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.arrow_down_float, 0);
-        final int[] selectedType = new int[]{bikeTypeIndex(bike == null ? "" : bike.optString("bike_type", ""))};
-        type.setText(bikeTypeLabel(bike == null ? "" : bike.optString("bike_type", "")));
-        type.setOnClickListener(v -> {
-            String[] labels = bikeTypeLabels();
-            new android.app.AlertDialog.Builder(this)
-                    .setTitle("نوع دوچرخه")
-                    .setSingleChoiceItems(labels, selectedType[0], (dialog, which) -> {
-                        selectedType[0] = which;
-                        type.setText(labels[which]);
-                        dialog.dismiss();
-                    })
-                    .show();
-        });
+        type.setHint("جاده، کوهستان، شهری، برقی...");
+        type.setText(bike == null ? "" : bike.optString("bike_type", ""));
 
         EditText frame = input("سایز فریم");
         EditText wheel = input("سایز چرخ");
@@ -3768,12 +3746,21 @@ public final class NativeMainActivity extends Activity {
             if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
         }
         box.addView(brand);box.addView(type);box.addView(frame);box.addView(wheel);box.addView(color);box.addView(weight);box.addView(primary);
-        PedalActionView photo=action(PedalIconView.Icon.PLUS,"انتخاب عکس دوچرخه",PedalActionView.Style.OUTLINE);photo.setOnClickListener(v->pickImage(REQ_BIKE_PHOTO));box.addView(photo,fullActionLp(50));
-        PedalActionView save=action(PedalIconView.Icon.DETAILS,"ذخیره دوچرخه",PedalActionView.Style.PRIMARY);box.addView(save,fullActionLp(54));
+        if (editing) {
+            PedalActionView photo=action(PedalIconView.Icon.PLUS,"انتخاب عکس",PedalActionView.Style.OUTLINE);
+            photo.setOnClickListener(v->pickImage(REQ_BIKE_PHOTO));
+            box.addView(photo,fullActionLp(50));
+        }
+        PedalActionView save=action(PedalIconView.Icon.DETAILS,"ذخیره",PedalActionView.Style.PRIMARY);box.addView(save,fullActionLp(54));
 
         if (editing) {
-            PedalActionView delete=action(PedalIconView.Icon.CLOSE,"حذف دوچرخه",PedalActionView.Style.OUTLINE);delete.setAccent(RED);
-            delete.setOnClickListener(v -> deleteBike(bike.optInt("id", 0), hiddenButtonProxy(delete)));box.addView(delete,fullActionLp(50));
+            PedalActionView delete=action(PedalIconView.Icon.CLOSE,"حذف",PedalActionView.Style.OUTLINE);delete.setAccent(RED);
+            delete.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                    .setMessage("این دوچرخه حذف شود؟")
+                    .setPositiveButton("حذف", (dialog, which) -> deleteBike(bike.optInt("id", 0), hiddenButtonProxy(delete)))
+                    .setNegativeButton("انصراف", null)
+                    .show());
+            box.addView(delete,fullActionLp(50));
         }
         content.addView(box,cardLp());
 
@@ -3781,7 +3768,7 @@ public final class NativeMainActivity extends Activity {
             save.setEnabled(false);int id = bike == null ? 0 : bike.optInt("id", 0);
             io.execute(() -> {
                 try {
-                    JSONObject saved=api.post("bike_save",new JSONObject().put("id",id).put("brand_model",brand.getText().toString().trim()).put("bike_type",bikeTypeValue(selectedType[0])).put("frame_size",frame.getText().toString().trim()).put("wheel_size",wheel.getText().toString().trim()).put("color",color.getText().toString().trim()).put("weight_kg",JalaliDate.en(weight.getText().toString().trim())).put("is_primary",primary.isChecked()));
+                    JSONObject saved=api.post("bike_save",new JSONObject().put("id",id).put("brand_model",brand.getText().toString().trim()).put("bike_type",type.getText().toString().trim()).put("frame_size",frame.getText().toString().trim()).put("wheel_size",wheel.getText().toString().trim()).put("color",color.getText().toString().trim()).put("weight_kg",JalaliDate.en(weight.getText().toString().trim())).put("is_primary",primary.isChecked()));
                     int bikeId=saved.optInt("id",id);
                     if(pendingBikePhotoUri!=null&&bikeId>0){
                         java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();fields.put("bike_id",String.valueOf(bikeId));
@@ -3789,13 +3776,27 @@ public final class NativeMainActivity extends Activity {
                         pendingBikePhotoUri=null;
                     }
                     bootstrap=api.bootstrap();activeRide=bootstrap.optJSONObject("my_active_ride");
-                    main.post(()->{toast("دوچرخه ذخیره شد.");showBikes();});
+                    JSONObject refreshedBike=findBikeById(bikeId);
+                    main.post(()->{
+                        toast("دوچرخه روی سرور ذخیره شد");
+                        if(refreshedBike!=null)showBikeEditor(refreshedBike);else showBikes();
+                    });
                 }catch(Exception e){main.post(()->{save.setEnabled(true);showInlineMessage("ذخیره دوچرخه انجام نشد",e.getMessage(),RED);});}
             });
         });
         VazirmatnLoader.apply(this,content);
     }
 
+
+    private JSONObject findBikeById(int id) {
+        JSONArray bikes=bootstrap==null?null:bootstrap.optJSONArray("my_bikes");
+        if(bikes==null)return null;
+        for(int i=0;i<bikes.length();i++){
+            JSONObject b=bikes.optJSONObject(i);
+            if(b!=null&&b.optInt("id",0)==id)return b;
+        }
+        return null;
+    }
 
     private void deleteBike(int id, Button button) {
         if (id <= 0) return;
