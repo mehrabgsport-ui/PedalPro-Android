@@ -93,9 +93,9 @@ expect "$NATIVE/NativeSiteSettingsActivity.java" 'case "bale": renderBale(); bre
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'private boolean isPrivateBaleField(String key)' "Bale credentials hidden from admin readout"
 expect "$NATIVE/NativeMainActivity.java" 'activeRideRouteView.setNavigationMode(true)' "Active ride starts rider-follow navigation presentation"
 expect "$NATIVE/NativeMainActivity.java" 'j.optDouble("bearing",Double.NaN)' "Navigation heading comes from TrackingService bearing"
-expect "$NATIVE/NativeRouteView.java" 'canvas.rotate(-navigationBearing' "Navigation canvas is heading-up"
-expect "$NATIVE/NativeRouteView.java" 'canvas.scale(1f,.86f' "Navigation has lightweight 2.5D tilt"
-expect "$NATIVE/PedalMapTiles.java" 'Math.hypot(w,h) * 1.05' "Rotated tile viewport has diagonal coverage"
+expect "$NATIVE/NativeRouteView.java" 'viewTransform.setConcat(pitch,rotate)' "Navigation camera follows heading under perspective tilt"
+expect "$NATIVE/NativeRouteView.java" 'pitch.setPolyToPoly(source,0,dest,0,4)' "Navigation is projective 2.5D instead of flat Y squeeze"
+expect "$NATIVE/PedalMapTiles.java" 'inverseProjection.mapPoints(corners)' "Tile viewport uses inverse perspective coverage"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'public void setNavigationMode(boolean enabled)' "Shared native map has follow-mode control"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'case "other": renderUnmirroredSiteSettings(); break;' "Additional backend fields audited"
 expect "$NATIVE/NativeMainActivity.java" 'headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage' "Administrator settings consolidated next to account"
@@ -133,6 +133,18 @@ expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setNavigationMode(
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setHeadingDegrees(loc.getBearing())' "Live navigation heading from an actual location"
 expect "$NATIVE/PedalMapTiles.java" 'double rangeW = overscan > 1.01f ? (cos*w + sin*h)*1.08 : w;' "Rotated raster viewport bounds requests"
 expect "$NATIVE/PedalMapTiles.java" 'CACHE_SCOPE = Integer.toHexString(TILE_URL.hashCode())' "Tiles are provider-scoped"
+
+expect "$NATIVE/NativeMainActivity.java" 'PedalNeshanMapSurface keepMap=shownRideId>0' "Recreate ride UI without discarding loaded map"
+expect "$NATIVE/NativeMainActivity.java" 'now-rideRouteLastFetchElapsed<20_000L' "Prevent repeated ride-route backend fetch"
+expect "$NATIVE/NativeMainActivity.java" 'seedDisplayMapFromLastLocation(activeRideRouteView)' "Seed map from recent device location"
+expect "$NATIVE/NativeRouteView.java" 'inverseViewTransform.mapPoints(riderAt)' "Rider anchored accurately through pitch perspective"
+expect "$NATIVE/NativeRouteView.java" 'canvas.concat(viewTransform)' "2.5D pitch applied to all overlay layers"
+expect "$NATIVE/PedalMapTiles.java" 'static final int TILE = 512;' "Raster tiles not undersized on high-density devices"
+expect "$NATIVE/PedalMapTiles.java" 'needed.sort(Comparator.comparingDouble' "Center-priority tile scheduling"
+expect "$NATIVE/PedalMapTiles.java" 'for(int level=1;level<=2' "Low-resolution parent tile placeholders"
+expect "$NATIVE/PedalMapTiles.java" 'for(View view:WATCHERS)' "Visible maps redraw after shared tile completion"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'setSdkCameraFloat("setTilt",follow?55f:90f)' "Licensed Neshan map receives real SDK tilt"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'setSdkCameraFloat("setBearing",bearing)' "Licensed Neshan map receives real SDK bearing"
 
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2

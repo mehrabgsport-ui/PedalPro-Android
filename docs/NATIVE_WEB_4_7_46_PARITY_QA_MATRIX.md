@@ -83,3 +83,16 @@ gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
 | Raster tile efficiency | Rotated tile bounds, cache scoped by provider, upright attribution, in-flight cap | Actual memory/network/battery telemetry, licence provider terms and rate limits; **not verified** |
 | Neshan SDK native camera | Conditional licensed SDK pathway unchanged; default signed build uses XYZ | Official signed licence and genuine SDK pitch/bearing integration still absent; **not verified** |
 | APK/CI RC6 | `versionCode 50`, Bazaar/Myket workflows updated for RC6 | Require both workflows success on final RC6 SHA plus certificate verification; **not yet verified** |
+
+## RC7 — reported screen-recording regression (2026-10-14)
+
+| User-visible issue | Code fix | Acceptance |
+|---|---|---|
+| Raster streets disappear after 5-8 seconds | Persist `PedalNeshanMapSurface` across ride-screen recreation; refresh ride geometry at most once/20s | Live device test PENDING |
+| Heavy city-wide tile bursts | 512 logical device pixels/tile, 18 max in-flight, queue rider-centered first; trigger redraw for every visible map | Actual CPU/battery/network telemetry PENDING |
+| Huge blank areas during zoom | Render cached lower-zoom parent tile as placeholder; keep ongoing map view | Network loss/zoom test PENDING |
+| Navigation appears flat | 4-point projective pitch matrix, 68% rider anchor reprojected through inverse, heading rotate only if valid | Real phone/device reference test PENDING |
+| Actual Neshan SDK absent | When Android licence exists, invoke documented Neshan MapView.setBearing / setTilt(55f) | SDK-bound signing licence & QA PENDING |
+| GPS data change | No changes to TrackingService, filters, ride-point writes, speed/distance/calories | Compare route logs on device PENDING |
+
+VIDEO evidence: `1000152337.mp4` displayed an OSM raster map flickering into navy-black regions and no visible pitch during a stopped GPS state. The reference Web 4.7.46 and Neshan `neshan.licence` remain unavailable; no Neshan cartography/true bicycle routing claim.

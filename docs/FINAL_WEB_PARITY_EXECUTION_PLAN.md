@@ -228,3 +228,10 @@ Each phase is split into small commits. After each batch:
 2. fix all compile/QA failures,
 3. mark the batch complete,
 4. continue to the next batch without mixing unrelated changes.
+
+### RC7 — map blanking/loading and real camera regression (2026-10-14)
+- User video confirmed tile flicker and plain 2D raster. Preserved the map view across ride UI rebuilds, throttled route fetch and seeded the last valid device location for display only.
+- Implemented perspective canvas transform with inverse camera anchor, heading and pan transforms, smaller visible tile set and prioritized on-screen center loading; parent tile placeholders prevent disappearing maps on zoom.
+- Documented official licensed Neshan `MapView.setBearing` and `MapView.setTilt` used only when SDK actually present. No licence was included in source or unsigned/signed default build, which remains XYZ fallback.
+- All GPS/TrackingService/backend calculations remain untouched.
+- RC7 `versionCode 51` / `versionName 2.0.0-native-rc7`. Structural QA and signed Bazaar/Myket workflow must pass at final HEAD; real-phone acceptance STILL PENDING.
