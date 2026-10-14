@@ -167,6 +167,18 @@ Status: IN PROGRESS
 - `6a067588e20c` code checkpoint: Native RC QA **SUCCESS** <https://github.com/mehrabgsport-ui/PedalPro-Android/actions/runs/38527023417> and signed store APK build **SUCCESS** <https://github.com/mehrabgsport-ui/PedalPro-Android/actions/runs/38527023446>; signed Bazaar/Myket artifacts were generated. Follow-up touch gestures must pass CI at their newer HEAD separately.
 - User screenshots are from the running Android app, **not an independently exported canonical Web 4.7.46 source**. Exact pixel/UI states and real map tile/gesture response remain unverified on device. Do not close Phase 5/8 prematurely and do not merge/publish without approval.
 
+### Phases 5/8 — Neshan Services road-navigation batch RC3 (2026-10-14)
+- User activated Neshan **service** permissions (no-traffic directions, traffic-aware directions, point-to-road map matching) in their account; **the actual API key was not shared with the app**.
+- `2876896f545a`, `82c8571d5e4c`: store suggested road-polyline geometry separately from recorded GPS polyline, with a shared native map-surface adapter.
+- `973514660600`: AES/GCM Android Keystore storage for device-local Neshan service key; never hardcode or commit keys.
+- `8fa23ce26221`: bounded Neshan V2 directions HTTP client, original street-polyline decoding and safe response parsing.
+- `05c3d1849dc2`, `776806df0284`: live/group navigation screen offers opt-in road suggestions, local credential dialog, 45-second request cooldown, 80m position-change recalc, invalid route cleanup and offscreen polling pause. Direct geodesic fallback preserved and explicit car-route/cycling caveats shown.
+- `28030ed251cd`: nine regression guards for key storage, road overlay and original GPS separation.
+- `92e0680fa4ae`, `387f94e55096`: Android 2.0.0-native-rc3/versionCode 47 and QA workflow enforcement.
+- `eecb7156671d`: evidence and remaining provider/device constraints documented in `docs/NESHAN_NATIVE_PARITY_AUDIT.md`.
+- Neshan `neshan.licence` (for actual Android SDK map imagery) still unavailable; the default signed APK uses XYZ tiles and no Neshan SDK. Service key must be entered locally for V2 road suggestions, or connected through a future authorized server-side proxy. No backend endpoint was invented.
+- **Open hard gates:** live Neshan API test with newly created key, Android licence-enabled SDK build, true bicycle-safe directions, real-device validation, exact Web 4.7.46 screenshot parity, owner approval before merge.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
