@@ -4899,10 +4899,9 @@ public final class NativeMainActivity extends Activity {
                 rideTimerAnchorElapsed = 0;
                 rideBaseSeconds = 0;
 
+                JSONObject energy = result.optJSONObject("energy");
+                final double calories = energy == null ? 0 : energy.optDouble("calories_kcal", 0);
                 main.post(() -> {
-                    double calories = 0;
-                    JSONObject energy = result.optJSONObject("energy");
-                    if (energy != null) calories = energy.optDouble("calories_kcal", 0);
                     toast(calories > 0
                             ? "رکاب‌زنی ذخیره شد — حدود " + JalaliDate.fa(Math.round(calories)) + " kcal"
                             : "رکاب‌زنی ذخیره شد");
