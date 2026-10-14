@@ -32,6 +32,8 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
     private int rideId,phase=PHASE_TO_TARGET;
     private boolean toBeginning=true,visible,arrived,startingTracking;
     private JSONArray recorded=new JSONArray();
+    private double[] trackLat=new double[0],trackLng=new double[0],trackMeters=new double[0];
+    private int lastProgressSegment=-1;
     private PedalNeshanMapSurface mapView;
     private TextView status;
     private double goalLat=Double.NaN,goalLng=Double.NaN;
@@ -93,6 +95,7 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     throw new IllegalStateException("این رکاب‌زنی نقاط معتبر برای دنبال‌کردن ندارد.");
                 main.post(()->{
                     recorded=points;
+                    indexTrack(points);
                     mapView.setPoints(recorded);
                     status.setText("مسیر دریافت شد ("+recorded.length()+" نقطه). مقصد را انتخاب کنید.");
                     chooseDestination();
@@ -124,7 +127,7 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     if(point==null){status.setText("نقطه مقصد معتبر نیست.");return;}
                     goalLat=point.optDouble("lat",Double.NaN);
                     goalLng=point.optDouble("lng",Double.NaN);
-                    phase=PHASE_TO_TARGET;arrived=false;
+                    phase=PHASE_TO_TARGET;arrived=false;lastProgressSegment=-1;
                     mapView.setNavigationMode(false);
                     mapView.setTarget(goalLat,goalLng);
                     status.setText("مقصد: "+(toBeginning?"ابتدای":"انتهای")+
@@ -191,7 +194,8 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
 
     private void activateFollowing(){
         phase=PHASE_FOLLOW;arrived=true;
-        mapView.clearTarget();
+        JSONObject finish=endpoint(false);
+        if(finish!=null)mapView.setTarget(finish.optDouble("lat"),finish.optDouble("lng"));
         mapView.setPoints(recorded);
         mapView.setNavigationMode(true);
         status.setText(recording()?"دنبال‌کردن مسیر اصلی و ثبت GPS فعال است.":
@@ -282,6 +286,7 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                 mapView.setCurrent(loc.getLatitude(),loc.getLongitude());
                 if(loc.hasSpeed()&&loc.hasBearing()&&loc.getSpeed()>1.3f)
                     mapView.setHeadingDegrees(loc.getBearing());
+                if(phase==PHASE_FOLLOW){updateFollowProgress(loc);return;}
                 if(phase!=PHASE_TO_TARGET||!Double.isFinite(goalLat))return;
                 float[] dist=new float[1];
                 Location.distanceBetween(loc.getLatitude(),loc.getLongitude(),goalLat,goalLng,dist);
@@ -309,6 +314,70 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     }
                 } else status.setText("به انتهای مسیر رسیدی.");
             });
+    }
+
+    /** Read-only index of the original GPS track, used only for navigation feedback. */
+    private void indexTrack(JSONArray points){
+        int size=points==null?0:points.length();
+        double[] la=new double[size],lo=new double[size],metres=new double[size];
+        int count=0;
+        for(int i=0;i<size;i++){
+            JSONObject p=points.optJSONObject(i);
+            if(p==null)continue;
+            double lat=p.optDouble("lat",Double.NaN),lng=p.optDouble("lng",Double.NaN);
+            if(!Double.isFinite(lat)||!Double.isFinite(lng)||
+                    Math.abs(lat)>=85||Math.abs(lng)>=180)continue;
+            if(count>0){
+                float[] step=new float[1];
+                Location.distanceBetween(la[count-1],lo[count-1],lat,lng,step);
+                if(step[0]<.5f)continue;
+                metres[count]=metres[count-1]+Math.max(0d,step[0]);
+            }
+            la[count]=lat;lo[count]=lng;count++;
+        }
+        trackLat=java.util.Arrays.copyOf(la,count);
+        trackLng=java.util.Arrays.copyOf(lo,count);
+        trackMeters=java.util.Arrays.copyOf(metres,count);
+        lastProgressSegment=-1;
+    }
+
+    /** Project a fresh rider fix onto a recorded segment; never alters recorded GPS. */
+    private void updateFollowProgress(Location fix){
+        if(trackLat.length<2||!fix.hasAccuracy()||fix.getAccuracy()>60f||
+                Math.abs(System.currentTimeMillis()-fix.getTime())>15000L){
+            status.setText("در انتظار موقعیت GPS معتبر برای دنبال‌کردن مسیر…");
+            return;
+        }
+        int from=lastProgressSegment<0?0:Math.max(0,lastProgressSegment-4);
+        int to=lastProgressSegment<0?trackLat.length-1:
+                Math.min(trackLat.length-1,lastProgressSegment+120);
+        double latScale=111195d;
+        double lngScale=latScale*Math.max(.01d,Math.cos(Math.toRadians(fix.getLatitude())));
+        double best=Double.POSITIVE_INFINITY,along=0d;
+        int matched=-1;
+        for(int i=from;i<to;i++){
+            double x=(trackLng[i]-fix.getLongitude())*lngScale;
+            double y=(trackLat[i]-fix.getLatitude())*latScale;
+            double dx=(trackLng[i+1]-trackLng[i])*lngScale;
+            double dy=(trackLat[i+1]-trackLat[i])*latScale;
+            double len=dx*dx+dy*dy;
+            if(len<.01d)continue;
+            double fraction=Math.max(0d,Math.min(1d,-(x*dx+y*dy)/len));
+            double gap=Math.hypot(x+fraction*dx,y+fraction*dy);
+            if(gap<best){
+                best=gap;matched=i;
+                along=trackMeters[i]+fraction*(trackMeters[i+1]-trackMeters[i]);
+            }
+        }
+        if(matched<0)return;
+        if(best<=Math.max(80d,fix.getAccuracy()*2d))lastProgressSegment=matched;
+        double remaining=Math.max(0d,trackMeters[trackMeters.length-1]-along);
+        String message="تا انتهای مسیر "+
+                String.format(Locale.US,"%.2f",remaining/1000d)+" کیلومتر";
+        if(best>Math.max(75d,fix.getAccuracy()*2d))
+            message+=" · فاصله از مسیر "+Math.round(best)+" متر";
+        else message+=" · روی مسیر اصلی";
+        status.setText(message+(recording()?" · ثبت GPS فعال":" · ثبت GPS غیرفعال"));
     }
     @Override protected void onResume(){
         super.onResume();visible=true;
