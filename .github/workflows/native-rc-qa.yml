@@ -48,6 +48,22 @@ jobs:
           test -f app/src/main/java/ir/pedalpro/app/nativeapp/WeatherClient.java
           test -f app/src/main/java/ir/pedalpro/app/nativeapp/JalaliDate.java
 
+      - name: Phase 5 UI state contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          NATIVE="app/src/main/java/ir/pedalpro/app/nativeapp"
+          grep -Fq 'EXTRA_IS_PAUSED' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'EXTRA_RESULT_SECONDS' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'paused?PedalIconView.Icon.PLAY:PedalIconView.Icon.PAUSE' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'EXTRA_BASE_SECONDS, displayedRideSeconds()' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'if(requestCode==REQ_LOW_POWER)' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'rideBaseSeconds = Math.max(serverSeconds, locallyDisplayed)' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'PedalIconView.Icon.HEADING' "$NATIVE/NativeLiveNavigationActivity.java"
+          grep -Fq 'case HEADING:' "$NATIVE/PedalIconView.java"
+          grep -Fq 'PedalIconView.Icon.SENSOR' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'create.setEnabled(false)' "$NATIVE/NativeSafetyActivity.java"
+
       - name: Unit tests
         run: |
           gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             --stacktrace
