@@ -4696,12 +4696,36 @@ public final class NativeMainActivity extends Activity {
         if(user!=null&&!user.optString("username","").isBlank()){TextView username=text("@"+user.optString("username"),11,false,MUTED);username.setGravity(Gravity.CENTER);profile.addView(username);}
         boolean verified=user!=null&&(!user.optString("phone_verified_at","").isBlank()||user.optInt("phone_verified",0)==1);
         TextView phone=text(verified?"شماره تلفن تأیید شده":"شماره تلفن نیاز به تأیید دارد",11,true,verified?GREEN:ORANGE);phone.setGravity(Gravity.CENTER);phone.setPadding(0,dp(5),0,0);profile.addView(phone);
+        if(user!=null){
+            LinearLayout stats=new LinearLayout(this);
+            stats.setOrientation(LinearLayout.HORIZONTAL);
+            stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            stats.setPadding(0,dp(14),0,0);
+            String[][] details={
+                {"سن",user.optString("age","")},
+                {"قد (cm)",user.optString("height_cm","")},
+                {"وزن (kg)",user.optString("weight_kg","")}
+            };
+            for(String[] detail:details){
+                String value=detail[1].isBlank()?"—":JalaliDate.fa(detail[1]);
+                stats.addView(memberStat(detail[0],value),
+                        new LinearLayout.LayoutParams(0,-2,1f));
+            }
+            profile.addView(stats);
+        }
         content.addView(profile,cardLp());
 
         PedalActionView edit=action(PedalIconView.Icon.EDIT,"ویرایش پروفایل و شماره تماس",PedalActionView.Style.PRIMARY);edit.setOnClickListener(v->showProfileEditor());content.addView(edit,fullActionLp(54));
         LinearLayout baleInfo=glassCard(20);
         baleInfo.addView(text("اتصال به ربات بله",17,true,TEXT));
         baleInfo.addView(text("اعلان برنامه‌ها، رکوردها و مدال‌ها از طریق ربات بله ارسال می‌شود.",11,false,MUTED));
+        JSONObject baleInvite=bootstrap==null?null:bootstrap.optJSONObject("bale_invite");
+        if(baleInvite==null&&user!=null)baleInvite=user.optJSONObject("bale_invite");
+        boolean baleConnected=baleInvite!=null&&baleInvite.optBoolean("connected",false);
+        TextView baleState=text(baleConnected?"وضعیت: متصل به ربات بله":"وضعیت: اتصال تأیید نشده",
+                12,true,baleConnected?GREEN:ORANGE);
+        baleState.setPadding(0,dp(8),0,dp(8));
+        baleInfo.addView(baleState);
         PedalActionView baleButton=action(PedalIconView.Icon.CHAT,"مدیریت اتصال به ربات بله",PedalActionView.Style.OUTLINE);
         baleButton.setOnClickListener(v->{
             JSONObject invite=bootstrap==null?null:bootstrap.optJSONObject("bale_invite");
@@ -4739,6 +4763,16 @@ public final class NativeMainActivity extends Activity {
         accountGrid.addView(bikes,new LinearLayout.LayoutParams(0,dp(55),1f));
         accountGrid.addView(fitness,new LinearLayout.LayoutParams(0,dp(55),1f));
         content.addView(accountGrid,cardLp());
+        LinearLayout services=new LinearLayout(this);
+        services.setOrientation(LinearLayout.HORIZONTAL);
+        services.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalActionView advisor=action(PedalIconView.Icon.CHAT,"مشاور هوشمند",PedalActionView.Style.OUTLINE);
+        advisor.setOnClickListener(v->showAiAdvisor());
+        PedalActionView reports=action(PedalIconView.Icon.CHART,"گزارشات من",PedalActionView.Style.OUTLINE);
+        reports.setOnClickListener(v->showPerformance());
+        services.addView(advisor,new LinearLayout.LayoutParams(0,dp(55),1f));
+        services.addView(reports,new LinearLayout.LayoutParams(0,dp(55),1f));
+        content.addView(services,cardLp());
         PedalActionView safety=action(PedalIconView.Icon.SHIELD,"ایمنی و حریم خصوصی",PedalActionView.Style.OUTLINE);safety.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(safety,fullActionLp(52));
         PedalActionView refresh=action(PedalIconView.Icon.REFRESH,"بروزرسانی اطلاعات",PedalActionView.Style.OUTLINE);refresh.setOnClickListener(v->refreshAndRender(this::showMe));content.addView(refresh,fullActionLp(50));
         PedalActionView logout=action(PedalIconView.Icon.CLOSE,"خروج از حساب",PedalActionView.Style.OUTLINE);logout.setAccent(RED);logout.setOnClickListener(v->io.execute(()->{try{api.logout();}catch(Exception ignored){session.clear();}main.post(()->{bootstrap=null;activeRide=null;showLogin();});}));content.addView(logout,fullActionLp(50));
@@ -7492,7 +7526,8 @@ public final class NativeMainActivity extends Activity {
                     attended.setTextColor(MUTED);
                     attended.setChecked(r.optInt("attended", 0) == 1);
                     int regId = r.optInt("id", 0);
-                    attended.setOnCheckedChangeListener((button, checked) -> saveAttendance(regId, checked));
+                    attended.setOnCheckedChangeListener((button, checked) ->
+                            saveAttendance(regId, checked, attended));
                     row.addView(attended, new LinearLayout.LayoutParams(-2, dp(42)));
                 } else {
                     TextView state = text(r.optInt("attended", 0) == 1 ? "✓ حاضر" : "ثبت‌نام", 11, false, MUTED);
@@ -7610,14 +7645,30 @@ public final class NativeMainActivity extends Activity {
     }
 
 
-    private void saveAttendance(int registrationId, boolean attended) {
-        if (registrationId <= 0) return;
-        io.execute(() -> {
-            try {
-                api.post("attendance", new JSONObject().put("id", registrationId).put("attended", attended));
-                main.post(() -> toast("وضعیت حضور ثبت شد"));
-            } catch (Exception e) {
-                main.post(() -> toast(e.getMessage()));
+    private void saveAttendance(int registrationId, boolean attended, CheckBox control) {
+        if(registrationId<=0||!control.isEnabled())return;
+        // Prevent overlapping toggles. Server remains authoritative for attendance,
+        // event-distance credits and overlapping personal GPS rides.
+        control.setEnabled(false);
+        io.execute(()->{
+            try{
+                api.post("attendance",new JSONObject()
+                        .put("id",registrationId).put("attended",attended));
+                JSONObject updated=api.bootstrap();
+                main.post(()->{
+                    bootstrap=updated;
+                    control.setEnabled(true);
+                    toast("وضعیت حضور در سرور ثبت شد");
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    control.setOnCheckedChangeListener(null);
+                    control.setChecked(!attended);
+                    control.setOnCheckedChangeListener((button,checked)->
+                            saveAttendance(registrationId,checked,control));
+                    control.setEnabled(true);
+                    toast("ثبت حضور ناموفق بود؛ مقدار قبلی بازگردانده شد.");
+                });
             }
         });
     }
