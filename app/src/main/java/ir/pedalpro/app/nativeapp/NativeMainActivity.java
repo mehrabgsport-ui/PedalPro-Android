@@ -7706,8 +7706,11 @@ public final class NativeMainActivity extends Activity {
                     attended.setTextColor(MUTED);
                     attended.setChecked(r.optInt("attended", 0) == 1);
                     int regId = r.optInt("id", 0);
-                    attended.setOnCheckedChangeListener((button, checked) ->
-                            saveAttendance(regId, checked, attended));
+                    attended.setOnCheckedChangeListener((button, checked) -> {
+                        if (checked && "completed".equals(event.optString("status", "")))
+                            promptRetrospectiveAttendance(regId,attended);
+                        else saveAttendance(regId, checked, attended, "");
+                    });
                     row.addView(attended, new LinearLayout.LayoutParams(-2, dp(42)));
                 } else {
                     TextView state = text(r.optInt("attended", 0) == 1 ? "✓ حاضر" : "ثبت‌نام", 11, false, MUTED);
@@ -7721,6 +7724,12 @@ public final class NativeMainActivity extends Activity {
             }
         }
         if (count == 0) box.addView(text("هنوز کسی ثبت‌نام نکرده است.", 12, false, MUTED));
+        if (admin && "active".equals(event.optString("status",""))) {
+            PedalActionView addLate=action(PedalIconView.Icon.PLUS,
+                    "افزودن عضو دیرهنگام به برنامه گروهی",PedalActionView.Style.OUTLINE);
+            addLate.setOnClickListener(v -> showLateMemberPicker(event, dialog));
+            box.addView(addLate,fullActionLp(48));
+        }
 
         double lat = event.optDouble("meeting_lat", Double.NaN);
         double lng = event.optDouble("meeting_lng", Double.NaN);
@@ -7825,15 +7834,89 @@ public final class NativeMainActivity extends Activity {
     }
 
 
+
+    private void promptRetrospectiveAttendance(int registrationId, CheckBox control) {
+        EditText joined=input("زمان واقعی ورود: YYYY-MM-DD HH:mm:ss");
+        joined.setSingleLine(true);
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("حضور پس از پایان برنامه")
+            .setMessage("برای اعتباردهی دقیق مسافت، زمان واقعی پیوستن عضو را به میلادی وارد کنید.")
+            .setView(joined)
+            .setNegativeButton("انصراف",(d,w)->restoreAttendanceToggle(control,false,registrationId))
+            .setOnCancelListener(d->restoreAttendanceToggle(control,false,registrationId))
+            .setPositiveButton("ثبت",(d,w)->{
+                String entered=joined.getText().toString().trim();
+                if(!entered.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}")){
+                    restoreAttendanceToggle(control,false,registrationId);
+                    toast("زمان باید قالب YYYY-MM-DD HH:mm:ss داشته باشد.");return;
+                }
+                saveAttendance(registrationId,true,control,entered);
+            }).show();
+    }
+
+    private void restoreAttendanceToggle(CheckBox control,boolean value,int registrationId) {
+        control.setOnCheckedChangeListener(null);
+        control.setChecked(value);
+        control.setOnCheckedChangeListener((b,checked)->saveAttendance(registrationId,checked,control,""));
+    }
+
+    private void showLateMemberPicker(JSONObject event, Dialog parent) {
+        int eventId=event.optInt("id",0);
+        if(eventId<=0||bootstrap==null)return;
+        JSONArray members=bootstrap.optJSONArray("members");
+        JSONArray regs=bootstrap.optJSONArray("registrations");
+        java.util.HashSet<Integer> registered=new java.util.HashSet<>();
+        if(regs!=null)for(int i=0;i<regs.length();i++){
+            JSONObject r=regs.optJSONObject(i);
+            if(r!=null&&r.optInt("event_id",0)==eventId)
+                registered.add(r.optInt("user_id",0));
+        }
+        java.util.ArrayList<Integer> ids=new java.util.ArrayList<>();
+        java.util.ArrayList<String> labels=new java.util.ArrayList<>();
+        if(members!=null)for(int i=0;i<members.length();i++){
+            JSONObject m=members.optJSONObject(i);if(m==null)continue;
+            int uid=m.optInt("id",0);
+            if(uid<=0||registered.contains(uid))continue;
+            ids.add(uid);labels.add(m.optString("display_name",m.optString("username","عضو")));
+        }
+        if(ids.isEmpty()){toast("عضوی برای افزودن پیدا نشد.");return;}
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("عضو دیرهنگام")
+            .setItems(labels.toArray(new String[0]),(d,which)->{
+                int memberId=ids.get(which);
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("ثبت ورود عضو")
+                    .setMessage(labels.get(which)+" اکنون وارد بخش گروهی می‌شود. سهم مسافت از این لحظه محاسبه خواهد شد.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("ثبت ورود",(confirm,w)->io.execute(()->{
+                        try{
+                            api.post("event_late_add",new JSONObject()
+                                    .put("event_id",eventId).put("user_id",memberId));
+                            JSONObject updated=api.bootstrap();
+                            main.post(()->{
+                                bootstrap=updated;parent.dismiss();
+                                toast("عضو به برنامه اضافه شد؛ اعتبار مسافت از زمان ورود است.");
+                                showEventDetail(event);
+                            });
+                        }catch(Exception e){main.post(()->toast("ثبت ورود انجام نشد: "+e.getMessage()));}
+                    })).show();
+            }).show();
+    }
+
     private void saveAttendance(int registrationId, boolean attended, CheckBox control) {
+        saveAttendance(registrationId,attended,control,"");
+    }
+
+    private void saveAttendance(int registrationId, boolean attended, CheckBox control, String attendedAt) {
         if(registrationId<=0||!control.isEnabled())return;
         // Prevent overlapping toggles. Server remains authoritative for attendance,
         // event-distance credits and overlapping personal GPS rides.
         control.setEnabled(false);
         io.execute(()->{
             try{
-                api.post("attendance",new JSONObject()
-                        .put("id",registrationId).put("attended",attended));
+                JSONObject request=new JSONObject().put("id",registrationId).put("attended",attended);
+                if(attendedAt!=null&&!attendedAt.isBlank())request.put("attended_at",attendedAt);
+                api.post("attendance",request);
                 // A successful attendance POST must not be rolled back merely
                 // because the subsequent optional bootstrap refresh times out.
                 JSONObject fresh=null;
@@ -7849,7 +7932,7 @@ public final class NativeMainActivity extends Activity {
                     control.setOnCheckedChangeListener(null);
                     control.setChecked(!attended);
                     control.setOnCheckedChangeListener((button,checked)->
-                            saveAttendance(registrationId,checked,control));
+                            saveAttendance(registrationId,checked,control,""));
                     control.setEnabled(true);
                     toast("ثبت حضور ناموفق بود؛ مقدار قبلی بازگردانده شد.");
                 });
