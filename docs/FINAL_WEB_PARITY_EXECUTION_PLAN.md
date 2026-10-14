@@ -155,6 +155,18 @@ Status: IN PROGRESS
 - Native RC QA and Android Store Release Build remain UNVERIFIED for current HEAD. No device validation, production-signing certificate verification or final signed APK delivery.
 - Full visual parity continues to require the exact PedalPro Web 4.7.46 reference archive/screenshots.
 
+### Phase 5/8 — User screenshot map and navigation batch (2026-10-14)
+- Confirmed root cause of the blank GPS map: `NativeRouteView` was a grid-only custom `Canvas` renderer with **no background tile requests**. Missing street imagery is not itself a GPS/website API failure.
+- `e537392217c4`, `7282db3c75db`, `12724cac1b35`: added a native XYZ HTTPS map tile backdrop, cache and Mercator-aligned overlays, with Gradle-configurable map URL; existing GPS/TrackingService/backend point processing unchanged.
+- `abf1ce5c6632`, `331d9b725286`: configurable attribution, HTTP map permission-error messages and tile request backoff. Public OSM raster tiles are a **test-only fallback**; secure licensed provider configuration remains a production requirement.
+- `2daaea85677f`: seed the map camera from the already-validated start GPS fix before the server route is fetched.
+- `2e0bf39c609e`: native map drag, pinch/double-tap zoom and long-press reset (camera only).
+- `7decfbe7fb78`, `53e2144ce5cd`, `bbea1f35c9d0`, `cc2e5c7d36c8`: removed duplicate ride form heading, sanitized `null` upcoming destination text, replaced emoji nav/drawer icons and aligned RTL select typography.
+- `3615ac670475`, `7273f0340ffe`: added scrolling clearance below main/secondary screens so the raised dock does not hide trailing controls.
+- `718a2e969088`, `cbe80555e3d7`: map integration, provider contract and acceptance tests in `docs/NATIVE_MAP_SETUP_AND_DIAGNOSIS.md`.
+- `6a067588e20c` code checkpoint: Native RC QA **SUCCESS** <https://github.com/mehrabgsport-ui/PedalPro-Android/actions/runs/38527023417> and signed store APK build **SUCCESS** <https://github.com/mehrabgsport-ui/PedalPro-Android/actions/runs/38527023446>; signed Bazaar/Myket artifacts were generated. Follow-up touch gestures must pass CI at their newer HEAD separately.
+- User screenshots are from the running Android app, **not an independently exported canonical Web 4.7.46 source**. Exact pixel/UI states and real map tile/gesture response remain unverified on device. Do not close Phase 5/8 prematurely and do not merge/publish without approval.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
