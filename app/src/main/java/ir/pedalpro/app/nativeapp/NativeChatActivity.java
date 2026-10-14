@@ -34,11 +34,16 @@ public final class NativeChatActivity extends NativeScreenBase {
     private int replyTo;
     private int editId;
     private boolean loading;
+    private boolean pollInFlight;
+    private int roomGeneration;
+    private int privateRequestGeneration;
+    private boolean isChatVisible;
     private String mode="group";
 
     private final Runnable poll=new Runnable(){
         @Override public void run(){
-            if(!isFinishing()&&roomId>0)livePoll();
+            if(isFinishing()||!isChatVisible)return;
+            if(roomId>0)livePoll();
             main.postDelayed(this,3000);
         }
     };
@@ -111,13 +116,18 @@ public final class NativeChatActivity extends NativeScreenBase {
 
     private void openGroup(){
         JSONObject group=boot==null?null:boot.optJSONObject("group");
+        roomGeneration++;
         roomId=group==null?0:group.optInt("id",0);mode="group";lastId=0;messages=new JSONArray();
+        loading=false;
+        pollInFlight=false;
+        if(messagesHost!=null)messagesHost.removeAllViews();
         setSubtitle(group==null?"چت گروهی":group.optString("title","چت گروهی"),GREEN);
         loadMessages(true);
     }
 
     private void openPrivate(int userId){
         if(userId<=0)return;
+        final int request=++privateRequestGeneration;
         setSubtitle("در حال بازکردن گفتگوی خصوصی…",MUTED);
         io.execute(()->{
             try{
@@ -126,12 +136,17 @@ public final class NativeChatActivity extends NativeScreenBase {
                 JSONObject room=d.optJSONObject("room"),other=d.optJSONObject("other");
                 int rid=room==null?0:room.optInt("id",0);
                 main.post(()->{
+                    if(request!=privateRequestGeneration)return;
                     if(rid<=0){toast("گفتگو ایجاد نشد.");return;}
+                    roomGeneration++;
                     roomId=rid;mode="private";lastId=0;messages=new JSONArray();
+                    loading=false;
+                    pollInFlight=false;
+                    if(messagesHost!=null)messagesHost.removeAllViews();
                     setSubtitle(other==null?"گفتگوی خصوصی":other.optString("display_name","گفتگوی خصوصی"),GREEN);
                     loadMessages(true);
                 });
-            }catch(Exception e){main.post(()->toast(e.getMessage()));}
+            }catch(Exception e){main.post(()->{if(request==privateRequestGeneration)toast(e.getMessage());});}
         });
     }
 
@@ -153,31 +168,70 @@ public final class NativeChatActivity extends NativeScreenBase {
     private void loadMessages(boolean full){
         if(roomId<=0||loading||messagesHost==null)return;
         loading=true;
-        long after=full?0:lastId;
+        final int selectedRoom=roomId;
+        final int generation=roomGeneration;
+        final long after=full?0:lastId;
         io.execute(()->{
             try{
-                Map<String,Object> q=new HashMap<>();q.put("room_id",roomId);q.put("after",after);q.put("limit",full?160:80);
+                Map<String,Object> q=new HashMap<>();
+                q.put("room_id",selectedRoom);
+                q.put("after",after);
+                q.put("limit",full?160:80);
                 JSONObject d=api.get("chat_messages",q);
                 JSONArray items=d.optJSONArray("items");
-                if(full)messages=new JSONArray();
-                if(items!=null)for(int i=0;i<items.length();i++){JSONObject m=items.optJSONObject(i);if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}}
-                JSONArray receipts=d.optJSONArray("receipts");mergeReceipts(receipts);
-                main.post(this::renderMessages);
-            }catch(Exception e){main.post(()->{if(full){messagesHost.removeAllViews();messagesHost.addView(text("دریافت پیام‌ها انجام نشد: "+e.getMessage(),11,false,RED));}});}
-            finally{loading=false;}
+                JSONArray receipts=d.optJSONArray("receipts");
+                main.post(()->{
+                    if(generation!=roomGeneration||selectedRoom!=roomId)return;
+                    loading=false;
+                    if(full){messages=new JSONArray();lastId=0;}
+                    if(items!=null)for(int i=0;i<items.length();i++){
+                        JSONObject m=items.optJSONObject(i);
+                        if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}
+                    }
+                    mergeReceipts(receipts);
+                    renderMessages();
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    if(generation!=roomGeneration||selectedRoom!=roomId)return;
+                    loading=false;
+                    if(full){
+                        messagesHost.removeAllViews();
+                        messagesHost.addView(text("دریافت پیام‌ها انجام نشد: "+e.getMessage(),11,false,RED));
+                    }
+                });
+            }
         });
     }
 
     private void livePoll(){
-        if(roomId<=0||loading)return;
+        if(roomId<=0||loading||pollInFlight)return;
+        final int selectedRoom=roomId;
+        final int generation=roomGeneration;
+        final long after=lastId;
+        pollInFlight=true;
         io.execute(()->{
             try{
-                JSONObject d=api.post("chat_live",new JSONObject().put("room_id",roomId).put("after",lastId).put("typing",false));
+                JSONObject d=api.post("chat_live",new JSONObject()
+                        .put("room_id",selectedRoom).put("after",after).put("typing",false));
                 JSONArray items=d.optJSONArray("items");
-                if(items!=null)for(int i=0;i<items.length();i++){JSONObject m=items.optJSONObject(i);if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}}
-                JSONObject live=d.optJSONObject("live");if(live!=null)mergeReceipts(live.optJSONArray("receipts"));
-                main.post(this::renderMessages);
+                JSONObject live=d.optJSONObject("live");
+                JSONArray receipts=live==null?null:live.optJSONArray("receipts");
+                main.post(()->{
+                    if(generation!=roomGeneration||selectedRoom!=roomId||loading)return;
+                    if(items!=null)for(int i=0;i<items.length();i++){
+                        JSONObject m=items.optJSONObject(i);
+                        if(m!=null){messages.put(m);lastId=Math.max(lastId,m.optLong("id",0));}
+                    }
+                    mergeReceipts(receipts);
+                    renderMessages();
+                });
             }catch(Exception ignored){}
+            finally{
+                main.post(()->{
+                    if(generation==roomGeneration&&selectedRoom==roomId)pollInFlight=false;
+                });
+            }
         });
     }
 
@@ -249,23 +303,58 @@ public final class NativeChatActivity extends NativeScreenBase {
     private void sendMessage(Button send,Button cancel){
         String body=input.getText().toString().trim();if(body.isBlank()||roomId<=0)return;
         send.setEnabled(false);
+        final int selectedRoom=roomId;
+        final int generation=roomGeneration;
         int rid=replyTo,eid=editId;
         io.execute(()->{
             try{
                 if(eid>0)api.post("chat_edit_message",new JSONObject().put("id",eid).put("body",body));
-                else api.post("chat_send",new JSONObject().put("room_id",roomId).put("body",body).put("reply_to_id",rid).put("client_token",UUID.randomUUID().toString()));
-                main.post(()->{input.setText("");replyTo=0;editId=0;composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);send.setEnabled(true);lastId=0;loadMessages(true);});
-            }catch(Exception e){main.post(()->{send.setEnabled(true);toast(e.getMessage());});}
+                else api.post("chat_send",new JSONObject().put("room_id",selectedRoom).put("body",body).put("reply_to_id",rid).put("client_token",UUID.randomUUID().toString()));
+                main.post(()->{
+                    send.setEnabled(true);
+                    if(generation!=roomGeneration||selectedRoom!=roomId)return;
+                    input.setText("");replyTo=0;editId=0;
+                    composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);
+                    lastId=0;loadMessages(true);
+                });
+            }catch(Exception e){main.post(()->{
+                send.setEnabled(true);
+                if(generation==roomGeneration&&selectedRoom==roomId)toast(e.getMessage());
+            });}
         });
     }
 
     private void deleteMessage(int id){
         if(id<=0)return;
+        final int selectedRoom=roomId;
+        final int generation=roomGeneration;
         io.execute(()->{
-            try{api.post("chat_delete_message",new JSONObject().put("id",id));main.post(()->{lastId=0;loadMessages(true);});}
-            catch(Exception e){main.post(()->toast(e.getMessage()));}
+            try{api.post("chat_delete_message",new JSONObject().put("id",id));main.post(()->{
+                if(generation!=roomGeneration||selectedRoom!=roomId)return;
+                lastId=0;loadMessages(true);
+            });}
+            catch(Exception e){main.post(()->{
+                if(generation==roomGeneration&&selectedRoom==roomId)toast(e.getMessage());
+            });}
         });
     }
 
-    @Override protected void onDestroy(){main.removeCallbacks(poll);super.onDestroy();}
+    @Override protected void onResume(){
+        super.onResume();
+        isChatVisible=true;
+        if(messagesHost!=null){main.removeCallbacks(poll);main.postDelayed(poll,3000);}
+    }
+
+    @Override protected void onPause(){
+        isChatVisible=false;
+        main.removeCallbacks(poll);
+        super.onPause();
+    }
+
+    @Override protected void onDestroy(){
+        roomGeneration++;
+        privateRequestGeneration++;
+        main.removeCallbacks(poll);
+        super.onDestroy();
+    }
 }
