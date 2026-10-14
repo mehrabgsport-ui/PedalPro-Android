@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Structural regression guards for the Native UI migration.
+# This is not visual/pixel QA and does not verify Web 4.7.46 screenshots.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NATIVE="$ROOT/app/src/main/java/ir/pedalpro/app/nativeapp"
+MANIFEST="$ROOT/app/src/main/AndroidManifest.xml"
+failed=0
+
+pass() { printf 'PASS %s\n' "$1"; }
+fail() { printf 'FAIL %s\n' "$1" >&2; failed=1; }
+check_file() {
+  if [[ -f "$NATIVE/$1" ]]; then pass "file $1"; else fail "missing $1"; fi
+}
+expect() {
+  local file="$1" pattern="$2" message="$3"
+  if grep -Fq -- "$pattern" "$file"; then pass "$message"; else fail "$message"; fi
+}
+for file in \
+  NativeMainActivity.java NativeScreenBase.java NativeRideDetailActivity.java \
+  LowPowerRideActivity.java NativeLiveNavigationActivity.java NativeSafetyActivity.java \
+  NativeRidePhotoController.java NativeRidePrivacyDialog.java NativeSensorsActivity.java \
+  NativeAdvancedActivity.java NativeSocialActivity.java NativeHeatmapActivity.java \
+  NativeSegmentLeaderboardActivity.java NativeSiteSettingsActivity.java \
+  NativeAppReleaseAdminController.java NativeFcmAdminController.java \
+  PedalIconView.java PedalActionView.java
+do
+  check_file "$file"
+done
+
+if grep -RnE 'new[[:space:]]+WebView[[:space:]]*\(|import[[:space:]]+android\.webkit\.WebView|android\.webkit\.WebView[[:space:]]*\(' "$NATIVE" --include='*.java'; then
+  fail "WebView reference in Native source"
+else
+  pass "Native sources have no instantiated WebView"
+fi
+
+expect "$MANIFEST" 'android:name=".nativeapp.NativeMainActivity"' "Native launcher declaration"
+expect "$MANIFEST" 'android:name=".nativeapp.LowPowerRideActivity"' "OLED registered"
+expect "$MANIFEST" 'android:name=".nativeapp.NativeRideDetailActivity"' "Ride details registered"
+expect "$MANIFEST" 'android:name=".nativeapp.NativeSiteSettingsActivity"' "Native admin registered"
+expect "$NATIVE/NativeMainActivity.java" 'EXTRA_BASE_SECONDS, displayedRideSeconds()' "OLED receives current display clock"
+expect "$NATIVE/NativeMainActivity.java" 'if(requestCode==REQ_LOW_POWER)' "OLED result handled"
+expect "$NATIVE/LowPowerRideActivity.java" 'EXTRA_RESULT_PAUSED' "OLED returns pause UI state"
+expect "$NATIVE/LowPowerRideActivity.java" 'EXTRA_RESULT_SECONDS' "OLED returns visible elapsed time"
+expect "$NATIVE/PedalIconView.java" 'case HEADING:' "Native heading icon"
+expect "$NATIVE/PedalIconView.java" 'case HEART:' "Native Kudos icon"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'PedalIconView.Icon.HEADING' "Live/group navigation native heading"
+expect "$NATIVE/NativeSafetyActivity.java" 'api.post("pp_beacon_create"' "Beacon backend action preserved"
+expect "$NATIVE/NativeSafetyActivity.java" 'api.post("pp_sos_start"' "SOS backend action preserved"
+expect "$NATIVE/NativeRideDetailActivity.java" 'api.get("ride_details",q)' "Ride details backend action preserved"
+expect "$NATIVE/NativeSocialActivity.java" 'api.post("pp_follow_toggle"' "Follow backend action preserved"
+expect "$NATIVE/NativeSocialActivity.java" 'api.post("pp_kudos_toggle"' "Kudos backend action preserved"
+expect "$NATIVE/NativeAdvancedActivity.java" 'pp_segment_create_from_ride' "Segment action preserved"
+expect "$NATIVE/NativeAdvancedActivity.java" 'pp_route_pack' "Offline pack action preserved"
+expect "$NATIVE/NativeMainActivity.java" 'i.putExtra("section", "sms")' "Full SMS admin entry"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'load("sms".equals(requested) ? "sms" : "general")' "SMS admin deep entry"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeAppReleaseAdminController' "Native release manager wired"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'new NativeFcmAdminController' "Native FCM manager wired"
+
+if [[ "$failed" -ne 0 ]]; then
+  printf 'Native parity structural guards FAILED.\n' >&2
+  exit 1
+fi
+printf 'Native parity structural guards passed. Build/device and source-reference QA remain separate gates.\n'
