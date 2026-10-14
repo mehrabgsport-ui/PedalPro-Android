@@ -204,6 +204,8 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     public void appendPoints(JSONArray rows){overlay.appendPoints(rows);}
     public void setCurrent(double lat,double lng){overlay.setCurrent(lat,lng);}
     public void setTarget(double lat,double lng){overlay.setTarget(lat,lng);}
+    public void setNavigationRoute(JSONArray rows){overlay.setNavigationRoute(rows);}
+    public void clearNavigationRoute(){overlay.clearNavigationRoute();}
     public void clearTarget(){overlay.clearTarget();}
     public int pointCount(){return overlay.pointCount();}
 }
