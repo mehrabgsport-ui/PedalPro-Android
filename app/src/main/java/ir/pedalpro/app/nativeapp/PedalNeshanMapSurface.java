@@ -158,21 +158,9 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     }
 
     private void applySdkNavigationCamera(){
-        if(neshanMap==null)return;
-        boolean follow=overlay.isNavigationMode();
-        if(follow!=lastSdkNavigationMode){
-            // Official Neshan Android MapView: tilt=90 is top-down;
-            // a ~55 degree camera creates a readable navigation perspective.
-            setSdkCameraFloat("setTilt",follow?55f:90f);
-            lastSdkNavigationMode=follow;
-        }
-        float bearing=follow&&overlay.isHeadingUpEnabled()&&overlay.hasHeadingDegrees()
-                ?overlay.getHeadingDegrees():0f;
-        if(!Float.isFinite(lastSdkBearing)||
-                Math.abs(((bearing-lastSdkBearing+540f)%360f)-180f)>1.2f){
-            setSdkCameraFloat("setBearing",bearing);
-            lastSdkBearing=bearing;
-        }
+        if(sdkBridge!=null)
+            sdkBridge.setNavigation(overlay.isNavigationMode(),overlay.isHeadingUpEnabled(),
+                    overlay.getHeadingDegrees(),overlay.hasHeadingDegrees());
     }
 
     private static void invoke(Object obj,String name,boolean value) {
@@ -297,7 +285,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
 
     public void setHeadingDegrees(float bearing){
         overlay.setHeadingDegrees(bearing);
-        if(neshanMap!=null)applySdkNavigationCamera();
+        if(sdkBridge!=null)applySdkNavigationCamera();
     }
 
     public boolean isNeshanEnabled(){return sdkBridge!=null;}
