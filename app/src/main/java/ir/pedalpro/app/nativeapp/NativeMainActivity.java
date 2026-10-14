@@ -2878,107 +2878,537 @@ public final class NativeMainActivity extends Activity {
 
     private void showProfileEditor() {
         currentPage = "profile";
-        if (!signedIn()) { showLogin(); return; }
+        if (!signedIn()) { showAuthDialog("login"); return; }
         selectNav(null);
         content.removeAllViews();
+
         JSONObject user = bootstrap.optJSONObject("user");
         if (user == null) return;
+        boolean admin = bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1;
 
-        addHero("ویرایش پروفایل", "اطلاعات حساب و تأیید شماره تماس");
+        addHero("پروفایل من", "");
 
-        LinearLayout identity=glassCard(24);
-        ImageView avatar=new ImageView(this);
+        LinearLayout identity = glassCard(24);
+        LinearLayout profileHead = new LinearLayout(this);
+        profileHead.setOrientation(LinearLayout.HORIZONTAL);
+        profileHead.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        profileHead.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        ImageView avatar = new ImageView(this);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatar.setClipToOutline(true);
-        avatar.setBackground(roundRect(Color.TRANSPARENT,44,Color.argb(100,245,249,252)));
-        RemoteImageLoader.load(this,avatar,user.optString("avatar_path",""),R.drawable.pedalpro_app_icon);
-        LinearLayout avWrap=new LinearLayout(this);avWrap.setGravity(Gravity.CENTER);avWrap.addView(avatar,new LinearLayout.LayoutParams(dp(88),dp(88)));
-        identity.addView(avWrap);
-        PedalActionView pickAvatar=action(PedalIconView.Icon.EDIT,"تغییر تصویر پروفایل",PedalActionView.Style.OUTLINE);
-        pickAvatar.setOnClickListener(v->pickImage(REQ_PROFILE_AVATAR));
-        identity.addView(pickAvatar,fullActionLp(50));
-        content.addView(identity,cardLp());
+        avatar.setBackground(roundRect(Color.TRANSPARENT, 44, Color.argb(100, 245, 249, 252)));
+        RemoteImageLoader.load(this, avatar, user.optString("avatar_path", ""), R.drawable.pedalpro_app_icon);
+        profileHead.addView(avatar, new LinearLayout.LayoutParams(dp(88), dp(88)));
 
-        LinearLayout box = glassCard(24);
-        EditText name = input("نام نمایشی"); name.setText(user.optString("display_name", ""));
-        EditText age = input("سن"); age.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); age.setText(user.optString("age", ""));
-        EditText height = input("قد (cm)"); height.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); height.setText(user.optString("height_cm", ""));
-        EditText weight = input("وزن (kg)"); weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); weight.setText(user.optString("weight_kg", ""));
-        EditText bio = input("درباره من"); bio.setSingleLine(false); bio.setMinLines(3); bio.setText(user.optString("bio", ""));
-        EditText instagram=input("Instagram");instagram.setText(user.optString("instagram_profile",""));
-        EditText telegram=input("Telegram");telegram.setText(user.optString("telegram_profile",""));
-        EditText eitaa=input("Eitaa");eitaa.setText(user.optString("eitaa_profile",""));
-        EditText bale=input("Bale");bale.setText(user.optString("bale_profile",""));
-        EditText strava=input("Strava");strava.setText(user.optString("strava_profile",""));
-        EditText relive=input("Relive");relive.setText(user.optString("relive_profile",""));
-        CheckBox publicProfile = new CheckBox(this);
-        publicProfile.setText("پروفایل عمومی"); publicProfile.setTextColor(TEXT); publicProfile.setChecked(user.optInt("profile_public", 1) == 1);
+        LinearLayout who = new LinearLayout(this);
+        who.setOrientation(LinearLayout.VERTICAL);
+        who.setGravity(Gravity.END);
+        who.addView(text(user.optString("display_name", "عضو"), 19, true, TEXT));
+        if (!user.optString("username", "").isBlank()) who.addView(text("@" + user.optString("username"), 11, false, MUTED));
+        TextView verification = text(
+                (!user.optString("phone_verified_at", "").isBlank() || user.optInt("phone_verified", 0) == 1) ? "شماره تلفن تأیید شده" : "شماره تلفن تأیید نشده",
+                11, true,
+                (!user.optString("phone_verified_at", "").isBlank() || user.optInt("phone_verified", 0) == 1) ? GREEN : ORANGE);
+        verification.setPadding(0, dp(4), 0, 0);
+        who.addView(verification);
+        LinearLayout.LayoutParams whoLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        whoLp.setMargins(dp(14), 0, 0, 0);
+        profileHead.addView(who, whoLp);
+        identity.addView(profileHead);
 
-        PedalActionView save = action(PedalIconView.Icon.DETAILS,"ذخیره پروفایل",PedalActionView.Style.PRIMARY);
-        box.addView(name);box.addView(age);box.addView(height);box.addView(weight);box.addView(bio);box.addView(instagram);box.addView(telegram);box.addView(eitaa);box.addView(bale);box.addView(strava);box.addView(relive);box.addView(publicProfile);box.addView(save,fullActionLp(54));
-        content.addView(box, cardLp());
+        PedalActionView pickAvatar = action(PedalIconView.Icon.EDIT, "تغییر تصویر پروفایل", PedalActionView.Style.OUTLINE);
+        pickAvatar.setOnClickListener(v -> pickImage(REQ_PROFILE_AVATAR));
+        identity.addView(pickAvatar, fullActionLp(50));
+        content.addView(identity, cardLp());
 
-        save.setOnClickListener(v -> {
-            save.setEnabled(false);
+        LinearLayout phoneCard = glassCard(24);
+        phoneCard.addView(text("تأیید شماره تلفن", 17, true, TEXT));
+        String savedPhone = user.optString("phone", "");
+        boolean verified = !user.optString("phone_verified_at", "").isBlank() || user.optInt("phone_verified", 0) == 1;
+        TextView phoneState = text(
+                verified ? "شماره تأیید شده: " + savedPhone : "شماره هنوز تأیید نشده است.",
+                11, true, verified ? GREEN : ORANGE);
+        phoneState.setPadding(0, dp(5), 0, dp(4));
+        phoneCard.addView(phoneState);
+
+        EditText phone = input("شماره موبایل");
+        phone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        phone.setText(savedPhone);
+        EditText code = input("کد تأیید");
+        code.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        phoneCard.addView(phone);
+        phoneCard.addView(code);
+
+        LinearLayout phoneActions = new LinearLayout(this);
+        phoneActions.setOrientation(LinearLayout.HORIZONTAL);
+        phoneActions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalActionView sendCode = action(PedalIconView.Icon.CHAT, "ارسال کد", PedalActionView.Style.OUTLINE);
+        PedalActionView verify = action(PedalIconView.Icon.DETAILS, "تأیید کد", PedalActionView.Style.PRIMARY);
+        phoneActions.addView(sendCode, new LinearLayout.LayoutParams(0, dp(50), 1f));
+        LinearLayout.LayoutParams verifyLp = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        verifyLp.setMargins(dp(8), 0, 0, 0);
+        phoneActions.addView(verify, verifyLp);
+        phoneCard.addView(phoneActions);
+
+        if (admin) {
+            PedalActionView manual = action(PedalIconView.Icon.EDIT, "ثبت دستی شماره مدیر", PedalActionView.Style.OUTLINE);
+            manual.setOnClickListener(v -> saveProfilePhoneManual(phone, manual));
+            phoneCard.addView(manual, fullActionLp(48));
+        }
+
+        TextView phoneNote = text("شماره موبایل برای کاربران عادی قابل مشاهده نیست.", 11, false, MUTED);
+        phoneNote.setPadding(0, dp(8), 0, 0);
+        phoneCard.addView(phoneNote);
+        content.addView(phoneCard, cardLp());
+
+        sendCode.setOnClickListener(v -> {
+            String p = JalaliDate.en(phone.getText().toString().trim());
+            if (p.isBlank()) { toast("شماره موبایل را وارد کنید."); return; }
+            sendCode.setEnabled(false);
             io.execute(() -> {
                 try {
-                    api.post("profile_save", new JSONObject()
-                            .put("display_name", name.getText().toString().trim())
-                            .put("age", JalaliDate.en(age.getText().toString().trim()))
-                            .put("height_cm", JalaliDate.en(height.getText().toString().trim()))
-                            .put("weight_kg", JalaliDate.en(weight.getText().toString().trim()))
-                            .put("bio", bio.getText().toString().trim())
-                            .put("profile_public", publicProfile.isChecked())
-                            .put("instagram_profile", instagram.getText().toString().trim())
-                            .put("telegram_profile", telegram.getText().toString().trim())
-                            .put("eitaa_profile", eitaa.getText().toString().trim())
-                            .put("bale_profile", bale.getText().toString().trim())
-                            .put("strava_profile", strava.getText().toString().trim())
-                            .put("relive_profile", relive.getText().toString().trim()));
-                    if(pendingProfileAvatarUri!=null){
-                        java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();fields.put("kind","avatar");
-                        api.postMultipart("profile_image_upload",fields,pendingProfileAvatarUri,"photo","avatar.jpg",getContentResolver().getType(pendingProfileAvatarUri));
-                        pendingProfileAvatarUri=null;
-                    }
-                    bootstrap = api.bootstrap(); activeRide = bootstrap.optJSONObject("my_active_ride");
-                    main.post(() -> { toast("پروفایل ذخیره شد."); showMe(); });
+                    api.post("profile_phone_send", new JSONObject().put("phone", p));
+                    main.post(() -> {
+                        sendCode.setEnabled(true);
+                        code.requestFocus();
+                        toast("کد تأیید ارسال شد؛ AutoFill فعال است");
+                    });
                 } catch (Exception e) {
-                    main.post(() -> { save.setEnabled(true); showInlineMessage("ذخیره پروفایل انجام نشد",e.getMessage(),RED); });
+                    main.post(() -> { sendCode.setEnabled(true); toast(e.getMessage()); });
                 }
             });
         });
 
-        LinearLayout phoneCard=glassCard(24);
-        phoneCard.addView(text("تأیید شماره تلفن",17,true,TEXT));
-        String savedPhone=user.optString("phone","");
-        boolean verified=!user.optString("phone_verified_at","").isBlank()||user.optInt("phone_verified",0)==1;
-        TextView phoneState=text(verified?"شماره تأیید شده":"شماره هنوز تأیید نشده است.",11,true,verified?GREEN:ORANGE);
-        phoneCard.addView(phoneState);
-        EditText phone=input("شماره موبایل");phone.setText(savedPhone);
-        EditText code=input("کد تأیید");code.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        PedalActionView sendCode=action(PedalIconView.Icon.CHAT,"ارسال کد",PedalActionView.Style.OUTLINE);
-        PedalActionView verify=action(PedalIconView.Icon.DETAILS,"تأیید کد",PedalActionView.Style.PRIMARY);
-        phoneCard.addView(phone);phoneCard.addView(code);phoneCard.addView(sendCode,fullActionLp(50));phoneCard.addView(verify,fullActionLp(52));
-        content.addView(phoneCard,cardLp());
-
-        sendCode.setOnClickListener(v->{
-            String p=JalaliDate.en(phone.getText().toString().trim()); if(p.isBlank()){showInlineMessage("شماره نامعتبر","شماره موبایل را وارد کنید.",RED);return;}
-            sendCode.setEnabled(false);io.execute(()->{
-                try{api.post("profile_phone_send",new JSONObject().put("phone",p));main.post(()->{sendCode.setEnabled(true);showInlineMessage("کد ارسال شد","کد تأیید به شماره واردشده ارسال شد.",GREEN);});}
-                catch(Exception e){main.post(()->{sendCode.setEnabled(true);showInlineMessage("ارسال انجام نشد",e.getMessage(),RED);});}
+        verify.setOnClickListener(v -> {
+            String p = JalaliDate.en(phone.getText().toString().trim());
+            String otp = JalaliDate.en(code.getText().toString().trim());
+            if (p.isBlank() || otp.isBlank()) { toast("شماره و کد را وارد کنید."); return; }
+            verify.setEnabled(false);
+            io.execute(() -> {
+                try {
+                    JSONObject result = api.post("profile_phone_verify", new JSONObject().put("phone", p).put("code", otp));
+                    bootstrap = api.bootstrap();
+                    activeRide = bootstrap.optJSONObject("my_active_ride");
+                    main.post(() -> {
+                        toast("شماره تأیید شد");
+                        JSONObject invite = result.optJSONObject("bale_invite");
+                        if (invite != null && invite.optBoolean("enabled", false)
+                                && !invite.optBoolean("connected", false)
+                                && !invite.optBoolean("opted_out", false)
+                                && !invite.optString("url", "").isBlank()) {
+                            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(invite.optString("url")))); }
+                            catch (Exception ignored) {}
+                        }
+                        showProfileEditor();
+                    });
+                } catch (Exception e) {
+                    main.post(() -> { verify.setEnabled(true); toast(e.getMessage()); });
+                }
             });
         });
-        verify.setOnClickListener(v->{
-            String p=JalaliDate.en(phone.getText().toString().trim()),otp=JalaliDate.en(code.getText().toString().trim());if(p.isBlank()||otp.isBlank()){showInlineMessage("اطلاعات ناقص","شماره و کد را وارد کنید.",RED);return;}
-            verify.setEnabled(false);io.execute(()->{
-                try{api.post("profile_phone_verify",new JSONObject().put("phone",p).put("code",otp));bootstrap=api.bootstrap();main.post(()->{toast("شماره تلفن تأیید شد.");showProfileEditor();});}
-                catch(Exception e){main.post(()->{verify.setEnabled(true);showInlineMessage("تأیید انجام نشد",e.getMessage(),RED);});}
-            });
-        });
 
-        VazirmatnLoader.apply(this,content);animatePageIn();
+        LinearLayout profile = glassCard(24);
+        profile.addView(text("اطلاعات پروفایل", 17, true, TEXT));
+        EditText name = input("نام نمایشی"); name.setText(user.optString("display_name", ""));
+        EditText age = input("سن"); age.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); age.setText(user.optString("age", ""));
+        EditText height = input("قد (cm)"); height.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); height.setText(user.optString("height_cm", ""));
+        EditText weight = input("وزن (kg)"); weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); weight.setText(user.optString("weight_kg", ""));
+        EditText bio = input("درباره من"); bio.setSingleLine(false); bio.setMinLines(4); bio.setText(user.optString("bio", ""));
+        android.widget.Spinner visibility = challengeSpinner(new String[]{"عمومی", "خصوصی"}, user.optInt("profile_public", 1) == 1 ? 0 : 1);
+        profile.addView(name); profile.addView(age); profile.addView(height); profile.addView(weight); profile.addView(bio);
+        TextView publicLabel = text("نمایش پروفایل", 11, false, MUTED);
+        publicLabel.setPadding(0, dp(5), 0, 0);
+        profile.addView(publicLabel);
+        profile.addView(visibility);
+        content.addView(profile, cardLp());
+
+        LinearLayout social = glassCard(24);
+        social.addView(text("شبکه‌های اجتماعی و ورزشی", 17, true, TEXT));
+        TextView socialSub = text("لینک یا نام کاربری هر سرویس را وارد کنید تا در پروفایل شما نمایش داده شود.", 11, false, MUTED);
+        socialSub.setPadding(0, dp(4), 0, dp(5));
+        social.addView(socialSub);
+
+        EditText instagram = input("اینستاگرام"); instagram.setHint("نام کاربری یا لینک کامل"); instagram.setText(user.optString("instagram_profile", ""));
+        EditText telegram = input("تلگرام"); telegram.setHint("نام کاربری یا لینک کامل"); telegram.setText(user.optString("telegram_profile", ""));
+        EditText eitaa = input("ایتا"); eitaa.setHint("نام کاربری یا لینک کامل"); eitaa.setText(user.optString("eitaa_profile", ""));
+        EditText bale = input("بله"); bale.setHint("نام کاربری یا لینک کامل"); bale.setText(user.optString("bale_profile", ""));
+        EditText strava = input("Strava"); strava.setHint("لینک کامل پروفایل Strava"); strava.setText(user.optString("strava_profile", ""));
+        EditText relive = input("Relive"); relive.setHint("لینک کامل پروفایل Relive"); relive.setText(user.optString("relive_profile", ""));
+        social.addView(instagram); social.addView(telegram); social.addView(eitaa); social.addView(bale); social.addView(strava); social.addView(relive);
+        social.addView(text("پس از وارد کردن لینک‌ها، «ذخیره تغییرات» را بزنید.", 11, false, MUTED));
+        content.addView(social, cardLp());
+
+        PedalActionView save = action(PedalIconView.Icon.DETAILS, "ذخیره تغییرات", PedalActionView.Style.PRIMARY);
+        save.setOnClickListener(v -> saveProfileNative(
+                user, name, age, height, weight, bio, visibility,
+                instagram, telegram, eitaa, bale, strava, relive, save));
+        content.addView(save, fullActionLp(54));
+
+        TextView privacy = text("سن، قد و وزن عمومی نمایش داده نمی‌شوند. شماره موبایل نیز برای کاربران عادی قابل مشاهده نیست.", 11, false, MUTED);
+        privacy.setPadding(dp(12), dp(11), dp(12), dp(11));
+        privacy.setBackground(roundRect(Color.argb(8, 255, 255, 255), 14, Color.argb(28, 255, 255, 255)));
+        content.addView(privacy, cardLp());
+
+        renderProfileMedals(user);
+        renderProfileChallenges(user);
+
+        LinearLayout account = glassCard(24);
+        account.addView(text("حریم خصوصی و مدیریت حساب", 17, true, TEXT));
+        TextView accountInfo = text("سیاست حریم خصوصی و مسیر حذف کامل حساب برای نسخه فروشگاهی PedalPro در دسترس است.", 11, false, MUTED);
+        accountInfo.setPadding(0, dp(5), 0, dp(7));
+        account.addView(accountInfo);
+
+        LinearLayout links = new LinearLayout(this);
+        links.setOrientation(LinearLayout.HORIZONTAL);
+        links.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button policy = normalButton("سیاست حریم خصوصی");
+        policy.setOnClickListener(v -> openExternalUrl("https://pedalpro.ir/privacy.php"));
+        Button deleteWeb = normalButton("حذف حساب از وب");
+        deleteWeb.setOnClickListener(v -> openExternalUrl("https://pedalpro.ir/account-delete.php"));
+        links.addView(policy, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        LinearLayout.LayoutParams deleteWebLp = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        deleteWebLp.setMargins(dp(8), 0, 0, 0);
+        links.addView(deleteWeb, deleteWebLp);
+        account.addView(links);
+
+        EditText deletePassword = input("رمز عبور برای حذف حساب");
+        deletePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        deletePassword.setHint("برای تأیید حذف وارد کنید");
+        account.addView(deletePassword);
+
+        LinearLayout destructive = new LinearLayout(this);
+        destructive.setOrientation(LinearLayout.HORIZONTAL);
+        destructive.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button deleteAccount = normalButton("حذف دائمی حساب و داده‌ها");
+        deleteAccount.setTextColor(RED);
+        deleteAccount.setOnClickListener(v -> confirmDeleteOwnAccount(deletePassword, deleteAccount));
+        Button logout = normalButton("خروج از حساب");
+        logout.setTextColor(RED);
+        logout.setOnClickListener(v -> logoutFromProfile(logout));
+        destructive.addView(deleteAccount, new LinearLayout.LayoutParams(0, dp(50), 1f));
+        LinearLayout.LayoutParams logoutLp = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        logoutLp.setMargins(dp(8), 0, 0, 0);
+        destructive.addView(logout, logoutLp);
+        account.addView(destructive);
+        content.addView(account, cardLp());
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
+
+    private void saveProfileNative(
+            JSONObject user,
+            EditText name,
+            EditText age,
+            EditText height,
+            EditText weight,
+            EditText bio,
+            android.widget.Spinner visibility,
+            EditText instagram,
+            EditText telegram,
+            EditText eitaa,
+            EditText bale,
+            EditText strava,
+            EditText relive,
+            PedalActionView save) {
+        save.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("profile_save", new JSONObject()
+                        .put("display_name", name.getText().toString().trim())
+                        .put("age", JalaliDate.en(age.getText().toString().trim()))
+                        .put("height_cm", JalaliDate.en(height.getText().toString().trim()))
+                        .put("weight_kg", JalaliDate.en(weight.getText().toString().trim()))
+                        .put("bio", bio.getText().toString().trim())
+                        .put("profile_public", visibility.getSelectedItemPosition() == 0)
+                        .put("instagram_profile", instagram.getText().toString().trim())
+                        .put("telegram_profile", telegram.getText().toString().trim())
+                        .put("eitaa_profile", eitaa.getText().toString().trim())
+                        .put("bale_profile", bale.getText().toString().trim())
+                        .put("strava_profile", strava.getText().toString().trim())
+                        .put("relive_profile", relive.getText().toString().trim()));
+
+                if (pendingProfileAvatarUri != null) {
+                    java.util.LinkedHashMap<String, String> fields = new java.util.LinkedHashMap<>();
+                    fields.put("kind", "avatar");
+                    api.postMultipart(
+                            "profile_image_upload",
+                            fields,
+                            pendingProfileAvatarUri,
+                            "photo",
+                            "avatar.jpg",
+                            getContentResolver().getType(pendingProfileAvatarUri));
+                    pendingProfileAvatarUri = null;
+                }
+
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> { toast("پروفایل ذخیره شد"); showProfileEditor(); });
+            } catch (Exception e) {
+                main.post(() -> { save.setEnabled(true); toast(e.getMessage()); });
+            }
+        });
+    }
+
+    private void saveProfilePhoneManual(EditText phone, PedalActionView button) {
+        String p = JalaliDate.en(phone.getText().toString().trim());
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("profile_phone_manual", new JSONObject().put("phone", p));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    toast(p.isBlank() ? "شماره مدیر حذف شد" : "شماره مدیر به‌صورت دستی ثبت شد؛ هنوز تأیید پیامکی نشده است.");
+                    showProfileEditor();
+                });
+            } catch (Exception e) {
+                main.post(() -> { button.setEnabled(true); toast(e.getMessage()); });
+            }
+        });
+    }
+
+    private void renderProfileMedals(JSONObject user) {
+        JSONArray defs = bootstrap == null ? null : bootstrap.optJSONArray("medal_definitions");
+        JSONArray awards = bootstrap == null ? null : bootstrap.optJSONArray("medal_awards");
+        LinearLayout section = glassCard(24);
+        section.addView(text("مدال‌ها", 17, true, TEXT));
+        section.addView(text("مدال‌های کسب‌شده اول نمایش داده می‌شوند؛ مدال‌های قفل‌شده خاکستری‌اند.", 11, false, MUTED));
+
+        if (defs == null || defs.length() == 0) {
+            section.addView(text("مدالی تعریف نشده است.", 12, false, MUTED));
+            content.addView(section, cardLp());
+            return;
+        }
+
+        int uid = user.optInt("id", 0);
+        java.util.ArrayList<JSONObject> sorted = new java.util.ArrayList<>();
+        for (int i = 0; i < defs.length(); i++) {
+            JSONObject def = defs.optJSONObject(i);
+            if (def != null) sorted.add(def);
+        }
+        sorted.sort((a, b) -> {
+            JSONObject aa = medalAwardFor(uid, a.optInt("id", 0), awards);
+            JSONObject ba = medalAwardFor(uid, b.optInt("id", 0), awards);
+            if ((aa != null) != (ba != null)) return aa != null ? -1 : 1;
+            if (aa != null && ba != null) return ba.optString("awarded_at", "").compareTo(aa.optString("awarded_at", ""));
+            int ao = a.optInt("sort_order", 100), bo = b.optInt("sort_order", 100);
+            return ao != bo ? Integer.compare(ao, bo) : Integer.compare(a.optInt("id", 0), b.optInt("id", 0));
+        });
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        int limit = Math.min(4, sorted.size());
+        for (int i = 0; i < limit; i++) {
+            JSONObject def = sorted.get(i);
+            JSONObject award = medalAwardFor(uid, def.optInt("id", 0), awards);
+            LinearLayout medal = new LinearLayout(this);
+            medal.setOrientation(LinearLayout.VERTICAL);
+            medal.setGravity(Gravity.CENTER);
+            medal.setPadding(dp(7), dp(8), dp(7), dp(8));
+            medal.setBackground(roundRect(Color.argb(8, 255, 255, 255), 15, Color.argb(24, 255, 255, 255)));
+            medal.setAlpha(award != null ? 1f : .46f);
+            medal.setClickable(true);
+            medal.setOnClickListener(v -> showMedalDetail(def, award));
+
+            ImageView image = new ImageView(this);
+            image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            String imagePath = def.optString("image_path", "");
+            if (imagePath.isBlank()) imagePath = "assets/medals/30km.png";
+            RemoteImageLoader.load(this, image, imagePath, R.drawable.pedalpro_app_icon);
+            medal.addView(image, new LinearLayout.LayoutParams(dp(64), dp(64)));
+
+            TextView title = text(def.optString("title", "مدال"), 10, true, TEXT);
+            title.setGravity(Gravity.CENTER);
+            title.setMaxLines(2);
+            medal.addView(title);
+            TextView state = text(
+                    award != null ? "دریافت: " + JalaliDate.format(award.optString("awarded_at", ""), true)
+                            : def.optInt("is_active", 1) == 1 ? "هنوز کسب نشده" : "غیرفعال",
+                    9, false, MUTED);
+            state.setGravity(Gravity.CENTER);
+            state.setMaxLines(2);
+            medal.addView(state);
+
+            LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(0, -2, 1f);
+            if (i > 0) mlp.setMargins(dp(5), 0, 0, 0);
+            row.addView(medal, mlp);
+        }
+        section.addView(row);
+        content.addView(section, cardLp());
+    }
+
+    private JSONObject medalAwardFor(int userId, int medalId, JSONArray awards) {
+        if (awards == null) return null;
+        for (int i = 0; i < awards.length(); i++) {
+            JSONObject a = awards.optJSONObject(i);
+            if (a != null && a.optInt("user_id", 0) == userId && a.optInt("medal_id", 0) == medalId) return a;
+        }
+        return null;
+    }
+
+    private void showMedalDetail(JSONObject medal, JSONObject award) {
+        Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout box = glassCard(20);
+        box.setPadding(dp(16), dp(16), dp(16), dp(16));
+        box.addView(text(medal.optString("title", "مدال"), 20, true, TEXT));
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        String path = medal.optString("image_path", "");
+        if (path.isBlank()) path = "assets/medals/30km.png";
+        RemoteImageLoader.load(this, image, path, R.drawable.pedalpro_app_icon);
+        image.setAlpha(award != null ? 1f : .38f);
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-1, dp(160));
+        ilp.setMargins(0, dp(10), 0, dp(10));
+        box.addView(image, ilp);
+
+        box.addView(text(medal.optString("description", ""), 12, false, TEXT));
+        String criteria = medalCriteriaText(medal);
+        TextView detail = text(
+                "شرط مدال: " + criteria
+                        + "\nوضعیت: " + (award != null ? "کسب شده" : "هنوز کسب نشده")
+                        + "\nتاریخ و ساعت دریافت: " + (award != null ? JalaliDate.format(award.optString("awarded_at", ""), true) : "—")
+                        + (award != null && !award.isNull("metric_value") ? "\nمقدار ثبت‌شده هنگام دریافت: " + award.optString("metric_value") : ""),
+                12, false, TEXT);
+        detail.setPadding(dp(12), dp(11), dp(12), dp(11));
+        detail.setBackground(roundRect(Color.argb(8, 255, 255, 255), 14, Color.argb(28, 255, 255, 255)));
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, -2);
+        dlp.setMargins(0, dp(10), 0, 0);
+        box.addView(detail, dlp);
+
+        Button close = normalButton("بستن");
+        close.setOnClickListener(v -> d.dismiss());
+        box.addView(close);
+
+        d.setContentView(box);
+        d.show();
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width = WindowManager.LayoutParams.MATCH_PARENT;
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.gravity = Gravity.CENTER;
+            lp.dimAmount = .66f;
+            w.setAttributes(lp);
+            w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        VazirmatnLoader.apply(this, box);
+    }
+
+    private String medalCriteriaText(JSONObject medal) {
+        String metric = medal.optString("metric_type", "");
+        String label;
+        switch (metric) {
+            case "distance_km": label = "مسافت رکاب‌زنی (km)"; break;
+            case "calories_kcal": label = "کالری سوزانده‌شده (kcal)"; break;
+            case "ascent_m": label = "صعود تجمعی (m)"; break;
+            case "ride_count": label = "تعداد رکاب‌زنی"; break;
+            case "weight_loss_kg": label = "کاهش وزن (kg)"; break;
+            case "weight_gain_kg": label = "افزایش وزن (kg)"; break;
+            case "event_count": label = "تعداد حضور در فعالیت‌ها"; break;
+            case "challenge_count": label = "تعداد مشارکت در چالش‌ها"; break;
+            case "participation_count": label = "مجموع مشارکت فعالیت + چالش"; break;
+            default: label = metric;
+        }
+        String out = label + ": " + medal.optString("target_value", "—") + " · "
+                + (medal.optInt("window_days", 0) > 0 ? "در بازه " + medal.optInt("window_days", 0) + " روزه" : "بدون محدودیت زمانی");
+        if (!medal.optString("match_text", "").isBlank()) out += " · فیلتر: " + medal.optString("match_text");
+        return out;
+    }
+
+    private void renderProfileChallenges(JSONObject user) {
+        JSONArray challenges = bootstrap == null ? null : bootstrap.optJSONArray("challenges");
+        LinearLayout section = glassCard(24);
+
+        LinearLayout summary = new LinearLayout(this);
+        summary.setOrientation(LinearLayout.HORIZONTAL);
+        summary.setGravity(Gravity.CENTER_VERTICAL);
+        summary.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        summary.addView(text("🏆 چالش‌های من", 16, true, TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView arrow = text("⌄", 16, false, MUTED);
+        arrow.setGravity(Gravity.CENTER);
+        summary.addView(arrow, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        section.addView(summary);
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setVisibility(View.GONE);
+        int uid = user.optInt("id", 0);
+        int count = 0;
+        if (challenges != null) {
+            for (int i = 0; i < challenges.length(); i++) {
+                JSONObject ch = challenges.optJSONObject(i);
+                if (ch == null) continue;
+                if (ch.optInt("creator_user_id", 0) != uid && ch.optInt("joined_by_me", 0) != 1) continue;
+                Button b = normalButton(ch.optString("title", "چالش"));
+                b.setOnClickListener(v -> showChallengeDetail(ch));
+                body.addView(b);
+                count++;
+            }
+        }
+        if (count == 0) body.addView(text("هنوز در هیچ چالشی عضو نشده‌اید.", 12, false, MUTED));
+        summary.setClickable(true);
+        summary.setOnClickListener(v -> {
+            boolean open = body.getVisibility() != View.VISIBLE;
+            body.setVisibility(open ? View.VISIBLE : View.GONE);
+            arrow.setText(open ? "⌃" : "⌄");
+        });
+        section.addView(body);
+        content.addView(section, cardLp());
+    }
+
+    private void openExternalUrl(String url) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch (Exception e) { toast(e.getMessage()); }
+    }
+
+    private void confirmDeleteOwnAccount(EditText password, Button button) {
+        String p = password.getText().toString();
+        if (p.isBlank()) { toast("رمز عبور را برای تأیید حذف حساب وارد کنید."); return; }
+        new android.app.AlertDialog.Builder(this)
+                .setMessage("هشدار: حساب، مسیرهای GPS، تصاویر، پیام‌ها و اطلاعات شخصی شما حذف می‌شوند و قابل بازگشت نیستند. ادامه می‌دهید؟")
+                .setPositiveButton("حذف دائمی", (dialog, which) -> deleteOwnAccount(p, button))
+                .setNegativeButton("انصراف", null)
+                .show();
+    }
+
+    private void deleteOwnAccount(String password, Button button) {
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("account_delete_self", new JSONObject().put("password", password));
+                session.clear();
+                bootstrap = null;
+                activeRide = null;
+                main.post(() -> {
+                    toast("حساب و داده‌های شخصی شما حذف شد.");
+                    refreshBootstrap(true);
+                });
+            } catch (Exception e) {
+                main.post(() -> { button.setEnabled(true); toast(e.getMessage()); });
+            }
+        });
+    }
+
+    private void logoutFromProfile(Button button) {
+        button.setEnabled(false);
+        io.execute(() -> {
+            try { api.logout(); }
+            catch (Exception ignored) { session.clear(); }
+            main.post(() -> {
+                bootstrap = null;
+                activeRide = null;
+                refreshBootstrap(true);
+            });
+        });
+    }
 
     private void showBikes() {
         currentPage = "bikes";
