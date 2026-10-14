@@ -964,8 +964,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
         long dtMs = current.getTime() - lastAcceptedLocation.getTime();
         if (dtMs <= 0L) return false;
         if (dtMs > 45000L) {
-            return lastAcceptedLocation.distanceTo(current) <=
-                    Math.max(120d, Math.min(350d, dtMs / 1000d * 4.0d));
+            // A long GPS blackout must not deadlock an otherwise valid ride.
+            // Reconnect only when the average travel speed across the gap is plausible.
+            double gapKmh = lastAcceptedLocation.distanceTo(current) /
+                    (dtMs / 1000d) * 3.6d;
+            return gapKmh <= Math.min(45.0,
+                    Math.max(35.0,prefs.getFloat("max_speed_kmh",65f)));
         }
 
         double meters = lastAcceptedLocation.distanceTo(current);
