@@ -57,10 +57,7 @@ abstract class NativeScreenBase extends Activity {
     private PedalActionView headerAccount;
     private View headerAdminSettings;
     private TextView rideDockLabel;
-    private TextView serverStatusLabel;
-    private View serverStatusDot;
     private boolean signedIn=false;
-    private boolean serverOnline=false;
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -129,12 +126,6 @@ abstract class NativeScreenBase extends Activity {
         root.addView(buildWebBottomNav(),new LinearLayout.LayoutParams(-1,dp(116)));
 
         frame.addView(root,new FrameLayout.LayoutParams(-1,-1));
-
-        FrameLayout.LayoutParams serverLp=new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,dp(36),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-        serverLp.bottomMargin=dp(122);
-        frame.addView(buildServerStatus(),serverLp);
-
         setContentView(frame);
         onScreenReady();
         refreshChrome();
@@ -185,8 +176,8 @@ abstract class NativeScreenBase extends Activity {
         nav.setPadding(dp(10),dp(16),dp(10),dp(10));
         nav.setBackground(bottomGradient());
 
-        nav.addView(bottomItem(PedalIconView.Icon.HOME,"خانه",()->openMain("dashboard")),bottomWeight(1f,90));
-        nav.addView(bottomItem(PedalIconView.Icon.CALENDAR,"فعالیت‌ها",()->openMain("activities")),bottomWeight(1f,90));
+        nav.addView(bottomItem("⌂","خانه",()->openMain("dashboard")),bottomWeight(1f,90));
+        nav.addView(bottomItem("🗓️","فعالیت‌ها",()->openMain("activities")),bottomWeight(1f,90));
 
         LinearLayout center=new LinearLayout(this);
         center.setGravity(Gravity.CENTER);
@@ -196,12 +187,12 @@ abstract class NativeScreenBase extends Activity {
         center.addView(ride,new LinearLayout.LayoutParams(dp(106),dp(106)));
         nav.addView(center,new LinearLayout.LayoutParams(0,dp(106),1.12f));
 
-        nav.addView(bottomItem(PedalIconView.Icon.ROUTE,"مسیرها",()->openMain("routes")),bottomWeight(1f,90));
-        nav.addView(bottomItem(PedalIconView.Icon.USER,"من",()->openMain("me")),bottomWeight(1f,90));
+        nav.addView(bottomItem("📍","مسیرها",()->openMain("routes")),bottomWeight(1f,90));
+        nav.addView(bottomItem("👤","من",()->openMain("me")),bottomWeight(1f,90));
         return nav;
     }
 
-    private View bottomItem(PedalIconView.Icon iconType,String label,Runnable run){
+    private View bottomItem(String glyph,String label,Runnable run){
         LinearLayout host=new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
@@ -210,7 +201,9 @@ abstract class NativeScreenBase extends Activity {
         host.setFocusable(true);
         host.setContentDescription(label);
 
-        PedalIconView icon=new PedalIconView(this,iconType,Color.rgb(238,248,255));
+        TextView icon=text(glyph,24,false,Color.rgb(238,248,255));
+        icon.setGravity(Gravity.CENTER);
+        icon.setIncludeFontPadding(false);
         host.addView(icon,new LinearLayout.LayoutParams(dp(30),dp(30)));
 
         TextView name=text(label,11,true,Color.rgb(238,248,255));
@@ -280,54 +273,14 @@ abstract class NativeScreenBase extends Activity {
                 if(ride.isBlank())ride="شروع";
                 String finalRide=ride;
                 main.post(()->{
-                    serverOnline=true;
                     signedIn=user!=null;
                     headerAccount.setLabel(signedIn?"حساب کاربری":"ورود");
                     headerAdminSettings.setVisibility(isAdmin?View.VISIBLE:View.GONE);
                     webHeader.setPadding(dp(10),dp(gap),dp(10),dp(14));
                     rideDockLabel.setText(finalRide+"\nرکاب");
-                    updateServerStatus();
                 });
-            }catch(Exception ignored){
-                main.post(()->{
-                    serverOnline=false;
-                    updateServerStatus();
-                });
-            }
+            }catch(Exception ignored){}
         });
-    }
-
-    private View buildServerStatus(){
-        LinearLayout pill=new LinearLayout(this);
-        pill.setOrientation(LinearLayout.HORIZONTAL);
-        pill.setGravity(Gravity.CENTER);
-        pill.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        pill.setPadding(dp(12),dp(7),dp(12),dp(7));
-        GradientDrawable bg=new GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(232,7,31,48),Color.argb(238,5,23,36)});
-        bg.setCornerRadius(dp(999));
-        bg.setStroke(dp(1),Color.argb(77,108,179,209));
-        pill.setBackground(bg);
-        pill.setElevation(dp(8));
-
-        serverStatusLabel=text("در حال بررسی سرور",11,false,Color.rgb(213,226,238));
-        serverStatusDot=new View(this);
-        pill.addView(serverStatusLabel);
-        LinearLayout.LayoutParams dotLp=new LinearLayout.LayoutParams(dp(8),dp(8));
-        dotLp.setMargins(dp(8),0,0,0);
-        pill.addView(serverStatusDot,dotLp);
-        updateServerStatus();
-        return pill;
-    }
-
-    private void updateServerStatus(){
-        if(serverStatusLabel==null||serverStatusDot==null)return;
-        serverStatusLabel.setText(serverOnline?"متصل به سرور":"اتصال سرور قطع — ذخیره محلی");
-        GradientDrawable dotBg=new GradientDrawable();
-        dotBg.setShape(GradientDrawable.OVAL);
-        dotBg.setColor(serverOnline?GREEN:RED);
-        serverStatusDot.setBackground(dotBg);
     }
 
     private void openMain(String page){
