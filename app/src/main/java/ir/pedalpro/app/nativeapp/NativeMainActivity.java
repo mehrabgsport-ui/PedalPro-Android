@@ -204,9 +204,7 @@ public final class NativeMainActivity extends Activity {
         super.onCreate(state);
         session = new SessionStore(this);
         api = new PedalProApiClient(this);
-        launchPage = getIntent().getStringExtra("page");
-        if (launchPage == null) launchPage = "";
-        launchEventId = getIntent().getIntExtra("event_id", 0);
+        consumeLaunchIntent(getIntent());
         cyclingSensors = new CyclingSensorManager(this, new CyclingSensorManager.Listener() {
             @Override public void onStatus(String json) { renderCyclingStatus(json); }
             @Override public void onMeasurement(String json) { renderCyclingMeasurement(json); }
@@ -280,6 +278,65 @@ public final class NativeMainActivity extends Activity {
     }
 
 
+    private void consumeLaunchIntent(Intent intent) {
+        if (intent == null) return;
+        launchPage = intent.getStringExtra("page");
+        if (launchPage == null) launchPage = "";
+        launchEventId = intent.getIntExtra("event_id", 0);
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        consumeLaunchIntent(intent);
+        if (bootstrap != null) handleLaunchPage();
+        else refreshBootstrap(true);
+    }
+
+    private void handleLaunchPage() {
+        if (launchEventId > 0) {
+            JSONObject requested = findEvent(launchEventId);
+            if (requested != null) showEventDetail(requested);
+            else showActivities();
+            launchEventId = 0;
+            launchPage = "";
+            return;
+        }
+
+        String target = launchPage == null ? "" : launchPage;
+        launchPage = "";
+        switch (target) {
+            case "activities": showActivities(); break;
+            case "routes": showRoutes(); break;
+            case "ride": showRide(); break;
+            case "me": showMe(); break;
+            case "club": showClub(); break;
+            case "challenges": showChallenges(); break;
+            case "gallery": showGalleryPage(); break;
+            case "chat": showGroupChat(); break;
+            case "ai": showAiAdvisor(); break;
+            case "performance": showPerformance(); break;
+            case "fitness": showFitness(); break;
+            case "bikes": showBikes(); break;
+            case "profile": showProfileEditor(); break;
+            case "phone-settings": showPhoneSettingsPage(); break;
+            case "app": showAppVersionPage(); break;
+            case "about": showAboutGroupPage(); break;
+            case "guide": showGuidePage(); break;
+            case "sms": showSmsPage(); break;
+            case "login":
+                showHome();
+                main.postDelayed(() -> showAuthDialog("login"), 120L);
+                break;
+            case "menu":
+                showHome();
+                main.postDelayed(this::showDrawer, 120L);
+                break;
+            case "dashboard":
+            default: showHome(); break;
+        }
+    }
+
     private void refreshBootstrap(boolean firstLaunch) {
         setTopStatus("در حال دریافت اطلاعات…", MUTED);
         io.execute(() -> {
@@ -304,21 +361,8 @@ public final class NativeMainActivity extends Activity {
                     } else {
                         setTopStatus("متصل · " + user.optString("display_name", user.optString("username", "PedalPro")), GREEN);
                     }
-                    if (firstLaunch) {
-                        if (launchEventId > 0) {
-                            JSONObject requested = findEvent(launchEventId);
-                            if (requested != null) showEventDetail(requested);
-                            else showActivities();
-                            launchEventId = 0;
-                        } else if ("activities".equals(launchPage)) {
-                            showActivities();
-                        } else if ("routes".equals(launchPage)) {
-                            showRoutes();
-                        } else {
-                            showHome();
-                        }
-                        launchPage = "";
-                    } else refreshVisibleScreen();
+                    if (firstLaunch) handleLaunchPage();
+                    else refreshVisibleScreen();
                 });
             } catch (Exception e) {
                 main.post(() -> {
