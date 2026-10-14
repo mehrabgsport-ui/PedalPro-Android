@@ -3019,6 +3019,86 @@ public final class NativeMainActivity extends Activity {
 
         addHero("پروفایل من", "");
 
+        LinearLayout pageContent = content;
+        JSONArray profileBikes = bootstrap.optJSONArray("my_bikes");
+        JSONObject primaryBike = null;
+        if (profileBikes != null) {
+            for (int i = 0; i < profileBikes.length(); i++) {
+                JSONObject b = profileBikes.optJSONObject(i);
+                if (b == null) continue;
+                if (primaryBike == null) primaryBike = b;
+                if (b.optInt("is_primary", 0) == 1) { primaryBike = b; break; }
+            }
+        }
+        String bikeSummary = "ثبت نشده";
+        if (primaryBike != null) {
+            java.util.ArrayList<String> bikeParts = new java.util.ArrayList<>();
+            String mainBike = primaryBike.optString("brand_model", "").trim();
+            if (mainBike.isBlank()) mainBike = bikeTypeLabel(primaryBike.optString("bike_type", ""));
+            if (!mainBike.isBlank()) bikeParts.add(mainBike);
+            if (!primaryBike.optString("frame_size", "").isBlank()) bikeParts.add("فریم " + primaryBike.optString("frame_size"));
+            if (!primaryBike.optString("wheel_size", "").isBlank()) bikeParts.add("چرخ " + primaryBike.optString("wheel_size"));
+            if (!bikeParts.isEmpty()) bikeSummary = android.text.TextUtils.join(" · ", bikeParts);
+        }
+
+        LinearLayout summaryCard = glassCard(24);
+        LinearLayout summaryTop = new LinearLayout(this);
+        summaryTop.setOrientation(LinearLayout.HORIZONTAL);
+        summaryTop.setGravity(Gravity.CENTER_VERTICAL);
+        summaryTop.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+        ImageView summaryAvatar = new ImageView(this);
+        summaryAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        summaryAvatar.setClipToOutline(true);
+        summaryAvatar.setBackground(roundRect(Color.rgb(10, 29, 45), 22, Color.rgb(42, 73, 99)));
+        RemoteImageLoader.load(this, summaryAvatar, user.optString("avatar_path", ""), R.drawable.pedalpro_app_icon);
+        summaryTop.addView(summaryAvatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
+
+        LinearLayout summaryWho = new LinearLayout(this);
+        summaryWho.setOrientation(LinearLayout.VERTICAL);
+        summaryWho.setGravity(Gravity.END);
+        summaryWho.addView(text(user.optString("display_name", "عضو"), 20, true, TEXT));
+        String roleLabel = "admin".equals(user.optString("role", "")) ? "مدیر" : "عضو";
+        TextView uname = text("@" + user.optString("username", "") + " · " + roleLabel, 11, false, MUTED);
+        uname.setPadding(0, dp(4), 0, 0);
+        summaryWho.addView(uname);
+        if (!user.optString("bio", "").isBlank()) {
+            TextView bioSummary = text(user.optString("bio"), 12, false, Color.rgb(196, 211, 222));
+            bioSummary.setPadding(0, dp(6), 0, 0);
+            summaryWho.addView(bioSummary);
+        }
+        LinearLayout.LayoutParams summaryWhoLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        summaryWhoLp.setMargins(dp(14), 0, 0, 0);
+        summaryTop.addView(summaryWho, summaryWhoLp);
+        summaryCard.addView(summaryTop);
+
+        String[][] facts = {
+                {"سن", user.optString("age", "").isBlank() ? "ثبت نشده" : JalaliDate.fa(user.optString("age")) + " سال"},
+                {"قد", user.optString("height_cm", "").isBlank() ? "ثبت نشده" : JalaliDate.fa(user.optString("height_cm")) + " cm"},
+                {"وزن", user.optString("weight_kg", "").isBlank() ? "ثبت نشده" : JalaliDate.fa(user.optString("weight_kg")) + " kg"},
+                {"دوچرخه", bikeSummary}
+        };
+        for (int i = 0; i < facts.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            row.addView(memberStat(facts[i][0], facts[i][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(memberStat(facts[i + 1][0], facts[i + 1][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+            rowLp.setMargins(0, dp(8), 0, 0);
+            summaryCard.addView(row, rowLp);
+        }
+
+        PedalActionView editToggle = action(PedalIconView.Icon.EDIT, "ویرایش پروفایل", PedalActionView.Style.OUTLINE);
+        summaryCard.addView(editToggle, fullActionLp(50));
+        pageContent.addView(summaryCard, cardLp());
+
+        LinearLayout editPanel = new LinearLayout(this);
+        editPanel.setOrientation(LinearLayout.VERTICAL);
+        editPanel.setVisibility(View.GONE);
+        pageContent.addView(editPanel, new LinearLayout.LayoutParams(-1, -2));
+        content = editPanel;
+
         LinearLayout identity = glassCard(24);
         LinearLayout profileHead = new LinearLayout(this);
         profileHead.setOrientation(LinearLayout.HORIZONTAL);
@@ -3063,7 +3143,7 @@ public final class NativeMainActivity extends Activity {
         phoneState.setPadding(0, dp(5), 0, dp(4));
         phoneCard.addView(phoneState);
 
-        EditText phone = input("شماره موبایل");
+        EditText phone = input("شماره جدید/شماره مدیر");
         phone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
         phone.setText(savedPhone);
         EditText code = input("کد تأیید");
@@ -3142,26 +3222,26 @@ public final class NativeMainActivity extends Activity {
         LinearLayout profile = glassCard(24);
         profile.addView(text("اطلاعات پروفایل", 17, true, TEXT));
         EditText name = input("نام نمایشی"); name.setText(user.optString("display_name", ""));
-        EditText age = input("سن"); age.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); age.setText(user.optString("age", ""));
+        EditText age = input("سن اختیاری"); age.setInputType(android.text.InputType.TYPE_CLASS_NUMBER); age.setText(user.optString("age", ""));
         EditText height = input("قد (cm)"); height.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); height.setText(user.optString("height_cm", ""));
-        EditText weight = input("وزن (kg)"); weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); weight.setText(user.optString("weight_kg", ""));
+        EditText weight = input("وزن فعلی (kg)"); weight.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL); weight.setText(user.optString("weight_kg", ""));
         EditText bio = input("درباره من"); bio.setSingleLine(false); bio.setMinLines(4); bio.setText(user.optString("bio", ""));
-        android.widget.Spinner visibility = challengeSpinner(new String[]{"عمومی", "خصوصی"}, user.optInt("profile_public", 1) == 1 ? 0 : 1);
+        android.widget.Spinner visibility = challengeSpinner(new String[]{"بله", "خیر"}, user.optInt("profile_public", 1) == 1 ? 0 : 1);
         profile.addView(name); profile.addView(age); profile.addView(height); profile.addView(weight); profile.addView(bio);
-        TextView publicLabel = text("نمایش پروفایل", 11, false, MUTED);
+        TextView publicLabel = text("پروفایل عمومی", 11, false, MUTED);
         publicLabel.setPadding(0, dp(5), 0, 0);
         profile.addView(publicLabel);
         profile.addView(visibility);
         content.addView(profile, cardLp());
 
         LinearLayout social = glassCard(24);
-        social.addView(text("شبکه‌های اجتماعی و ورزشی", 17, true, TEXT));
-        TextView socialSub = text("لینک یا نام کاربری هر سرویس را وارد کنید تا در پروفایل شما نمایش داده شود.", 11, false, MUTED);
+        social.addView(text("شبکه‌های اجتماعی و حساب‌های ورزشی", 17, true, TEXT));
+        TextView socialSub = text("لینک‌ها در پروفایل عمومی شما برای اعضا نمایش داده می‌شوند.", 11, false, MUTED);
         socialSub.setPadding(0, dp(4), 0, dp(5));
         social.addView(socialSub);
 
-        EditText instagram = input("اینستاگرام"); instagram.setHint("نام کاربری یا لینک کامل"); instagram.setText(user.optString("instagram_profile", ""));
-        EditText telegram = input("تلگرام"); telegram.setHint("نام کاربری یا لینک کامل"); telegram.setText(user.optString("telegram_profile", ""));
+        EditText instagram = input("Instagram"); instagram.setHint("نام کاربری یا لینک کامل"); instagram.setText(user.optString("instagram_profile", ""));
+        EditText telegram = input("Telegram"); telegram.setHint("نام کاربری یا لینک کامل"); telegram.setText(user.optString("telegram_profile", ""));
         EditText eitaa = input("ایتا"); eitaa.setHint("نام کاربری یا لینک کامل"); eitaa.setText(user.optString("eitaa_profile", ""));
         EditText bale = input("بله"); bale.setHint("نام کاربری یا لینک کامل"); bale.setText(user.optString("bale_profile", ""));
         EditText strava = input("Strava"); strava.setHint("لینک کامل پروفایل Strava"); strava.setText(user.optString("strava_profile", ""));
@@ -3224,7 +3304,15 @@ public final class NativeMainActivity extends Activity {
         account.addView(destructive);
         content.addView(account, cardLp());
 
-        VazirmatnLoader.apply(this, content);
+        content = pageContent;
+        editToggle.setOnClickListener(v -> {
+            boolean opening = editPanel.getVisibility() != View.VISIBLE;
+            editPanel.setVisibility(opening ? View.VISIBLE : View.GONE);
+            editToggle.setLabel(opening ? "بستن ویرایش" : "ویرایش پروفایل");
+            if (opening) editPanel.post(() -> mainScroll.smoothScrollTo(0, Math.max(0, editPanel.getTop() - dp(8))));
+        });
+
+        VazirmatnLoader.apply(this, pageContent);
         animatePageIn();
     }
 
