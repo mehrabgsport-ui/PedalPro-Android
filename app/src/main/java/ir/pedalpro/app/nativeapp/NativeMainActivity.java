@@ -134,6 +134,9 @@ public final class NativeMainActivity extends Activity {
     private String launchPage = "";
     private int launchEventId = 0;
     private PedalNeshanMapSurface activeRideRouteView;
+    private int activeRideMapRideId;
+    private long rideRouteLastFetchElapsed;
+    private int rideRouteLastFetchId;
     private FrameLayout activeRideImmersiveOverlay;
     private int pendingEventPhotoId = 0;
     private android.net.Uri pendingEditorCoverUri;
@@ -1699,9 +1702,16 @@ public final class NativeMainActivity extends Activity {
     private void showRide() {
         currentPage = "ride";
         if (!signedIn()) { showLogin(); return; }
+        // Refreshes must not discard an already rendered/loaded map: doing so
+        // disconnected in-flight tile callbacks and caused the blank screen in RC6.
+        final int shownRideId=activeRide==null?0:activeRide.optInt("id",0);
+        PedalNeshanMapSurface keepMap=shownRideId>0 && shownRideId==activeRideMapRideId
+                ?activeRideRouteView:null;
+        if(keepMap!=null && keepMap.getParent() instanceof android.view.ViewGroup)
+            ((android.view.ViewGroup)keepMap.getParent()).removeView(keepMap);
         selectNav(navRide);
         content.removeAllViews();
-        activeRideRouteView = null;
+        activeRideRouteView = keepMap;
 
         if (activeRide == null) {
             // The form already has its own heading; avoid the duplicate blank hero card.
@@ -1933,7 +1943,11 @@ public final class NativeMainActivity extends Activity {
         stats.addView(wrapMetric(rideSpeed, "km/h"), weightHeightLp(dp(100)));
         content.addView(stats, cardLp());
 
-        activeRideRouteView = new PedalNeshanMapSurface(this);
+        if(activeRideRouteView==null){
+            activeRideRouteView = new PedalNeshanMapSurface(this);
+            activeRideMapRideId=shownRideId;
+            seedDisplayMapFromLastLocation(activeRideRouteView);
+        }
         content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
         loadActiveRideRoute();
 
@@ -4996,14 +5010,38 @@ public final class NativeMainActivity extends Activity {
         }
     }
 
+    private void seedDisplayMapFromLastLocation(PedalNeshanMapSurface map){
+        if(ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)
+                !=PackageManager.PERMISSION_GRANTED)return;
+        LocationServices.getFusedLocationProviderClient(this).getLastLocation()
+                .addOnSuccessListener(this,location->{
+                    if(location==null||activeRideRouteView!=map)return;
+                    long age=System.currentTimeMillis()-location.getTime();
+                    if(age>=0L&&age<300_000L)
+                        map.setCurrent(location.getLatitude(),location.getLongitude());
+                });
+    }
+
     private void loadActiveRideRoute(){
         if(activeRideRouteView==null||activeRide==null)return;
-        int id=activeRide.optInt("id",0);if(id<=0)return;
+        final int id=activeRide.optInt("id",0);if(id<=0)return;
+        long now=SystemClock.elapsedRealtime();
+        if(rideRouteLastFetchId==id&&now-rideRouteLastFetchElapsed<20_000L)return;
+        rideRouteLastFetchElapsed=now;
+        rideRouteLastFetchId=id;
+        final PedalNeshanMapSurface view=activeRideRouteView;
         io.execute(()->{
             try{
-                java.util.LinkedHashMap<String,Object> q=new java.util.LinkedHashMap<>();q.put("ride_id",id);q.put("point_mode","nav");
-                JSONObject d=api.get("ride_details",q);JSONObject r=d.optJSONObject("ride");JSONArray pts=r==null?null:r.optJSONArray("points");
-                main.post(()->{if(activeRideRouteView!=null)activeRideRouteView.setPoints(pts);});
+                java.util.LinkedHashMap<String,Object> q=new java.util.LinkedHashMap<>();
+                q.put("ride_id",id);q.put("point_mode","nav");
+                JSONObject d=api.get("ride_details",q);
+                JSONObject r=d.optJSONObject("ride");
+                JSONArray pts=r==null?null:r.optJSONArray("points");
+                main.post(()->{
+                    if(activeRideRouteView==view&&activeRide!=null
+                            &&activeRide.optInt("id",0)==id&&pts!=null)
+                        view.setPoints(pts);
+                });
             }catch(Exception ignored){}
         });
     }
