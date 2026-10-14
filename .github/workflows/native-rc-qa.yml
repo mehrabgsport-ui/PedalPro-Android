@@ -106,7 +106,6 @@ jobs:
           gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             --stacktrace
 
       - name: Compile Neshan MapLibre adapter without publishing test key
-        if: env.NESHAN_MOBILE_API_KEY == ''
         env:
           NESHAN_MOBILE_API_KEY: CI_COMPILE_ONLY_NOT_A_REAL_MOBILE_KEY
         run: gradle :app:compileBazaarReleaseJavaWithJavac --stacktrace
