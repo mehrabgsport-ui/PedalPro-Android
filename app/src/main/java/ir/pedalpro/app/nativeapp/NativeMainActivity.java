@@ -204,6 +204,11 @@ public final class NativeMainActivity extends Activity {
                     if (activeRideRouteView != null) {
                         double lat = j.optDouble("lat", Double.NaN), lng = j.optDouble("lng", Double.NaN);
                         if (Double.isFinite(lat) && Double.isFinite(lng)) activeRideRouteView.setCurrent(lat, lng);
+                        // Location bearing is received from TrackingService, not recalculated
+                        // from noisy pixel positions or fed back into GPS recording.
+                        double course=j.optDouble("bearing",Double.NaN);
+                        if (Double.isFinite(course) && mps > 1.3)
+                            activeRideRouteView.setHeadingDegrees((float)course);
                     }
                     if (rideGps != null) {
                         rideGps.setText(acc > 0 ? "GPS فعال · دقت ±" + Math.round(acc) + " متر" : "GPS فعال");
@@ -2011,6 +2016,8 @@ public final class NativeMainActivity extends Activity {
         });
         activeRideImmersiveOverlay=immersive;
         activeRideRouteView.setFullRideMode(true);
+        // Rider-follow / heading-up camera is visual only; does not alter GPS or track.
+        activeRideRouteView.setNavigationMode(true);
         immersive.addView(activeRideRouteView,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout top=new LinearLayout(this);
