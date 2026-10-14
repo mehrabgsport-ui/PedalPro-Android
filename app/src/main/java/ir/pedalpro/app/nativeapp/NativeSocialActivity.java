@@ -124,11 +124,9 @@ public final class NativeSocialActivity extends NativeScreenBase {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setLayoutDirection(android.view.View.LAYOUT_DIRECTION_RTL);
         int rideId=x.optInt("id",0);
-        Button kudos=normal("👍 Kudos");
-        if(x.optBoolean("viewer_kudos",false)){
-            kudos.setTextColor(Color.rgb(5,40,55));
-            kudos.setBackground(round(Color.rgb(20,223,237),17,0));
-        }
+        PedalActionView kudos=new PedalActionView(this,PedalIconView.Icon.HEART,
+                x.optBoolean("viewer_kudos",false)?"Kudos ✓":"Kudos",PedalActionView.Style.OUTLINE);
+        kudos.setAccent(x.optBoolean("viewer_kudos",false)?Color.rgb(20,223,237):TEXT);
         kudos.setOnClickListener(v->toggleKudos(rideId,kudos));
         Button detail=normal("مسیر و دیدگاه‌ها");
         detail.setOnClickListener(v->openRide(rideId));
@@ -202,21 +200,16 @@ public final class NativeSocialActivity extends NativeScreenBase {
         startActivity(x);
     }
 
-    private void toggleKudos(int rideId,Button b){
+    private void toggleKudos(int rideId,PedalActionView b){
         b.setEnabled(false);
         io.execute(()->{
             try{
                 JSONObject d=api.post("pp_kudos_toggle",new JSONObject().put("ride_id",rideId));
                 main.post(()->{
                     b.setEnabled(true);
-                    b.setText("👍 Kudos");
-                    if(d.optBoolean("active")){
-                        b.setTextColor(Color.rgb(5,40,55));
-                        b.setBackground(round(Color.rgb(20,223,237),17,0));
-                    }else{
-                        b.setTextColor(TEXT);
-                        b.setBackground(round(Color.argb(18,255,255,255),17,Color.argb(46,255,255,255)));
-                    }
+                    boolean active=d.optBoolean("active");
+                    b.setLabel(active?"Kudos ✓":"Kudos");
+                    b.setAccent(active?Color.rgb(20,223,237):TEXT);
                 });
             }catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}
         });
