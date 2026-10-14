@@ -518,7 +518,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     private void renderMedals() {
         LinearLayout head = card();
         head.addView(text("مدیریت مدال‌ها", 18, true, TEXT));
-        head.addView(text("معیار، مقدار هدف، بازه زمانی و ترتیب نمایش مدال‌ها", 11, false, MUTED));
+        head.addView(text("معیار، مقدار هدف، بازه زمانی، تصویر و ترتیب نمایش مدال‌ها", 11, false, MUTED));
+        head.addView(text("آپلود مستقیم تصویر به قرارداد معتبر Backend نیاز دارد؛ فعلاً مسیر تصویر موجود در سایت قابل تنظیم است.",11,false,ORANGE));
         Button recalc = normal("محاسبه مجدد همه");
         recalc.setOnClickListener(v -> postAndReload("medals_recalculate", new JSONObject(), recalc, "مدال‌ها دوباره محاسبه شدند"));
         head.addView(recalc);
@@ -529,6 +530,13 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
             for (int i=0;i<rows.length();i++) {
                 JSONObject m = rows.optJSONObject(i); if (m == null) continue;
                 LinearLayout card = card();
+                String medalPhoto=m.optString("image_path","");
+                if(!medalPhoto.isBlank()){
+                    android.widget.ImageView photo=new android.widget.ImageView(this);
+                    photo.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+                    RemoteImageLoader.load(this,photo,medalPhoto,ir.pedalpro.app.R.drawable.pedalpro_app_icon);
+                    card.addView(photo,new LinearLayout.LayoutParams(-1,dp(82)));
+                }
                 card.addView(text(m.optString("title","مدال"), 15, true, TEXT));
                 String meta = m.optString("metric","") + " · هدف " + m.optString("target_value","") +
                         " · " + (m.optInt("is_active",1)==1 ? "فعال" : "غیرفعال") +
@@ -555,8 +563,9 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         EditText window = input("بازه زمانی (روز)؛ ۰ = بدون محدودیت");
         EditText sort = input("ترتیب نمایش"); sort.setText("100");
         EditText match = input("فیلتر عنوان (اختیاری)");
+        EditText imagePath = input("مسیر تصویر موجود در سایت (image_path)");
         EditText active = input("وضعیت: 1 فعال / 0 غیرفعال"); active.setText("1");
-        form.addView(id);form.addView(title);form.addView(desc);form.addView(metric);form.addView(target);form.addView(window);form.addView(sort);form.addView(match);form.addView(active);
+        form.addView(id);form.addView(title);form.addView(desc);form.addView(metric);form.addView(target);form.addView(window);form.addView(sort);form.addView(match);form.addView(imagePath);form.addView(active);
         Button save = primary("ذخیره مدال");
         save.setOnClickListener(v -> {
             JSONObject p = new JSONObject();
@@ -569,6 +578,9 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 p.put("window_days", intValue(window,0));
                 p.put("sort_order", intValue(sort,100));
                 p.put("match_title", match.getText().toString());
+                String image=imagePath.getText().toString().trim();
+                if(!image.isBlank()&&!image.contains("..")&&!image.startsWith("javascript:"))
+                    p.put("image_path",image);
                 p.put("is_active", intValue(active,1));
             } catch(Exception ignored){}
             postAndReload("medal_save", p, save, "مدال ذخیره شد");
