@@ -19,6 +19,7 @@ import org.maplibre.android.annotations.PolylineOptions;
 import org.maplibre.android.camera.CameraPosition;
 import org.maplibre.android.camera.CameraUpdateFactory;
 import org.maplibre.android.geometry.LatLng;
+import org.maplibre.android.geometry.LatLngBounds;
 import org.maplibre.android.gestures.MoveGestureDetector;
 import org.maplibre.android.maps.MapLibreMap;
 import org.maplibre.android.maps.MapView;
@@ -41,6 +42,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private MapLibreMap map;
     private boolean ready, destroyed, night, navigation, headingUp=true, validHeading;
     private boolean manualPan;
+    private boolean firstCamera=true;
     private float heading;
     private double lat=Double.NaN,lng=Double.NaN,goalLat=Double.NaN,goalLng=Double.NaN;
     private int zoom=17;
@@ -102,6 +104,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         if(ready&&night==enabled)return;
         night=enabled;
         ready=false;
+        firstCamera=true;
         map.setStyle(new Style.Builder().fromUri(
             STYLES+(night?"dark.json":"light.json")),style->{
                 if(destroyed)return;
@@ -136,7 +139,10 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 Math.abs(latitude)>85||Math.abs(longitude)>180)return;
         lat=latitude;lng=longitude;
         updateRiderMarker(false);
-        updateCamera(false);
+        if(firstCamera && ready && !navigation){
+            map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(lat,lng),zoom));
+            firstCamera=false;
+        }else updateCamera(false);
     }
 
     private void updateRiderMarker(boolean force){
@@ -191,8 +197,16 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         if(recorded!=null){map.removePolyline(recorded);recorded=null;}
         if(suggested!=null){map.removePolyline(suggested);suggested=null;}
         List<LatLng> history=parse(recordedPoints),route=parse(suggestedPoints);
-        if(history.size()>1)recorded=map.addPolyline(new PolylineOptions()
-                .addAll(history).color(Color.rgb(28,215,230)).width(5f));
+        if(history.size()>1){
+            recorded=map.addPolyline(new PolylineOptions()
+                    .addAll(history).color(Color.rgb(28,215,230)).width(5f));
+            if(firstCamera&&!navigation){
+                LatLngBounds.Builder bounds=new LatLngBounds.Builder();
+                for(LatLng point:history)bounds.include(point);
+                map.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds.build(),44));
+                firstCamera=false;
+            }
+        }
         if(route.size()>1)suggested=map.addPolyline(new PolylineOptions()
                 .addAll(route).color(Color.rgb(255,194,43)).width(8f));
         lastLineMs=SystemClock.elapsedRealtime();
@@ -200,6 +214,11 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
 
     @Override public void setTarget(double latitude,double longitude){
         goalLat=latitude;goalLng=longitude;updateTargetMarker();
+        if(ready&&firstCamera&&!navigation&&Double.isFinite(latitude)&&Double.isFinite(longitude)){
+            map.moveCamera(CameraUpdateFactory.newLatLngZoom(
+                    new LatLng(latitude,longitude),Math.min(zoom,15)));
+            firstCamera=false;
+        }
     }
     @Override public void clearTarget(){
         goalLat=Double.NaN;goalLng=Double.NaN;
