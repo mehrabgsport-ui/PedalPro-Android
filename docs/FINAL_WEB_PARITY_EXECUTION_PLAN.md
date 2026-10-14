@@ -78,6 +78,20 @@ Status: IN PROGRESS
 - CI: Native RC QA / Android Store Release Build results for this batch are **NOT YET VERIFIED**. The available commit status endpoint returned no check contexts, and the workflow-run lookup excludes push-triggered runs. Do not declare this batch release-validated or close Phase 5 until both build results are independently confirmed.
 - Remaining Phase 5: source-by-source comparison and verified release build for start/finish, OLED, live/group navigation, Beacon/SOS/privacy, sensors, ride detail, photos, comments, and publication states.
 
+### Phase 5 — UI state, navigation, sensors, safety batch 5B–5D (2026-10-14)
+- `f53b3cdd3bd0`: OLED accepts initial paused state, presents the matching play/pause icon and returns elapsed display time plus final pause state.
+- `c2e24ce7860d`: parent screen receives the OLED result; native display clock avoids resetting backward during refresh.
+- `838cecf536f5`, `39a6c7751636`: live/group heading glyph replaced with accessible native vector, without changing route coordinates, GPS or map algorithms.
+- `2fa8e37b70ec`: native sensor scan/connect button skin and vector icon parity.
+- `2e16515dec94`: Beacon link creation visibly disabled when there is no selectable active ride.
+- `f923661c73fa`: OLED receives currently displayed elapsed seconds, rather than a stale cached base duration.
+- `dfebdf7ca964`: add regression guards to Native RC QA; existing Android unit tests, lint and APK smoke-build steps retained.
+- Source review: six affected native UI files passed balanced-delimiter syntax screening and cross-file UI-state contract assertions; this **does not** constitute a Gradle/Android build.
+- CI verification: this environment cannot retrieve push-triggered workflow runs; combined commit statuses do not expose the native QA/release workflow checks. **Native RC QA and Android Store Release Build remain UNVERIFIED on these new commits**.
+- Source-of-truth limitation: the named Web 4.7.46 PPUP restore file was not found in accessible Library or connected Drive. Exact pixel/state parity cannot be certified without the reference content.
+- Current Phase 5 code inventory: ride controls in NativeMainActivity; OLED in LowPowerRideActivity; live/group navigation in NativeLiveNavigationActivity; SOS/Beacon/privacy zones in NativeSafetyActivity; BLE sensor UI in NativeMainActivity; ride detail/comments/photos/privacy in NativeRideDetailActivity, NativeRidePhotoController and NativeRidePrivacyDialog.
+- Phase 5 remains IN PROGRESS until CI is verified and device-based Web 4.7.46 screen/state parity is audited. Do not mark DONE or merge to main prematurely.
+
 ## Phase 6 — Pro and community features
 Status: PENDING
 - Segments and leaderboard.
