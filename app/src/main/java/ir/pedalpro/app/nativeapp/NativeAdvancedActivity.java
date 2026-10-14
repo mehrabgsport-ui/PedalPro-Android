@@ -12,6 +12,7 @@ import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -87,10 +88,44 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void renderOverview(){
-        LinearLayout loading=card();TextView status=text("در حال آماده‌سازی خلاصه عملکرد…",12,false,MUTED);loading.addView(status);content.addView(loading,cardLp());
+        LinearLayout loading=card();
+        TextView status=text("در حال آماده‌سازی خلاصه عملکرد…",12,false,MUTED);
+        loading.addView(status);
+        content.addView(loading,cardLp());
         io.execute(()->{
-            try{JSONObject d=api.get("pp_pro_summary");main.post(()->{content.removeView(loading);JSONObject best=d.optJSONObject("best_efforts");LinearLayout grid=card();grid.addView(text("خلاصه عملکرد",18,true,TEXT));if(best!=null){addBest(grid,"بیشترین مسافت",best.optJSONObject("distance"),"distance_km","km");addBest(grid,"بیشترین صعود",best.optJSONObject("ascent"),"ascent_m","m");addBest(grid,"بیشترین سرعت",best.optJSONObject("speed"),"max_speed_kmh","km/h");addBest(grid,"طولانی‌ترین زمان",best.optJSONObject("duration"),"duration_seconds","s");}grid.addView(text("سگمنت‌ها: "+d.optInt("segments",0)+" · Effortهای شما: "+d.optInt("efforts",0),12,false,MUTED));content.addView(grid,cardLp());VazirmatnLoader.apply(this,content);});}
-            catch(Exception e){main.post(()->status.setText(e.getMessage()));}
+            try{
+                JSONObject d=api.get("pp_pro_summary");
+                JSONObject hr=null;
+                try{hr=api.get("pp_hr_latest");}catch(Exception ignored){}
+                JSONObject finalHr=hr;
+                main.post(()->{
+                    content.removeView(loading);
+                    JSONObject best=d.optJSONObject("best_efforts");
+                    if(best==null)best=new JSONObject();
+                    addProGrid(
+                            bestEffortCard("بیشترین مسافت",best.optJSONObject("distance"),"distance_km","distance"),
+                            bestEffortCard("بیشترین صعود",best.optJSONObject("ascent"),"ascent_m","ascent"),
+                            bestEffortCard("بیشترین سرعت",best.optJSONObject("speed"),"max_speed_kmh","speed"),
+                            bestEffortCard("طولانی‌ترین زمان",best.optJSONObject("duration"),"duration_seconds","duration")
+                    );
+
+                    SharedPreferences offline=getSharedPreferences("pedalpro_offline_routes",MODE_PRIVATE);
+                    String hrValue="—";
+                    if(finalHr!=null){
+                        JSONObject sample=finalHr.optJSONObject("sample");
+                        if(sample!=null)hrValue=sample.optInt("bpm",0)+" bpm";
+                    }
+                    addProGrid(
+                            proValueCard("سگمنت‌ها",String.valueOf(d.optInt("segments",0)),"سگمنت عمومی"),
+                            proValueCard("Effortهای شما",String.valueOf(d.optInt("efforts",0)),"عبور ثبت‌شده"),
+                            proValueCard("مسیرهای آفلاین",String.valueOf(offline.getAll().size()),"ذخیره روی این دستگاه"),
+                            proValueCard("سنسور",hrValue,"آخرین ضربان")
+                    );
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){
+                main.post(()->status.setText(e.getMessage()));
+            }
         });
     }
 
@@ -99,28 +134,217 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void renderTraining(){
-        LinearLayout box=card();TextView status=text("در حال دریافت Training Load…",12,false,MUTED);box.addView(status);content.addView(box,cardLp());
-        io.execute(()->{try{JSONObject d=api.get("pp_training_summary");main.post(()->{
-            content.removeView(box);JSONObject t=d.optJSONObject("training");if(t==null)t=d;
-            LinearLayout c=card();c.addView(text("Training Load / Fitness",18,true,TEXT));
-            c.addView(text(String.format(Locale.US,"Acute 7d: %.1f\nChronic 28d: %.1f\nForm: %.1f\nA:C Ratio: %.2f\nStatus: %s",t.optDouble("acute_7d",0),t.optDouble("chronic_28d_weekly",0),t.optDouble("form",0),t.optDouble("acute_chronic_ratio",0),t.optString("status","—")),12,false,MUTED));
-            JSONObject settings=t.optJSONObject("settings");EditText ftp=input("FTP (W)"),hr=input("Max HR");if(settings!=null){ftp.setText(String.valueOf(settings.optInt("ftp_w",0)));hr.setText(String.valueOf(settings.optInt("max_hr",0)));}Button save=primary("ذخیره FTP / Max HR");save.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("ftp_w",iv(ftp,200));p.put("max_hr",iv(hr,180));}catch(Exception ignored){}post("pp_training_settings_save",p,save,"تنظیمات تمرین ذخیره شد",this::renderTraining);});c.addView(ftp);c.addView(hr);c.addView(save);content.addView(c,cardLp());VazirmatnLoader.apply(this,content);
-        });}catch(Exception e){main.post(()->status.setText(e.getMessage()));}});
+        LinearLayout loading=card();
+        TextView status=text("در حال دریافت Training Load…",12,false,MUTED);
+        loading.addView(status);
+        content.addView(loading,cardLp());
+        io.execute(()->{
+            try{
+                JSONObject d=api.get("pp_training_summary");
+                main.post(()->{
+                    content.removeView(loading);
+                    JSONObject t=d.optJSONObject("training");
+                    if(t==null)t=d;
+
+                    addProGrid(
+                            proValueCard("بار ۷ روز",String.format(Locale.US,"%.0f",t.optDouble("acute_7d",0)),"PedalPro Load"),
+                            proValueCard("میانگین هفتگی ۲۸ روز",String.format(Locale.US,"%.0f",t.optDouble("chronic_28d_weekly",0)),"بار پایه"),
+                            proValueCard("Form",String.format(Locale.US,"%.0f",t.optDouble("form",0)),t.optString("status","")),
+                            proValueCard("Acute / Chronic",String.format(Locale.US,"%.2f",t.optDouble("acute_chronic_ratio",0)),"برآورد تمرینی غیرپزشکی")
+                    );
+
+                    LinearLayout trend=proSectionCard("روند ۴۲ روزه");
+                    NativeTrainingLoadBarsView bars=new NativeTrainingLoadBarsView(this);
+                    bars.setDays(t.optJSONArray("daily"));
+                    trend.addView(bars,new LinearLayout.LayoutParams(-1,dp(180)));
+                    content.addView(trend,cardLp());
+
+                    JSONObject sensors=t.optJSONObject("sensors");
+                    if(sensors==null)sensors=new JSONObject();
+                    addProGrid(
+                            proValueCard("Power",Math.round(sensors.optDouble("avg_power_w",0))+" W",
+                                    "میانگین ۲۸ روز · بیشینه "+Math.round(sensors.optDouble("max_power_w",0))+" W"),
+                            proValueCard("Cadence",String.format(Locale.US,"%.0f rpm",sensors.optDouble("avg_cadence_rpm",0)),"میانگین ۲۸ روز")
+                    );
+
+                    JSONObject settings=t.optJSONObject("settings");
+                    if(settings==null)settings=new JSONObject();
+                    LinearLayout cfg=proSectionCard("تنظیمات Training Load");
+                    EditText ftp=input("FTP (W)");
+                    ftp.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                    ftp.setText(String.valueOf(settings.optInt("ftp_w",200)));
+                    EditText hr=input("Max HR");
+                    hr.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+                    hr.setText(String.valueOf(settings.optInt("max_hr",180)));
+                    Button save=primary("ذخیره تنظیمات");
+                    save.setOnClickListener(v->{
+                        JSONObject p=new JSONObject();
+                        try{p.put("ftp_w",iv(ftp,200));p.put("max_hr",iv(hr,180));}catch(Exception ignored){}
+                        post("pp_training_settings_save",p,save,"تنظیمات تمرین ذخیره شد",this::rerenderCurrent);
+                    });
+                    cfg.addView(ftp);cfg.addView(hr);cfg.addView(save);
+                    TextView note=text("اگر Power برای یک رکاب‌زنی ثبت شده باشد، بار تمرین با FTP محاسبه می‌شود؛ در غیر این صورت مدل زمان/سرعت/مسافت/صعود استفاده می‌شود.",11,false,MUTED);
+                    note.setPadding(0,dp(8),0,0);cfg.addView(note);
+                    content.addView(cfg,cardLp());
+
+                    LinearLayout zones=proSectionCard("Heart Rate Zones");
+                    JSONObject hrData=t.optJSONObject("hr");
+                    if(hrData!=null&&hrData.optBoolean("available",false)){
+                        JSONObject zs=hrData.optJSONObject("zones_seconds");
+                        if(zs==null)zs=new JSONObject();
+                        LinearLayout zoneRows=new LinearLayout(this);
+                        zoneRows.setOrientation(LinearLayout.VERTICAL);
+                        for(int base=1;base<=5;base+=2){
+                            LinearLayout row=new LinearLayout(this);
+                            row.setOrientation(LinearLayout.HORIZONTAL);
+                            row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                            for(int j=0;j<2;j++){
+                                int zone=base+j;
+                                if(zone>5){row.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));continue;}
+                                LinearLayout z=smallMetricCard("Zone "+zone,formatSeconds(zs.optLong(String.valueOf(zone),0)));
+                                LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1f);
+                                if(j==0)lp.setMargins(dp(4),dp(4),0,dp(4));else lp.setMargins(0,dp(4),dp(4),dp(4));
+                                row.addView(z,lp);
+                            }
+                            zoneRows.addView(row);
+                        }
+                        zones.addView(zoneRows);
+                        TextView maxHr=text("Max HR: "+hrData.optInt("max_hr",180)+" bpm",11,false,MUTED);
+                        maxHr.setPadding(0,dp(8),0,0);zones.addView(maxHr);
+                    }else{
+                        zones.addView(noticeView("Heart Rate فعلاً اختیاری است. تحلیل Power و سایر داده‌های رکاب‌زنی مستقل از آن کار می‌کنند."));
+                    }
+                    content.addView(zones,cardLp());
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){main.post(()->status.setText(e.getMessage()));}
+        });
     }
 
     private void renderClub(){
-        LinearLayout box=card();TextView status=text("در حال دریافت رتبه‌بندی هفتگی…",12,false,MUTED);box.addView(status);content.addView(box,cardLp());
-        io.execute(()->{try{JSONObject d=api.get("pp_club_weekly");JSONArray a=d.optJSONArray("items");main.post(()->{content.removeView(box);LinearLayout h=card();h.addView(text("رتبه‌بندی هفتگی باشگاه",18,true,TEXT));h.addView(text("هفته شنبه تا جمعه",11,false,MUTED));content.addView(h,cardLp());if(a!=null)for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;LinearLayout r=card();r.addView(text((i+1)+". "+x.optString("display_name","عضو"),14,true,TEXT));r.addView(text(String.format(Locale.US,"%d رکاب · %.1f km · %.0f m صعود",x.optInt("rides",0),x.optDouble("distance_m",0)/1000.0,x.optDouble("ascent_m",0)),11,false,MUTED));content.addView(r,cardLp());}VazirmatnLoader.apply(this,content);});}catch(Exception e){main.post(()->status.setText(e.getMessage()));}});
+        LinearLayout loading=card();
+        TextView status=text("در حال دریافت رتبه‌بندی هفتگی…",12,false,MUTED);
+        loading.addView(status);content.addView(loading,cardLp());
+        io.execute(()->{
+            try{
+                JSONObject d=api.get("pp_club_weekly");
+                JSONArray a=d.optJSONArray("items");
+                main.post(()->{
+                    content.removeView(loading);
+                    content.addView(noticeView("رتبه‌بندی هفته جاری از شنبه · شروع: "+JalaliDate.format(d.optString("week_start",""),false)),cardLp());
+                    if(a==null||a.length()==0){content.addView(noticeView("این هفته هنوز رکاب‌زنی ثبت نشده است."),cardLp());return;}
+                    for(int i=0;i<a.length();i++){
+                        JSONObject x=a.optJSONObject(i);if(x==null)continue;
+                        LinearLayout row=proRow();
+                        TextView rank=text(String.valueOf(i+1),13,true,TEXT);
+                        rank.setGravity(android.view.Gravity.CENTER);
+                        rank.setBackground(round(android.graphics.Color.argb(33,36,223,240),11,0));
+                        row.addView(rank,new LinearLayout.LayoutParams(dp(34),dp(34)));
+
+                        LinearLayout copy=new LinearLayout(this);
+                        copy.setOrientation(LinearLayout.VERTICAL);
+                        copy.setGravity(android.view.Gravity.END);
+                        copy.addView(text(x.optString("display_name","عضو"),14,true,TEXT));
+                        copy.addView(text(x.optInt("rides",0)+" رکاب · "+
+                                String.format(Locale.US,"%.1f km",x.optDouble("distance_m",0)/1000.0)+" · "+
+                                Math.round(x.optDouble("ascent_m",0))+" m صعود",11,false,MUTED));
+                        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1f);cp.setMargins(dp(10),0,dp(10),0);
+                        row.addView(copy,cp);
+                        row.addView(text(formatSeconds(x.optLong("moving_seconds",0)),12,true,TEXT));
+                        content.addView(row,cardLp());
+                    }
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){main.post(()->status.setText(e.getMessage()));}
+        });
     }
 
     private void renderSegments(){
-        LinearLayout form=card();form.addView(text("سگمنت‌ها",18,true,TEXT));EditText rideId=input("شناسه رکاب‌زنی"),name=input("نام سگمنت");Button create=primary("ساخت سگمنت از این رکاب‌زنی");create.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("ride_id",iv(rideId,0));p.put("name",name.getText().toString().trim());}catch(Exception ignored){}post("pp_segment_create_from_ride",p,create,"سگمنت ساخته شد",this::render);});form.addView(rideId);form.addView(name);form.addView(create);content.addView(form,cardLp());
-        io.execute(()->{try{JSONObject d=api.get("pp_segments_list");JSONArray a=d.optJSONArray("items");main.post(()->{if(a==null||a.length()==0){addCard("سگمنت‌ها","هنوز سگمنتی ساخته نشده است.");return;}for(int i=0;i<a.length();i++){JSONObject s=a.optJSONObject(i);if(s==null)continue;LinearLayout r=card();r.addView(text(s.optString("name","Segment"),15,true,TEXT));r.addView(text(String.format(Locale.US,"%.2f km · %d تلاش",s.optDouble("distance_m",0)/1000.0,s.optInt("efforts",0)),11,false,MUTED));int id=s.optInt("id",0);Button board=normal("رتبه‌بندی");board.setOnClickListener(v->{Intent x=new Intent(this,NativeSegmentLeaderboardActivity.class);x.putExtra(NativeSegmentLeaderboardActivity.EXTRA_SEGMENT_ID,id);x.putExtra(NativeSegmentLeaderboardActivity.EXTRA_TITLE,s.optString("name","Segment"));startActivity(x);});r.addView(board);content.addView(r,cardLp());}VazirmatnLoader.apply(this,content);});}catch(Exception e){main.post(()->addCard("خطا",e.getMessage()));}});
+        LinearLayout form=card();
+        form.addView(text("سگمنت‌ها",18,true,TEXT));
+        android.widget.Spinner ride=rideSpinner();
+        EditText name=input("نام سگمنت");
+        Button create=primary("ساخت سگمنت از این رکاب‌زنی");
+        create.setOnClickListener(v->{
+            int rideId=rideId(ride);
+            JSONObject p=new JSONObject();
+            try{p.put("ride_id",rideId);p.put("name",name.getText().toString().trim());}catch(Exception ignored){}
+            post("pp_segment_create_from_ride",p,create,"سگمنت ساخته شد",this::rerenderCurrent);
+        });
+        form.addView(ride);form.addView(name);form.addView(create);
+        content.addView(form,cardLp());
+
+        io.execute(()->{
+            try{
+                JSONObject d=api.get("pp_segments_list");
+                JSONArray a=d.optJSONArray("items");
+                main.post(()->{
+                    if(a==null||a.length()==0){content.addView(noticeView("هنوز سگمنتی ساخته نشده است."),cardLp());return;}
+                    for(int i=0;i<a.length();i++){
+                        JSONObject seg=a.optJSONObject(i);if(seg==null)continue;
+                        LinearLayout row=proRow();
+                        LinearLayout copy=new LinearLayout(this);copy.setOrientation(LinearLayout.VERTICAL);copy.setGravity(android.view.Gravity.END);
+                        copy.addView(text(seg.optString("name","Segment"),14,true,TEXT));
+                        copy.addView(text(String.format(Locale.US,"%.2f km · %d تلاش",seg.optDouble("distance_m",0)/1000.0,seg.optInt("efforts",0)),11,false,MUTED));
+                        row.addView(copy,new LinearLayout.LayoutParams(0,-2,1f));
+
+                        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.VERTICAL);
+                        Button refresh=normal("ثبت تلاش‌های من");
+                        Button board=normal("رتبه‌بندی");
+                        int id=seg.optInt("id",0);
+                        refresh.setOnClickListener(v->{
+                            refresh.setEnabled(false);
+                            io.execute(()->{try{
+                                JSONObject out=api.post("pp_segment_refresh",new JSONObject().put("segment_id",id));
+                                main.post(()->{refresh.setEnabled(true);toast(out.optInt("matched",0)+" تلاش شما با این سگمنت تطبیق داده شد");rerenderCurrent();});
+                            }catch(Exception e){main.post(()->{refresh.setEnabled(true);toast(e.getMessage());});}});
+                        });
+                        board.setOnClickListener(v->{
+                            Intent x=new Intent(this,NativeSegmentLeaderboardActivity.class);
+                            x.putExtra(NativeSegmentLeaderboardActivity.EXTRA_SEGMENT_ID,id);
+                            x.putExtra(NativeSegmentLeaderboardActivity.EXTRA_TITLE,seg.optString("name","Segment"));
+                            startActivity(x);
+                        });
+                        actions.addView(refresh,new LinearLayout.LayoutParams(dp(132),dp(42)));
+                        LinearLayout.LayoutParams blp=new LinearLayout.LayoutParams(dp(132),dp(42));blp.setMargins(0,dp(5),0,0);
+                        actions.addView(board,blp);
+                        LinearLayout.LayoutParams alp=new LinearLayout.LayoutParams(-2,-2);alp.setMargins(dp(8),0,0,0);
+                        row.addView(actions,alp);
+                        content.addView(row,cardLp());
+                    }
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){main.post(()->content.addView(noticeView(e.getMessage()),cardLp()));}
+        });
     }
 
     private void renderDiscover(){
-        LinearLayout status=card();status.addView(text("برنامه‌های آینده PedalPro به ترتیب زمان",14,true,TEXT));content.addView(status,cardLp());
-        io.execute(()->{try{JSONObject d=api.get("pp_event_discovery");JSONArray a=d.optJSONArray("items");main.post(()->{if(a==null||a.length()==0){addCard("کشف برنامه‌ها","برنامه آینده‌ای ثبت نشده است.");return;}for(int i=0;i<a.length();i++){JSONObject x=a.optJSONObject(i);if(x==null)continue;LinearLayout r=card();r.addView(text(x.optString("title","برنامه"),15,true,TEXT));r.addView(text(x.optString("event_date","")+" · "+x.optString("meeting_location","مکان اعلام نشده")+" · "+x.optInt("registrations_count",0)+" ثبت‌نام",11,false,MUTED));content.addView(r,cardLp());}VazirmatnLoader.apply(this,content);});}catch(Exception e){main.post(()->addCard("خطا",e.getMessage()));}});
+        content.addView(noticeView("برنامه‌های آینده PedalPro به ترتیب زمان"),cardLp());
+        io.execute(()->{
+            try{
+                JSONObject d=api.get("pp_event_discovery");
+                JSONArray a=d.optJSONArray("items");
+                main.post(()->{
+                    if(a==null||a.length()==0){content.addView(noticeView("برنامه آینده‌ای ثبت نشده است."),cardLp());return;}
+                    for(int i=0;i<a.length();i++){
+                        JSONObject x=a.optJSONObject(i);if(x==null)continue;
+                        LinearLayout row=proRow();
+                        LinearLayout copy=new LinearLayout(this);copy.setOrientation(LinearLayout.VERTICAL);copy.setGravity(android.view.Gravity.END);
+                        copy.addView(text(x.optString("title","برنامه"),14,true,TEXT));
+                        copy.addView(text(JalaliDate.format(x.optString("event_date",""),true)+" · "+
+                                x.optString("meeting_location","مکان اعلام نشده")+" · "+
+                                x.optInt("registrations_count",0)+" ثبت‌نام",11,false,MUTED));
+                        row.addView(copy,new LinearLayout.LayoutParams(0,-2,1f));
+                        Button open=primary("مشاهده");
+                        int eventId=x.optInt("id",0);
+                        open.setOnClickListener(v->openEvent(eventId));
+                        row.addView(open,new LinearLayout.LayoutParams(dp(92),dp(44)));
+                        content.addView(row,cardLp());
+                    }
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){main.post(()->content.addView(noticeView(e.getMessage()),cardLp()));}
+        });
     }
 
     private void renderRideData(String title,String action){
@@ -128,18 +352,307 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void renderAnalysis(){
-        LinearLayout c=card();c.addView(text("هوا و ارتفاع",18,true,TEXT));EditText ride=input("شناسه رکاب‌زنی");Button load=primary("تحلیل فعالیت");TextView out=text("",11,false,MUTED);load.setOnClickListener(v->{load.setEnabled(false);io.execute(()->{try{Map<String,Object> q=new HashMap<>();q.put("ride_id",iv(ride,0));JSONObject d=api.get("pp_ride_analysis",q);main.post(()->{load.setEnabled(true);JSONObject x=d.optJSONObject("analysis");if(x==null)x=d;out.setText(x.toString());});}catch(Exception e){main.post(()->{load.setEnabled(true);out.setText(e.getMessage());});}});});c.addView(ride);c.addView(load);c.addView(out);content.addView(c,cardLp());
+        LinearLayout form=card();
+        android.widget.Spinner ride=rideSpinner();
+        Button load=primary("تحلیل رکاب‌زنی");
+        form.addView(ride);form.addView(load);
+        content.addView(form,cardLp());
+        LinearLayout result=new LinearLayout(this);result.setOrientation(LinearLayout.VERTICAL);
+        result.addView(text("رکاب‌زنی را انتخاب کنید و «تحلیل رکاب‌زنی» را بزنید.",12,false,MUTED));
+        content.addView(result,cardLp());
+
+        load.setOnClickListener(v->{
+            int id=rideId(ride);
+            load.setEnabled(false);
+            io.execute(()->{
+                try{
+                    Map<String,Object> q=new HashMap<>();q.put("ride_id",id);
+                    JSONObject d=api.get("pp_ride_analysis",q);
+                    main.post(()->{
+                        load.setEnabled(true);result.removeAllViews();
+                        JSONObject e=d.optJSONObject("elevation");if(e==null)e=new JSONObject();
+                        JSONObject w=d.optJSONObject("weather");if(w==null)w=new JSONObject();
+                        addProGridTo(result,
+                                proValueCard("صعود",Math.round(e.optDouble("gain_m",0))+" m","نزول "+Math.round(e.optDouble("descent_m",0))+" m"),
+                                proValueCard("ارتفاع",e.isNull("max_m")?"—":Math.round(e.optDouble("max_m",0))+" m",
+                                        "کمینه "+(e.isNull("min_m")?"—":Math.round(e.optDouble("min_m",0))+" m")),
+                                proValueCard("بیشترین شیب نمونه‌برداری‌شده",String.format(Locale.US,"%.1f%%",e.optDouble("max_grade_pct",0)),"با حذف جهش‌های ارتفاعی"),
+                                proValueCard("آب‌وهوا",w.isNull("avg_temperature_c")?"—":String.format(Locale.US,"%.1f°",w.optDouble("avg_temperature_c",0)),
+                                        "باد "+(w.isNull("avg_wind_kmh")?"—":String.format(Locale.US,"%.1f km/h",w.optDouble("avg_wind_kmh",0)))+
+                                                " · تندباد "+(w.isNull("max_gust_kmh")?"—":String.format(Locale.US,"%.1f",w.optDouble("max_gust_kmh",0))))
+                        );
+                        NativeElevationProfileView chart=new NativeElevationProfileView(this);
+                        chart.setProfile(e.optJSONArray("profile"));
+                        LinearLayout.LayoutParams clp=new LinearLayout.LayoutParams(-1,dp(210));clp.setMargins(0,dp(10),0,0);
+                        result.addView(chart,clp);
+                        TextView note=text("نمونه‌های هواشناسی: "+w.optInt("samples",0)+" · بارش ثبت‌شده: "+
+                                String.format(Locale.US,"%.1f mm",w.optDouble("precipitation_mm",0))+
+                                ". نوع نقشه و مسیر تغییری نکرده است.",11,false,TEXT);
+                        note.setBackground(round(android.graphics.Color.argb(8,255,255,255),14,android.graphics.Color.argb(28,255,255,255)));
+                        note.setPadding(dp(12),dp(11),dp(12),dp(11));
+                        LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-1,-2);nlp.setMargins(0,dp(10),0,0);
+                        result.addView(note,nlp);
+                        VazirmatnLoader.apply(this,result);
+                    });
+                }catch(Exception e){main.post(()->{load.setEnabled(true);toast(e.getMessage());});}
+            });
+        });
     }
 
     private void renderOffline(){
-        LinearLayout c=card();c.addView(text("مسیرهای آفلاین",18,true,TEXT));c.addView(text("داده مسیر بدون اینترنت روی این دستگاه باقی می‌ماند.",11,false,MUTED));EditText ride=input("شناسه رکاب‌زنی");Button save=primary("ذخیره مسیر روی گوشی");TextView saved=text("",11,false,MUTED);
-        SharedPreferences p=getSharedPreferences("pedalpro_offline_routes",MODE_PRIVATE);saved.setText("ذخیره‌شده: "+p.getAll().size()+" مسیر");
-        save.setOnClickListener(v->{save.setEnabled(false);io.execute(()->{try{Map<String,Object> q=new HashMap<>();q.put("ride_id",iv(ride,0));JSONObject d=api.get("pp_route_pack",q);JSONObject route=d.optJSONObject("route");if(route==null)throw new IllegalStateException("مسیر دریافت نشد.");p.edit().putString(String.valueOf(route.optInt("id",0)),route.toString()).apply();main.post(()->{save.setEnabled(true);saved.setText("ذخیره‌شده: "+p.getAll().size()+" مسیر");toast("مسیر روی این گوشی ذخیره شد");});}catch(Exception e){main.post(()->{save.setEnabled(true);toast(e.getMessage());});}});});Button clear=danger("پاک‌کردن همه");clear.setOnClickListener(v->{p.edit().clear().apply();saved.setText("ذخیره‌شده: 0 مسیر");});c.addView(ride);c.addView(save);c.addView(clear);c.addView(saved);content.addView(c,cardLp());
+        SharedPreferences prefs=getSharedPreferences("pedalpro_offline_routes",MODE_PRIVATE);
+        LinearLayout form=card();
+        android.widget.Spinner ride=rideSpinner();
+        Button save=primary("ذخیره مسیر روی گوشی");
+        Button clear=normal("پاک‌کردن همه");
+        form.addView(ride);form.addView(save);form.addView(clear);
+        content.addView(form,cardLp());
+
+        LinearLayout list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
+        content.addView(list,cardLp());
+        Runnable paint=()->renderOfflineSaved(list,prefs);
+        paint.run();
+
+        save.setOnClickListener(v->{
+            int id=rideId(ride);save.setEnabled(false);
+            io.execute(()->{
+                try{
+                    Map<String,Object> q=new HashMap<>();q.put("ride_id",id);
+                    JSONObject d=api.get("pp_route_pack",q);
+                    JSONObject route=d.optJSONObject("route");
+                    if(route==null)throw new IllegalStateException("مسیر دریافت نشد.");
+                    prefs.edit().putString(String.valueOf(route.optInt("id",0)),route.toString()).apply();
+                    main.post(()->{save.setEnabled(true);toast("مسیر روی این گوشی ذخیره شد");paint.run();});
+                }catch(Exception e){main.post(()->{save.setEnabled(true);toast(e.getMessage());});}
+            });
+        });
+        clear.setOnClickListener(v->{prefs.edit().clear().apply();paint.run();});
+        TextView note=text("داده مسیر بدون اینترنت باقی می‌ماند. نمایش پس‌زمینه نقشه به Tileهای قبلاً Cache‌شده دستگاه وابسته است.",11,false,MUTED);
+        content.addView(note,cardLp());
     }
 
     private void renderMaintenance(){
-        LinearLayout form=card();form.addView(text("سرویس و نگهداری",18,true,TEXT));EditText bike=input("شناسه دوچرخه"),title=input("مثلاً تعویض زنجیر"),km=input("دوره سرویس km");km.setText("500");Button save=primary("افزودن یادآور");save.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("bike_id",iv(bike,0));p.put("title",title.getText().toString());p.put("interval_km",iv(km,500));}catch(Exception ignored){}post("pp_maintenance_save",p,save,"یادآور سرویس ثبت شد",this::render);});form.addView(bike);form.addView(title);form.addView(km);form.addView(save);content.addView(form,cardLp());
-        io.execute(()->{try{JSONObject d=api.get("pp_maintenance_list");JSONArray items=d.optJSONArray("items");main.post(()->{if(items==null||items.length()==0){addCard("سرویس","یادآور سرویس ندارید.");return;}for(int i=0;i<items.length();i++){JSONObject x=items.optJSONObject(i);if(x==null)continue;LinearLayout r=card();r.addView(text(x.optString("title","سرویس"),14,true,TEXT));r.addView(text("سرویس هر "+x.optInt("interval_km",0)+" km · موعد "+x.optDouble("next_due_km",0)+" km",11,false,MUTED));int id=x.optInt("id",0);Button done=normal("سرویس انجام شد");done.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("id",id);}catch(Exception ignored){}post("pp_maintenance_complete",p,done,"کیلومتر سرویس بروزرسانی شد",this::render);});r.addView(done);content.addView(r,cardLp());}VazirmatnLoader.apply(this,content);});}catch(Exception e){main.post(()->addCard("خطا",e.getMessage()));}});
+        LinearLayout loading=card();TextView status=text("در حال دریافت سرویس و نگهداری…",12,false,MUTED);loading.addView(status);content.addView(loading,cardLp());
+        io.execute(()->{
+            try{
+                JSONObject d=api.get("pp_maintenance_list");
+                JSONArray bikes=d.optJSONArray("bikes"),items=d.optJSONArray("items");
+                main.post(()->{
+                    content.removeView(loading);
+                    LinearLayout form=card();
+                    android.widget.Spinner bike=bikeSpinner(bikes);
+                    EditText title=input("مثلاً تعویض زنجیر");
+                    EditText km=input("دوره سرویس km");km.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);km.setText("500");
+                    Button save=primary("افزودن یادآور");
+                    save.setOnClickListener(v->{
+                        JSONObject p=new JSONObject();
+                        try{p.put("bike_id",bikeId(bike));p.put("title",title.getText().toString());p.put("interval_km",iv(km,500));}catch(Exception ignored){}
+                        post("pp_maintenance_save",p,save,"یادآور سرویس ثبت شد",this::rerenderCurrent);
+                    });
+                    form.addView(bike);form.addView(title);form.addView(km);form.addView(save);content.addView(form,cardLp());
+
+                    if(items==null||items.length()==0){content.addView(noticeView("یادآور سرویس ندارید."),cardLp());return;}
+                    for(int i=0;i<items.length();i++){
+                        JSONObject x=items.optJSONObject(i);if(x==null)continue;
+                        JSONObject found=findBike(bikes,x.optInt("bike_id",0));
+                        double odo=found==null?0:found.optDouble("odometer_km",0);
+                        double left=x.optDouble("next_due_km",0)-odo;
+                        int color=left<=0?RED:left<100?android.graphics.Color.rgb(255,209,102):android.graphics.Color.rgb(85,230,155);
+                        LinearLayout row=proRow();
+                        LinearLayout copy=new LinearLayout(this);copy.setOrientation(LinearLayout.VERTICAL);copy.setGravity(android.view.Gravity.END);
+                        copy.addView(text(x.optString("title","سرویس"),14,true,TEXT));
+                        copy.addView(text((found==null?"دوچرخه":found.optString("brand_model","دوچرخه"))+" · سرویس هر "+
+                                Math.round(x.optDouble("interval_km",0))+" km",11,false,MUTED));
+                        row.addView(copy,new LinearLayout.LayoutParams(0,-2,1f));
+                        LinearLayout due=new LinearLayout(this);due.setOrientation(LinearLayout.VERTICAL);due.setGravity(android.view.Gravity.END);
+                        due.addView(text(left<=0?"موعد سرویس رسیده":Math.round(left)+" km مانده",12,true,color));
+                        Button done=normal("سرویس انجام شد");
+                        int itemId=x.optInt("id",0);
+                        done.setOnClickListener(v->{
+                            JSONObject p=new JSONObject();try{p.put("id",itemId);}catch(Exception ignored){}
+                            post("pp_maintenance_complete",p,done,"کیلومتر سرویس بروزرسانی شد",this::rerenderCurrent);
+                        });
+                        due.addView(done,new LinearLayout.LayoutParams(dp(126),dp(42)));
+                        LinearLayout.LayoutParams dlp=new LinearLayout.LayoutParams(-2,-2);dlp.setMargins(dp(8),0,0,0);row.addView(due,dlp);
+                        content.addView(row,cardLp());
+                    }
+                    VazirmatnLoader.apply(this,content);
+                });
+            }catch(Exception e){main.post(()->status.setText(e.getMessage()));}
+        });
+    }
+
+    private void rerenderCurrent(){content.removeAllViews();render();}
+
+    private LinearLayout proSectionCard(String title){
+        LinearLayout c=card();
+        c.setPadding(dp(15),dp(15),dp(15),dp(15));
+        c.addView(text(title,16,true,TEXT));
+        return c;
+    }
+
+    private LinearLayout proValueCard(String title,String value,String sub){
+        LinearLayout c=card();
+        c.setPadding(dp(15),dp(15),dp(15),dp(15));
+        c.addView(text(title,14,true,TEXT));
+        TextView v=text(value==null?"—":value,27,true,android.graphics.Color.rgb(233,251,255));
+        LinearLayout.LayoutParams vlp=new LinearLayout.LayoutParams(-1,-2);vlp.setMargins(0,dp(7),0,0);c.addView(v,vlp);
+        TextView m=text(sub==null?"":sub,12,false,MUTED);
+        LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(-1,-2);mlp.setMargins(0,dp(4),0,0);c.addView(m,mlp);
+        return c;
+    }
+
+    private LinearLayout bestEffortCard(String title,JSONObject x,String field,String kind){
+        if(x==null)return proValueCard(title,"—","هنوز رکوردی ثبت نشده");
+        double value=x.optDouble(field,0);
+        String v;
+        if("distance".equals(kind))v=String.format(Locale.US,"%.1f km",value);
+        else if("ascent".equals(kind))v=Math.round(value)+" m";
+        else if("speed".equals(kind))v=String.format(Locale.US,"%.1f km/h",value);
+        else v=formatSeconds((long)value);
+        return proValueCard(title,v,x.optString("title",""));
+    }
+
+    private void addProGrid(android.view.View... views){addProGridTo(content,views);}
+
+    private void addProGridTo(LinearLayout host,android.view.View... views){
+        for(int i=0;i<views.length;i+=2){
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            android.view.View a=views[i];
+            LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-2,1f);ap.setMargins(dp(5),0,0,dp(10));row.addView(a,ap);
+            if(i+1<views.length){
+                LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,-2,1f);bp.setMargins(0,0,dp(5),dp(10));row.addView(views[i+1],bp);
+            }else row.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));
+            host.addView(row,new LinearLayout.LayoutParams(-1,-2));
+        }
+    }
+
+    private LinearLayout smallMetricCard(String label,String value){
+        LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setGravity(android.view.Gravity.CENTER);
+        c.setPadding(dp(10),dp(10),dp(10),dp(10));
+        c.setBackground(round(android.graphics.Color.argb(10,255,255,255),14,android.graphics.Color.argb(23,255,255,255)));
+        TextView l=text(label,10,false,MUTED);l.setGravity(android.view.Gravity.CENTER);
+        TextView v=text(value,18,true,TEXT);v.setGravity(android.view.Gravity.CENTER);
+        c.addView(l);c.addView(v);return c;
+    }
+
+    private TextView noticeView(String body){
+        TextView t=text(body==null?"":body,12,false,TEXT);
+        t.setPadding(dp(12),dp(11),dp(12),dp(11));
+        t.setBackground(round(android.graphics.Color.argb(8,255,255,255),14,android.graphics.Color.argb(28,255,255,255)));
+        return t;
+    }
+
+    private LinearLayout proRow(){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setPadding(dp(12),dp(12),dp(12),dp(12));
+        row.setBackground(round(android.graphics.Color.argb(9,255,255,255),15,android.graphics.Color.argb(23,255,255,255)));
+        return row;
+    }
+
+    private android.widget.Spinner rideSpinner(){
+        android.widget.Spinner spinner=new android.widget.Spinner(this);
+        ArrayList<String> labels=new ArrayList<>();
+        JSONArray ids=new JSONArray();
+        JSONArray rides=boot==null?null:boot.optJSONArray("my_completed_rides");
+        if(rides==null)rides=boot==null?null:boot.optJSONArray("rides");
+        if(rides!=null){
+            JSONObject me=boot.optJSONObject("user");int uid=me==null?0:me.optInt("id",0);
+            for(int i=rides.length()-1;i>=0;i--){
+                JSONObject r=rides.optJSONObject(i);if(r==null)continue;
+                if(!"completed".equals(r.optString("status","completed")))continue;
+                int owner=r.optInt("owner_user_id",uid);if(uid>0&&owner>0&&owner!=uid)continue;
+                labels.add(r.optString("title","رکاب "+r.optInt("id",0))+" — "+String.format(Locale.US,"%.1f km",r.optDouble("distance_m",0)/1000.0));
+                ids.put(r.optInt("id",0));
+                if(labels.size()>=80)break;
+            }
+        }
+        if(labels.isEmpty()){labels.add("رکاب‌زنی ثبت‌شده‌ای وجود ندارد");ids.put(0);}
+        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,labels){
+            @Override public android.view.View getView(int position,android.view.View convertView,android.view.ViewGroup parent){
+                TextView v=(TextView)super.getView(position,convertView,parent);styleSpinnerText(v);return v;
+            }
+            @Override public android.view.View getDropDownView(int position,android.view.View convertView,android.view.ViewGroup parent){
+                TextView v=(TextView)super.getDropDownView(position,convertView,parent);v.setTextColor(TEXT);v.setBackgroundColor(android.graphics.Color.rgb(9,26,41));v.setPadding(dp(12),dp(12),dp(12),dp(12));v.setGravity(android.view.Gravity.END);return v;
+            }
+        };
+        spinner.setAdapter(adapter);spinner.setTag(ids);spinner.setBackground(round(android.graphics.Color.argb(122,5,25,40),12,android.graphics.Color.argb(46,255,255,255)));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));lp.setMargins(0,dp(6),0,dp(6));spinner.setLayoutParams(lp);
+        return spinner;
+    }
+
+    private void styleSpinnerText(TextView v){v.setTextColor(TEXT);v.setTextSize(12);v.setPadding(dp(12),0,dp(12),0);v.setGravity(android.view.Gravity.CENTER_VERTICAL|android.view.Gravity.END);}
+
+    private int rideId(android.widget.Spinner spinner){
+        Object tag=spinner.getTag();if(!(tag instanceof JSONArray))return 0;
+        return ((JSONArray)tag).optInt(spinner.getSelectedItemPosition(),0);
+    }
+
+    private android.widget.Spinner bikeSpinner(JSONArray bikes){
+        android.widget.Spinner spinner=new android.widget.Spinner(this);
+        ArrayList<String> labels=new ArrayList<>();JSONArray ids=new JSONArray();
+        if(bikes!=null)for(int i=0;i<bikes.length();i++){
+            JSONObject b=bikes.optJSONObject(i);if(b==null)continue;
+            labels.add(b.optString("brand_model","دوچرخه "+b.optInt("id",0))+" — "+String.format(Locale.US,"%.1f km",b.optDouble("odometer_km",0)));
+            ids.put(b.optInt("id",0));
+        }
+        if(labels.isEmpty()){labels.add("دوچرخه‌ای ثبت نشده است");ids.put(0);}
+        android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,labels){
+            @Override public android.view.View getView(int position,android.view.View convertView,android.view.ViewGroup parent){TextView v=(TextView)super.getView(position,convertView,parent);styleSpinnerText(v);return v;}
+            @Override public android.view.View getDropDownView(int position,android.view.View convertView,android.view.ViewGroup parent){TextView v=(TextView)super.getDropDownView(position,convertView,parent);v.setTextColor(TEXT);v.setBackgroundColor(android.graphics.Color.rgb(9,26,41));v.setPadding(dp(12),dp(12),dp(12),dp(12));v.setGravity(android.view.Gravity.END);return v;}
+        };
+        spinner.setAdapter(adapter);spinner.setTag(ids);spinner.setBackground(round(android.graphics.Color.argb(122,5,25,40),12,android.graphics.Color.argb(46,255,255,255)));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));lp.setMargins(0,dp(6),0,dp(6));spinner.setLayoutParams(lp);return spinner;
+    }
+
+    private int bikeId(android.widget.Spinner spinner){Object tag=spinner.getTag();return tag instanceof JSONArray?((JSONArray)tag).optInt(spinner.getSelectedItemPosition(),0):0;}
+
+    private JSONObject findBike(JSONArray bikes,int id){
+        if(bikes==null)return null;
+        for(int i=0;i<bikes.length();i++){JSONObject b=bikes.optJSONObject(i);if(b!=null&&b.optInt("id",0)==id)return b;}
+        return null;
+    }
+
+    private void renderOfflineSaved(LinearLayout host,SharedPreferences prefs){
+        host.removeAllViews();
+        if(prefs.getAll().isEmpty()){host.addView(noticeView("مسیر آفلاینی روی این دستگاه ذخیره نشده است."));return;}
+        for(Map.Entry<String,?> e:prefs.getAll().entrySet()){
+            try{
+                JSONObject r=new JSONObject(String.valueOf(e.getValue()));
+                LinearLayout row=proRow();
+                LinearLayout copy=new LinearLayout(this);copy.setOrientation(LinearLayout.VERTICAL);copy.setGravity(android.view.Gravity.END);
+                copy.addView(text(r.optString("title","مسیر"),14,true,TEXT));
+                JSONArray pts=r.optJSONArray("points");
+                copy.addView(text(String.format(Locale.US,"%.1f km · %d نقطه",r.optDouble("distance_km",0),pts==null?0:pts.length()),11,false,MUTED));
+                row.addView(copy,new LinearLayout.LayoutParams(0,-2,1f));
+                Button show=normal("نمایش");
+                show.setOnClickListener(v->showOfflineRoute(r));
+                row.addView(show,new LinearLayout.LayoutParams(dp(82),dp(42)));
+                host.addView(row,cardLp());
+            }catch(Exception ignored){}
+        }
+    }
+
+    private void showOfflineRoute(JSONObject route){
+        JSONArray source=route.optJSONArray("points");
+        JSONArray points=new JSONArray();
+        if(source!=null)for(int i=0;i<source.length();i++){
+            JSONArray p=source.optJSONArray(i);if(p==null||p.length()<2)continue;
+            JSONObject o=new JSONObject();try{o.put("lat",p.optDouble(0));o.put("lng",p.optDouble(1));points.put(o);}catch(Exception ignored){}
+        }
+        NativeRouteView map=new NativeRouteView(this);map.setPoints(points);
+        content.addView(map,new LinearLayout.LayoutParams(-1,dp(360)));
+    }
+
+    private void openEvent(int eventId){
+        Intent i=new Intent(this,NativeMainActivity.class);
+        i.putExtra("page","activities");i.putExtra("event_id",eventId);
+        startActivity(i);
     }
 
     private void openGroup(){Intent i=new Intent(this,NativeLiveNavigationActivity.class);i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");startActivity(i);}
