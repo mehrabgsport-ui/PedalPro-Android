@@ -34,6 +34,9 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
     private JSONArray recorded=new JSONArray();
     private double[] trackLat=new double[0],trackLng=new double[0],trackMeters=new double[0];
     private int lastProgressSegment=-1;
+    private long lastCyclingAttempt,approachRevision;
+    private boolean cyclingInFlight;
+    private long arrivalCandidateElapsed,arrivalCandidateFixTime;
     private PedalNeshanMapSurface mapView;
     private TextView status;
     private double goalLat=Double.NaN,goalLng=Double.NaN;
@@ -51,7 +54,7 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
         if(rideId<=0){addCard("خطا","شناسه مسیر نامعتبر است.");return;}
         LinearLayout intro=card();
         intro.addView(text("دو مرحله: رسیدن به مسیر، سپس دنبال‌کردن خط GPS اصلی",15,true,TEXT));
-        intro.addView(text("مسیریاب نشان مقصد انتخابی را باز می‌کند. ثبت رکاب‌زنی در PedalPro فقط در صورت فعال بودن رکاب‌زنی GPS ادامه دارد.",11,false,MUTED));
+        intro.addView(text("مسیریابی اختصاصی دوچرخه تا ابتدا یا انتهای مسیر روی نقشه PedalPro نمایش داده می‌شود، پس از فعال‌سازی سرویس دوچرخه در سرور. ثبت GPS مستقل ادامه دارد.",11,false,MUTED));
         content.addView(intro,cardLp());
 
         mapView=new PedalNeshanMapSurface(this);
@@ -128,10 +131,14 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     goalLat=point.optDouble("lat",Double.NaN);
                     goalLng=point.optDouble("lng",Double.NaN);
                     phase=PHASE_TO_TARGET;arrived=false;lastProgressSegment=-1;
-                    mapView.setNavigationMode(false);
+                    arrivalCandidateElapsed=0L;arrivalCandidateFixTime=0L;
+                    lastCyclingAttempt=0L;approachRevision++;
+                    mapView.setNavigationMode(true);
+                    mapView.clearNavigationRoute();
                     mapView.setTarget(goalLat,goalLng);
                     status.setText("مقصد: "+(toBeginning?"ابتدای":"انتهای")+
-                            " مسیر. نشان را باز کنید و از داخل نشان مسیریابی را شروع کنید.");
+                            " مسیر؛ در انتظار GPS و دریافت مسیر ویژه دوچرخه…");
+                    updateLocation();
                 }).show();
     }
     private boolean recording(){
@@ -180,20 +187,27 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
     }
     private void startFollow(){
         if(recorded.length()<2)return;
+        if(!Double.isFinite(goalLat)){chooseDestination();return;}
+        // Never skip the bicycle approach to the selected endpoint.
+        phase=PHASE_TO_TARGET;
+        arrived=false;arrivalCandidateElapsed=0L;arrivalCandidateFixTime=0L;
+        mapView.setNavigationMode(true);
         if(!recording()){
             new AlertDialog.Builder(this).setTitle("ثبت مسیر GPS")
-                    .setMessage("برای ثبت رکاب‌زنی هنگام دنبال‌کردن مسیر اصلی، GPS را فعال کنید.")
-                    .setPositiveButton("شروع GPS و ادامه",(d,w)->
-                            beginTrackingThen(this::activateFollowing))
-                    .setNeutralButton("مشاهده بدون ثبت",(d,w)->activateFollowing())
+                    .setMessage("برای ذخیره حرکت تا مسیر اصلی ابتدا GPS را روشن کن.")
+                    .setPositiveButton("شروع GPS و مسیریابی",(d,w)->
+                            beginTrackingThen(this::updateLocation))
+                    .setNeutralButton("مسیریابی بدون ثبت",(d,w)->updateLocation())
                     .setNegativeButton("انصراف",null).show();
             return;
         }
-        activateFollowing();
+        updateLocation();
     }
 
     private void activateFollowing(){
         phase=PHASE_FOLLOW;arrived=true;
+        approachRevision++;
+        mapView.clearNavigationRoute();
         JSONObject finish=endpoint(false);
         if(finish!=null)mapView.setTarget(finish.optDouble("lat"),finish.optDouble("lng"));
         mapView.setPoints(recorded);
@@ -288,12 +302,29 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     mapView.setHeadingDegrees(loc.getBearing());
                 if(phase==PHASE_FOLLOW){updateFollowProgress(loc);return;}
                 if(phase!=PHASE_TO_TARGET||!Double.isFinite(goalLat))return;
+                if(!loc.hasAccuracy()||loc.getAccuracy()>50f||
+                        Math.abs(System.currentTimeMillis()-loc.getTime())>12000L){
+                    status.setText("GPS قدیمی یا کم‌دقت است؛ مسیریابی دوچرخه متوقف شده.");
+                    return;
+                }
+                fetchCyclingApproach(loc);
                 float[] dist=new float[1];
                 Location.distanceBetween(loc.getLatitude(),loc.getLongitude(),goalLat,goalLng,dist);
                 status.setText(String.format(Locale.US,"تا %s مسیر %.0f متر · GPS ±%.0f متر",
                         toBeginning?"ابتدا":"انتها",dist[0],loc.hasAccuracy()?loc.getAccuracy():999f));
-                if(arrived||!loc.hasAccuracy()||loc.getAccuracy()>30f||
-                    dist[0]>Math.max(35f,loc.getAccuracy()*1.5f))return;
+                if(arrived||loc.getAccuracy()>30f||
+                    dist[0]>Math.max(35f,loc.getAccuracy()*1.5f)){
+                    arrivalCandidateElapsed=0L;arrivalCandidateFixTime=0L;
+                    return;
+                }
+                if(arrivalCandidateElapsed==0L){
+                    arrivalCandidateElapsed=SystemClock.elapsedRealtime();
+                    arrivalCandidateFixTime=loc.getTime();
+                    status.setText("نزدیک مقصد؛ در حال تأیید رسیدن با GPS دوم…");
+                    return;
+                }
+                if(loc.getTime()<=arrivalCandidateFixTime ||
+                        SystemClock.elapsedRealtime()-arrivalCandidateElapsed<6000L)return;
                 arrived=true;
                 if(toBeginning){
                     // Switch to the recorded polyline after an accurate start fix.
@@ -314,6 +345,40 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
                     }
                 } else status.setText("به انتهای مسیر رسیدی.");
             });
+    }
+
+
+    private void fetchCyclingApproach(Location position){
+        if(cyclingInFlight||!Double.isFinite(goalLat)||phase!=PHASE_TO_TARGET)return;
+        long now=SystemClock.elapsedRealtime();
+        if(lastCyclingAttempt>0&&now-lastCyclingAttempt<45000L)return;
+        lastCyclingAttempt=now;cyclingInFlight=true;
+        final long revision=approachRevision;
+        final double fromLat=position.getLatitude(),fromLng=position.getLongitude();
+        final double toLat=goalLat,toLng=goalLng;
+        io.execute(()->{
+            try{
+                CyclingDirectionsClient.Route route=CyclingDirectionsClient.fetch(api,fromLat,fromLng,toLat,toLng);
+                main.post(()->{
+                    cyclingInFlight=false;
+                    if(isFinishing()||phase!=PHASE_TO_TARGET||revision!=approachRevision)return;
+                    mapView.setNavigationRoute(route.points);
+                    status.setText(String.format(Locale.US,
+                            "مسیر مخصوص دوچرخه تا %s: %.2f km · حدود %d دقیقه",
+                            toBeginning?"ابتدا":"انتها",route.distanceMeters/1000.0,
+                            Math.max(1,(route.durationSeconds+59)/60)));
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    cyclingInFlight=false;
+                    if(isFinishing()||phase!=PHASE_TO_TARGET||revision!=approachRevision)return;
+                    mapView.clearNavigationRoute();
+                    status.setText("مسیر دوچرخه روی سرور فعال نیست یا در دسترس نیست: "+
+                            (e.getMessage()==null?"خطای دریافت":e.getMessage())+
+                            " · مسیر خودرو جایگزین نمی‌شود.");
+                });
+            }
+        });
     }
 
     /** Read-only index of the original GPS track, used only for navigation feedback. */

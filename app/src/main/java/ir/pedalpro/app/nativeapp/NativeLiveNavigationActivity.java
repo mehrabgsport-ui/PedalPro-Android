@@ -115,20 +115,20 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         }
 
         LinearLayout routing=card();
-        routing.addView(text("مسیریابی خیابانی نشان",17,true,TEXT));
-        roadStatus=text("مسیر خیابانی پیشنهاد خودرو است؛ برای دوچرخه از نظر عبورپذیری و زمان سفر تأیید نشده.",12,false,MUTED);
+        routing.addView(text("مسیریابی مخصوص دوچرخه",17,true,TEXT));
+        roadStatus=text("مسیر مخصوص دوچرخه از API سرور دریافت می‌شود؛ در صورت نبود سرویس، مسیر خودرو جایگزین نخواهد شد.",12,false,MUTED);
         roadStatus.setPadding(0,dp(8),0,dp(8));
         routing.addView(roadStatus);
-        roadToggle=normal("فعال‌سازی مسیر خیابانی");
+        roadToggle=normal("فعال‌سازی مسیر دوچرخه");
         roadToggle.setOnClickListener(v->{
             roadEnabled=!roadEnabled;
             getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE).edit()
                     .putBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,roadEnabled).apply();
-            roadToggle.setText(roadEnabled?"غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
+            roadToggle.setText(roadEnabled?"غیرفعال‌سازی مسیر دوچرخه":"فعال‌سازی مسیر دوچرخه");
             if(!roadEnabled){
                 routeView.clearNavigationRoute();
                 invalidateDirectionCache();
-                roadStatus.setText("نمایش فاصله مستقیم؛ مسیر خیابانی خاموش است.");
+                roadStatus.setText("نمایش فاصله مستقیم؛ مسیر دوچرخه خاموش است.");
             } else {
                 invalidateDirectionCache();
                 maybeFetchDirections();
@@ -137,9 +137,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         routing.addView(roadToggle);
         // Admin map credentials live only behind the account-adjacent settings gear.
         content.addView(routing,cardLp());
-        if(!NeshanServiceCredentials.hasKey(this))
-            roadStatus.setText("برای مسیریابی خیابانی، کلید «سرویس‌ها»ی نشان را روی این دستگاه وارد کنید. مسیر مستقیم همچنان فعال است.");
-        addCard("راهنما","خط مستقیم موقعیت هدف را نشان می‌دهد. مسیر خیابانی تنها پس از فعال‌کردن و دریافت پاسخ معتبر نشان نمایش داده می‌شود.");
+        roadStatus.setText("برای مسیریابی دوچرخه، سرویس cycling-regular باید در Backend فعال باشد؛ نقشه نشان حفظ می‌شود.");
+        addCard("راهنما","خط مستقیم فقط فاصله را نشان می‌دهد؛ خط ناوبری ویژه دوچرخه پس از پاسخ معتبر Backend ترسیم می‌شود.");
     }
 
     @Override protected void onResume(){
@@ -154,8 +153,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         }
         if(roadToggle!=null)roadToggle.setText(roadEnabled?
                 "غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
-        if(roadStatus!=null&&!NeshanServiceCredentials.hasKey(this))
-            roadStatus.setText("کلید مسیریابی نشان در تنظیمات مدیر ثبت نشده است.");
+
         main.removeCallbacks(tick);
         main.post(tick);
         if(roadEnabled)maybeFetchDirections();
@@ -332,11 +330,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         if(!roadEnabled || directionInFlight || !Double.isFinite(currentLat) ||
                 !Double.isFinite(currentLng)||!Double.isFinite(targetLat)||
                 !Double.isFinite(targetLng)||isFinishing())return;
-        String secret=NeshanServiceCredentials.read(this);
-        if(secret.isEmpty()) {
-            roadStatus.setText("کلید سرویس نشان در این گوشی تنظیم نشده؛ فاصله مستقیم فعال است.");
-            return;
-        }
+        // Cycling credential is server-side only; never request a Neshan car route.
         long now=SystemClock.elapsedRealtime();
         if(now-lastDirectionAttempt<("group".equals(mode)?10_000L:45_000L)
                 && lastDirectionAttempt>0)return;
@@ -351,10 +345,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         lastDirectionAttempt=now;
         directionInFlight=true;
         final double fromLat=currentLat,fromLng=currentLng,toLat=targetLat,toLng=targetLng;
-        roadStatus.setText("در حال دریافت مسیر خیابانی پیشنهاد خودرو از نشان…");
+        roadStatus.setText("در حال دریافت مسیر مخصوص دوچرخه…");
         directionsIo.execute(()->{
             try {
-                NeshanDirectionsClient.Route result=NeshanDirectionsClient.fetch(secret,
+                CyclingDirectionsClient.Route result=CyclingDirectionsClient.fetch(api,
                         fromLat,fromLng,toLat,toLng);
                 main.post(()->{
                     directionInFlight=false;
@@ -369,18 +363,18 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     String km=result.distanceMeters>0?
                             String.format(Locale.US,"%.1f کیلومتر",result.distanceMeters/1000.0):
                             "مسیر موجود";
-                    String next=result.nextInstruction==null?"":result.nextInstruction.trim();
-                    roadStatus.setText("مسیر خیابانی پیشنهادی خودرو: "+km+
-                            (next.isEmpty()?"":" · "+next)+
-                            " · زمان و عبورپذیری دوچرخه تأیید نشده است.");
+                    String next=result.instruction==null?"":result.instruction.trim();
+                    roadStatus.setText("مسیر مخصوص دوچرخه: "+km+
+                            (next.isEmpty()?"":" · "+next));
                 });
             } catch(Exception e) {
-                String reason=e.getMessage()==null?"پاسخ نامعتبر از نشان":e.getMessage();
+                String reason=e.getMessage()==null?"پاسخ معتبر دوچرخه دریافت نشد":e.getMessage();
                 main.post(()->{
                     directionInFlight=false;
                     if(isFinishing()||!roadEnabled)return;
                     routeView.clearNavigationRoute();
-                    roadStatus.setText("نشان: "+reason+" · فاصله مستقیم همچنان در دسترس است.");
+                    roadStatus.setText("مسیریابی دوچرخه: "+reason+
+                            " · مسیر خودرو جایگزین نمی‌شود.");
                 });
             }
         });
