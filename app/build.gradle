@@ -13,6 +13,12 @@ android {
         targetSdk 36
         versionCode 45
         versionName '2.0.0-native-rc1'
+        // Override with -PpedalproMapTileTemplate='https://licensed-host/{z}/{x}/{y}.png'
+        // OSM tiles are a development fallback; production must respect provider terms.
+        def mapTemplate = providers.gradleProperty('pedalproMapTileTemplate')
+                .orElse('https://tile.openstreetmap.org/{z}/{x}/{y}.png').get()
+        buildConfigField 'String', 'PEDALPRO_MAP_TILE_TEMPLATE',
+                '"' + mapTemplate.replace('\\', '\\\\').replace('"', '\\"') + '"'
     }
 
     flavorDimensions 'distribution'
