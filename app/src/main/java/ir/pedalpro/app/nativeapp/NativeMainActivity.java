@@ -2820,12 +2820,14 @@ public final class NativeMainActivity extends Activity {
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
             @Override public View getView(int position, View convertView, android.view.ViewGroup parent) {
                 TextView v = (TextView) super.getView(position, convertView, parent);
-                v.setTextColor(TEXT); v.setTextSize(12); v.setGravity(Gravity.CENTER_VERTICAL | Gravity.END); v.setPadding(dp(12), 0, dp(12), 0);
+                v.setTextColor(TEXT); v.setTextSize(14); v.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+                v.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG); v.setPadding(dp(14), 0, dp(14), 0);
                 return v;
             }
             @Override public View getDropDownView(int position, View convertView, android.view.ViewGroup parent) {
                 TextView v = (TextView) super.getDropDownView(position, convertView, parent);
-                v.setTextColor(TEXT); v.setBackgroundColor(Color.rgb(9, 26, 41)); v.setPadding(dp(12), dp(12), dp(12), dp(12)); v.setGravity(Gravity.END);
+                v.setTextColor(TEXT); v.setTextSize(14); v.setBackgroundColor(Color.rgb(9, 26, 41));
+                v.setPadding(dp(14), dp(12), dp(14), dp(12)); v.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
                 return v;
             }
         };
