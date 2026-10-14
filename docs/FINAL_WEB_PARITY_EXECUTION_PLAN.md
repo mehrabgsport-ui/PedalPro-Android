@@ -27,7 +27,7 @@ Status: DONE
 - Final source glyph treatment, signed-in account state, admin group styling and common input skin aligned.
 
 ## Phase 3 — Core public pages
-Status: IN PROGRESS
+Status: DONE
 - Home hero, quick cards, live rides, upcoming activity, site feed, report, top riders.
 - Activities/events list/detail/register/gallery.
 - Routes list/detail.
@@ -41,6 +41,8 @@ Status: IN PROGRESS
 - About page mobile glass layout and canonical guide PDF target.
 - Verified Native RC QA and Android Store Release Build.
 - Current batch complete: mobile single-column home report, corrected guide PDF target, member cards linked to native member detail.
+- Final audit complete: Home, Activities/Events, Routes, Members, Gallery, About and the 12-section Guide are present in Native UI and use the canonical web data/actions.
+- Phase 3 closed with successful Native RC QA and Android Store Release Build.
 
 ## Phase 4 — Account and personal data
 Status: DONE
