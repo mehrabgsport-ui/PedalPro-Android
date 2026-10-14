@@ -5803,6 +5803,25 @@ public final class NativeMainActivity extends Activity {
         return lp;
     }
 
+    private PedalIconView.Icon drawerIcon(String label) {
+        if (label == null) return PedalIconView.Icon.DETAILS;
+        String s = label.toLowerCase(Locale.ROOT);
+        if (s.contains("beacon") || s.contains("اشتراک زنده")) return PedalIconView.Icon.BEACON;
+        if (s.contains("sos") || s.contains("حریم خصوصی") || s.contains("privacy")) return PedalIconView.Icon.SHIELD;
+        if (s.contains("سنسور") || s.contains("cadence") || s.contains("power")) return PedalIconView.Icon.SENSOR;
+        if (s.contains("گفتگو") || s.contains("چت") || s.contains("ارتباط")) return PedalIconView.Icon.CHAT;
+        if (s.contains("حساب") || s.contains("پروفایل") || s.contains("عضو") || s.contains("اعضا")) return PedalIconView.Icon.USER;
+        if (s.contains("مدیریت") || s.contains("تنظیمات") || s.contains("گوشی")) return PedalIconView.Icon.SETTINGS;
+        if (s.contains("گالری") || s.contains("عکس")) return PedalIconView.Icon.GALLERY;
+        if (s.contains("رکاب") || s.contains("دوچرخه") || s.contains("سرویس")) return PedalIconView.Icon.RIDE;
+        if (s.contains("برنامه") || s.contains("فعالیت") || s.contains("کشف")) return PedalIconView.Icon.CALENDAR;
+        if (s.contains("مسیر") || s.contains("نقشه") || s.contains("heatmap") || s.contains("flyover")) return PedalIconView.Icon.ROUTE;
+        if (s.contains("آمار") || s.contains("عملکرد") || s.contains("training") || s.contains("رتبه")) return PedalIconView.Icon.CHART;
+        if (s.contains("هوشمند") || s.contains("مشاور")) return PedalIconView.Icon.CHAT;
+        if (s.contains("صفحه اصلی") || s.contains("خانه")) return PedalIconView.Icon.HOME;
+        return PedalIconView.Icon.DETAILS;
+    }
+
     private View drawerItem(String glyph, String label, Runnable run, boolean active) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -5818,8 +5837,7 @@ public final class NativeMainActivity extends Activity {
         row.setContentDescription(label);
 
         int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
-        TextView icon = text(glyph, 16, false, fg);
-        icon.setGravity(Gravity.CENTER);
+        PedalIconView icon = new PedalIconView(this, drawerIcon(label), fg);
         row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView tv = text(label, 13, true, fg);
@@ -5848,8 +5866,7 @@ public final class NativeMainActivity extends Activity {
         head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         head.setPadding(dp(12), 0, dp(12), 0);
 
-        TextView sectionIcon = text(groupGlyph, 16, false, Color.rgb(220, 234, 243));
-        sectionIcon.setGravity(Gravity.CENTER);
+        PedalIconView sectionIcon = new PedalIconView(this, drawerIcon(title), Color.rgb(220, 234, 243));
         TextView titleView = text(title, 13, true, Color.rgb(220, 234, 243));
         TextView chevron = text(startOpen ? "⌃" : "⌄", 15, false, Color.rgb(128, 164, 187));
         chevron.setGravity(Gravity.CENTER);
@@ -5878,8 +5895,7 @@ public final class NativeMainActivity extends Activity {
             sub.setFocusable(true);
 
             String glyph = itemGlyphs != null && i < itemGlyphs.length ? itemGlyphs[i] : "";
-            TextView gi = text(glyph, 16, false, Color.rgb(220, 234, 243));
-            gi.setGravity(Gravity.CENTER);
+            PedalIconView gi = new PedalIconView(this, drawerIcon(labels[i]), Color.rgb(220, 234, 243));
             sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
             TextView label = text(labels[i], 12, false, Color.rgb(220, 234, 243));
