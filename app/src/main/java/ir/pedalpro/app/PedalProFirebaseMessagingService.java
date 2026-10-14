@@ -49,7 +49,11 @@ public class PedalProFirebaseMessagingService extends FirebaseMessagingService {
             nm.createNotificationChannel(ch);
         }
 
-        Intent open = new Intent(this, MainActivity.class);
+        Intent open = new Intent(this,ir.pedalpro.app.nativeapp.NativeMainActivity.class);
+        // Notifications must always open the native screen, never legacy WebView.
+        if(actionUrl!=null && (actionUrl.contains("chat")||
+                actionUrl.contains("message")||actionUrl.contains("conversation")))
+            open.putExtra("page","chat");
         if (actionUrl != null && !actionUrl.isEmpty()) {
             String url = actionUrl.startsWith("/") ? "https://pedalpro.ir" + actionUrl : actionUrl;
             open.setData(Uri.parse(url));
