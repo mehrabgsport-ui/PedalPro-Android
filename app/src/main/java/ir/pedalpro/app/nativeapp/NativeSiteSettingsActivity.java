@@ -242,8 +242,9 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                     if(row!=null)displayed+=appendBaleFields(box,row,key+" / "+(i+1),0);
                 }
             } else if(object!=null) {
-                if(!isPrivateBaleField(key)) {
-                    box.addView(text(key+": "+String.valueOf(object),12,false,TEXT));
+                String safe=safeBaleValue(key,object);
+                if(safe!=null) {
+                    box.addView(text(key+": "+safe,12,false,TEXT));
                     displayed++;
                 }
             }
@@ -282,8 +283,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 continue;
             Object val=source.opt(key);
             if(val instanceof Number||val instanceof Boolean||val instanceof String){
-                String safe=String.valueOf(val);
-                if(safe.length()>160)safe=safe.substring(0,160)+"…";
+                String safe=safeBaleValue(key,val);
+                if(safe==null)continue;
                 box.addView(text(scope+"."+key+": "+safe,12,false,TEXT));
                 count++;
             }
@@ -303,18 +304,45 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
             if(value instanceof JSONObject) {
                 shown+=appendBaleFields(box,(JSONObject)value,key,depth+1);
             }else if(value instanceof Boolean||value instanceof Number||value instanceof String){
-                box.addView(text(key+" : "+String.valueOf(value),12,false,TEXT));
+                String safe=safeBaleValue(key,value);
+                if(safe==null)continue;
+                box.addView(text(key+" : "+safe,12,false,TEXT));
                 shown++;
             }
         }
         return shown;
     }
 
+    /** The Bale bootstrap is not a documented public schema: display only safe status primitives. */
+    private String safeBaleValue(String key,Object value){
+        if(isPrivateBaleField(key)||value==null||value==JSONObject.NULL)return null;
+        if(value instanceof Boolean||value instanceof Number)return String.valueOf(value);
+        if(!(value instanceof String))return null;
+        String field=key.toLowerCase(Locale.ROOT);
+        String safe=((String)value).trim();
+        boolean knownStatus=field.equals("status")||field.equals("state")||
+                field.equals("mode")||field.equals("connection_status")||
+                field.equals("webhook_status")||field.equals("bot_status")||
+                field.equals("last_check_status");
+        boolean publicIdentity=field.equals("bot_name")||field.equals("bot_username")||
+                field.equals("username")||field.equals("version");
+        if(!knownStatus&&!publicIdentity)return "••••";
+        if(safe.length()>72||safe.contains("://")||safe.contains("\\")||
+                safe.contains("/")||safe.contains("=")||safe.contains("\n")||
+                safe.contains("\r")||safe.contains(" "))return "••••";
+        return safe;
+    }
+
     private boolean isPrivateBaleField(String key){
         String name=key==null?"":key.toLowerCase(Locale.ROOT);
+        if(name.equals("webhook_status")||name.equals("last_check_status"))return false;
         return name.contains("token")||name.contains("secret")||name.contains("pass")
-                ||name.contains("key")||name.contains("auth")||name.contains("webhook_url")
-                ||name.contains("chat_id")||name.contains("phone")||name.contains("session");
+                ||name.contains("key")||name.contains("auth")||name.contains("webhook")
+                ||name.contains("chat_id")||name.contains("phone")||name.contains("session")
+                ||name.contains("callback")||name.contains("endpoint")||name.contains("url")
+                ||name.contains("cookie")||name.contains("header")||name.contains("bearer")
+                ||name.contains("credential")||name.contains("access")||name.contains("contact")
+                ||name.contains("peer")||name.contains("user_id")||name.contains("otp");
     }
 
     private void renderUnmirroredSiteSettings(){
