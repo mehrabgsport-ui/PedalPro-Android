@@ -29,6 +29,8 @@ public final class NativeChatActivity extends NativeScreenBase {
     private JSONObject boot;
     private JSONArray messages=new JSONArray();
     private LinearLayout messagesHost;
+    private ScrollView messagesScroll;
+    private int lastRenderedCount;
     private EditText input;
     private TextView composeContext;
     private int replyTo;
@@ -94,8 +96,17 @@ public final class NativeChatActivity extends NativeScreenBase {
         tabsScroll.addView(tabs);content.addView(tabsScroll,cardLp());
 
         LinearLayout messagesCard=card();
-        messagesHost=new LinearLayout(this);messagesHost.setOrientation(LinearLayout.VERTICAL);
-        messagesCard.addView(messagesHost);
+        messagesCard.setBackground(round(android.graphics.Color.rgb(9,32,50),24,STROKE));
+        messagesScroll=new ScrollView(this);
+        messagesScroll.setFillViewport(false);
+        messagesScroll.setSmoothScrollingEnabled(true);
+        messagesScroll.setVerticalScrollBarEnabled(true);
+        messagesHost=new LinearLayout(this);
+        messagesHost.setOrientation(LinearLayout.VERTICAL);
+        messagesHost.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        messagesScroll.addView(messagesHost);
+        int height=Math.min(dp(465),Math.round(getResources().getDisplayMetrics().heightPixels*.48f));
+        messagesCard.addView(messagesScroll,new LinearLayout.LayoutParams(-1,height));
         content.addView(messagesCard,cardLp());
 
         LinearLayout composer=card();
@@ -104,6 +115,7 @@ public final class NativeChatActivity extends NativeScreenBase {
         Button send=primary("ارسال");
         Button cancel=normal("لغو پاسخ / ویرایش");cancel.setVisibility(View.GONE);
         composer.addView(composeContext);composer.addView(input);composer.addView(send);composer.addView(cancel);
+        composer.setBackground(round(android.graphics.Color.rgb(9,32,50),20,STROKE));
         content.addView(composer,cardLp());
 
         cancel.setOnClickListener(v->{replyTo=0;editId=0;composeContext.setVisibility(View.GONE);cancel.setVisibility(View.GONE);input.setText("");send.setText("ارسال");});
@@ -122,6 +134,8 @@ public final class NativeChatActivity extends NativeScreenBase {
         loading=false;
         pollInFlight=false;
         if(messagesHost!=null)messagesHost.removeAllViews();
+        lastRenderedCount=0;
+        lastRenderedCount=0;
         setSubtitle(group==null?"چت گروهی":group.optString("title","چت گروهی"),GREEN);
         loadMessages(true);
     }
@@ -246,14 +260,25 @@ public final class NativeChatActivity extends NativeScreenBase {
 
     private void renderMessages(){
         if(messagesHost==null)return;
+        int previous=lastRenderedCount;
+        boolean wasAtBottom=messagesScroll==null||
+                messagesScroll.getScrollY()+messagesScroll.getHeight()>=
+                messagesHost.getHeight()-dp(90);
         messagesHost.removeAllViews();
-        if(messages.length()==0){messagesHost.addView(text("هنوز پیامی در این گفتگو نیست.",12,false,MUTED));return;}
-        for(int i=0;i<messages.length();i++){
+        if(messages.length()==0){
+            lastRenderedCount=0;
+            messagesHost.addView(text("هنوز پیامی در این گفتگو نیست.",12,false,MUTED));
+            return;
+        }
+        // Cap native bubble views; full history stays on server and avoids freezes.
+        for(int i=Math.max(0,messages.length()-110);i<messages.length();i++){
             JSONObject m=messages.optJSONObject(i);if(m==null)continue;
             addMessageBubble(m);
         }
+        lastRenderedCount=messages.length();
         VazirmatnLoader.apply(this,messagesHost);
-        content.postDelayed(()->{if(content.getParent() instanceof ScrollView)((ScrollView)content.getParent()).fullScroll(View.FOCUS_DOWN);},80);
+        if(messagesScroll!=null&&(wasAtBottom||previous==0))
+            messagesScroll.post(()->messagesScroll.fullScroll(View.FOCUS_DOWN));
     }
 
     private void addMessageBubble(JSONObject m){
@@ -274,7 +299,8 @@ public final class NativeChatActivity extends NativeScreenBase {
             bubble.addView(reply);
         }
         bubble.addView(text(mine?"شما":m.optString("sender_name","عضو"),11,true,mine?ACCENT:ORANGE));
-        bubble.addView(text(m.optBoolean("deleted_at",false)?"پیام حذف شده است.":m.optString("body",""),13,false,TEXT));
+        String body=m.isNull("body")?"":m.optString("body","");
+        bubble.addView(text(m.optBoolean("deleted_at",false)?"پیام حذف شده است.":("null".equalsIgnoreCase(body.trim())?"":body),13,false,TEXT));
         String meta=JalaliDate.format(m.optString("created_at",""),true);
         if(m.opt("edited_at")!=null&&!String.valueOf(m.opt("edited_at")).isBlank())meta+=" · ویرایش‌شده";
         if("private".equals(mode)&&mine){
