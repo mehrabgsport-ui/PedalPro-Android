@@ -42,11 +42,13 @@ final class PedalMapTiles {
                 }
             });
     private static final Set<String> PENDING = Collections.synchronizedSet(new HashSet<>());
+    private static final Map<String, Long> RETRY_AFTER = Collections.synchronizedMap(new LinkedHashMap<>());
+    private static volatile boolean hostRejected = false;
     private static final Paint IMAGE = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
     private static final Paint CAPTION = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final long CACHE_AGE_MS = 7L * 24 * 60 * 60 * 1000;
     private static final String TILE_URL = BuildConfig.PEDALPRO_MAP_TILE_TEMPLATE;
-    private static final String OSM_HOST = "tile.openstreetmap.org";
+    private static final String CREDIT = BuildConfig.PEDALPRO_MAP_ATTRIBUTION;
 
     private PedalMapTiles() {}
 
@@ -90,23 +92,22 @@ final class PedalMapTiles {
         CAPTION.setTextSize(target.getResources().getDisplayMetrics().scaledDensity * 10f);
         if (available == 0) {
             CAPTION.setColor(Color.rgb(199, 215, 224));
-            c.drawText("در حال دریافت نقشه زمینه…", 16f, h / 2f, CAPTION);
+            c.drawText(hostRejected ? "دسترسی به سرویس نقشه رد شد؛ تنظیمات API را بررسی کنید" :
+                    "در حال دریافت نقشه زمینه…", 16f, h / 2f, CAPTION);
         }
         // Mandatory per-tile provider attribution. Other providers may require a different credit.
         CAPTION.setColor(Color.WHITE);
         CAPTION.setShadowLayer(3, 0, 1, Color.BLACK);
-        c.drawText(OSM_HOST.equals(host()) ? "© OpenStreetMap contributors" : "Map © tile provider",
-                10f, h - 12f, CAPTION);
+        String credit = CREDIT == null ? "" : CREDIT;
+        c.drawText(credit, Math.max(10f, w - CAPTION.measureText(credit) - 10f), h - 24f, CAPTION);
         CAPTION.clearShadowLayer();
     }
 
-    private static String host() {
-        try { return new URL(TILE_URL.replace("{z}", "4").replace("{x}", "8").replace("{y}", "5")).getHost(); }
-        catch (Exception e) { return ""; }
-    }
-
     private static void queue(View target, String id, int zoom, int x, int y) {
-        if (TILE_URL == null || !TILE_URL.startsWith("https://") || !PENDING.add(id)) return;
+        if (TILE_URL == null || !TILE_URL.startsWith("https://")) return;
+        Long retry = RETRY_AFTER.get(id);
+        if (retry != null && retry > System.currentTimeMillis()) return;
+        if (!PENDING.add(id)) return;
         Context app = target.getContext().getApplicationContext();
         IO.execute(() -> {
             try {
@@ -125,7 +126,11 @@ final class PedalMapTiles {
                     connection.setReadTimeout(8000);
                     connection.setRequestProperty("User-Agent", "PedalPro-Android/2.0 (+https://pedalpro.ir)");
                     try {
-                        if (connection.getResponseCode() == 200) {
+                        int status = connection.getResponseCode();
+                        if (status == 401 || status == 403) hostRejected = true;
+                        if (status != 200) RETRY_AFTER.put(id,
+                                System.currentTimeMillis() + (status == 401 || status == 403 || status == 429 ? 60_000L : 15_000L));
+                        if (status == 200) {
                             String mime = connection.getContentType();
                             if (mime != null && mime.startsWith("image/")) {
                                 File temp = new File(folder, id + ".tmp");
@@ -148,10 +153,13 @@ final class PedalMapTiles {
                 }
                 if (bitmap != null) {
                     MEMORY.put(id, bitmap);
+                    RETRY_AFTER.remove(id);
+                    hostRejected = false;
                     if (target.isAttachedToWindow()) MAIN.post(target::postInvalidateOnAnimation);
                 }
             } catch (Exception ignored) {
                 // Keep GPS route visible even when the tile host is offline.
+                RETRY_AFTER.put(id, System.currentTimeMillis() + 15_000L);
             } finally { PENDING.remove(id); }
         });
     }
