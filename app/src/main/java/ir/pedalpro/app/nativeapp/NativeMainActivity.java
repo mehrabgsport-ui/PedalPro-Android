@@ -71,6 +71,7 @@ public final class NativeMainActivity extends Activity {
     private static final int REQ_EVENT_COVER = 2302;
     private static final int REQ_PROFILE_AVATAR = 2303;
     private static final int REQ_BIKE_PHOTO = 2304;
+    private static final int REQ_LOW_POWER = 2305;
 
     private static final int BG = Color.rgb(6, 17, 30);
     private static final int CARD = Color.rgb(13, 28, 44);
@@ -144,6 +145,27 @@ public final class NativeMainActivity extends Activity {
     private boolean gpsChecking = false;
     private long rideTimerAnchorElapsed = 0L;
     private long rideBaseSeconds = 0L;
+    private int displayClockRideId = 0;
+
+    // Presentation clock only; GPS tracking and server ride-duration calculations remain untouched.
+    private void synchronizeDisplayedRideTime(JSONObject ride) {
+        if (ride == null || ride.optInt("id", 0) <= 0) {
+            displayClockRideId = 0;
+            rideBaseSeconds = 0L;
+            rideTimerAnchorElapsed = 0L;
+            return;
+        }
+        int id = ride.optInt("id", 0);
+        long serverSeconds = Math.max(0L, ride.optLong("duration_seconds", 0L));
+        long locallyDisplayed = id == displayClockRideId ? rideBaseSeconds : 0L;
+        if (id == displayClockRideId && !manualPaused && rideTimerAnchorElapsed > 0L) {
+            locallyDisplayed += Math.max(0L, (SystemClock.elapsedRealtime() - rideTimerAnchorElapsed) / 1000L);
+        }
+        if (id != displayClockRideId) manualPaused = false;
+        rideBaseSeconds = Math.max(serverSeconds, locallyDisplayed);
+        displayClockRideId = id;
+        rideTimerAnchorElapsed = manualPaused ? 0L : SystemClock.elapsedRealtime();
+    }
 
     private final Runnable clockTick = new Runnable() {
         @Override public void run() {
@@ -344,13 +366,7 @@ public final class NativeMainActivity extends Activity {
                 bootstrap = d;
                 serverOnline = true;
                 activeRide = d.optJSONObject("my_active_ride");
-                if (activeRide != null) {
-                    rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
-                    rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
-                } else {
-                    rideBaseSeconds = 0;
-                    rideTimerAnchorElapsed = 0;
-                }
+                synchronizeDisplayedRideTime(activeRide);
                 main.post(() -> {
                     updateHeaderAccess(d);
                     applyUiSettings(d);
@@ -1935,7 +1951,8 @@ public final class NativeMainActivity extends Activity {
             i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
             i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS, rideBaseSeconds > 0 ? rideBaseSeconds : activeRide.optLong("duration_seconds", 0));
             i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM, activeRide.optDouble("distance_km", 0));
-            startActivity(i);
+            i.putExtra(LowPowerRideActivity.EXTRA_IS_PAUSED, manualPaused);
+            startActivityForResult(i, REQ_LOW_POWER);
         });
         content.addView(low, fullActionLp(56));
 
@@ -1952,8 +1969,7 @@ public final class NativeMainActivity extends Activity {
         stop.setOnClickListener(v -> confirmFinishRide(stop));
         content.addView(stop, fullActionLp(54));
 
-        rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
-        rideTimerAnchorElapsed = manualPaused ? 0 : SystemClock.elapsedRealtime();
+        synchronizeDisplayedRideTime(activeRide);
         VazirmatnLoader.apply(this, content);
         animatePageIn();
     }
@@ -7328,6 +7344,20 @@ public final class NativeMainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_LOW_POWER){
+            if(resultCode==RESULT_OK&&data!=null&&activeRide!=null){
+                int resultRideId=data.getIntExtra(LowPowerRideActivity.EXTRA_RIDE_ID,0);
+                if(resultRideId>0&&resultRideId==activeRide.optInt("id",0)){
+                    manualPaused=data.getBooleanExtra(LowPowerRideActivity.EXTRA_RESULT_PAUSED,manualPaused);
+                    rideBaseSeconds=Math.max(rideBaseSeconds,Math.max(0L,
+                            data.getLongExtra(LowPowerRideActivity.EXTRA_RESULT_SECONDS,rideBaseSeconds)));
+                    displayClockRideId=resultRideId;
+                    rideTimerAnchorElapsed=manualPaused?0L:SystemClock.elapsedRealtime();
+                    if("ride".equals(currentPage))showRide();
+                }
+            }
+            return;
+        }
         if(resultCode!=RESULT_OK||data==null||data.getData()==null)return;
         android.net.Uri uri=data.getData();
         try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Throwable ignored){}
