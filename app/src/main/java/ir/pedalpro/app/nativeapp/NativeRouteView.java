@@ -32,6 +32,9 @@ public final class NativeRouteView extends View {
     private P currentPoint;
     private P targetPoint;
     private boolean showTargetLine = false;
+    private int cameraZoom = 15;
+    private double cameraLat = Double.NaN;
+    private double cameraLng = Double.NaN;
 
     public NativeRouteView(Context context) { super(context); init(); }
     public NativeRouteView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -110,19 +113,23 @@ public final class NativeRouteView extends View {
         final float w = getWidth(), h = getHeight();
         if (w <= 1 || h <= 1) return;
 
-        for (int i = 1; i < 6; i++) {
-            float x = w * i / 6f, y = h * i / 6f;
-            canvas.drawLine(x, 0, x, h, grid);
-            canvas.drawLine(0, y, w, y, grid);
-        }
-
         Bounds b = bounds();
         if (b == null) {
-            canvas.drawText("مسیر GPS هنوز نقطه‌ای ندارد", dp(16), h / 2f, text);
+            canvas.drawText("در انتظار دریافت اولین نقطه GPS…", dp(16), h / 2f, text);
             return;
         }
 
         float pad = dp(22);
+        cameraLat = (b.minLat + b.maxLat) * .5;
+        cameraLng = (b.minLng + b.maxLng) * .5;
+        for (cameraZoom = 17; cameraZoom > 3; cameraZoom--) {
+            double spanX = PedalMapTiles.worldX(b.maxLng, cameraZoom)
+                    - PedalMapTiles.worldX(b.minLng, cameraZoom);
+            double spanY = PedalMapTiles.worldY(b.minLat, cameraZoom)
+                    - PedalMapTiles.worldY(b.maxLat, cameraZoom);
+            if (spanX <= w - pad * 2 && spanY <= h - pad * 2) break;
+        }
+        PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom);
         Path p = new Path();
         boolean first = true;
         for (P x : points) {
@@ -182,10 +189,12 @@ public final class NativeRouteView extends View {
     }
 
     private float projectX(double lng, Bounds b, float w, float pad) {
-        return pad + (float)((lng - b.minLng)/(b.maxLng-b.minLng)) * Math.max(1, w - pad*2);
+        return w * .5f + (float)(PedalMapTiles.worldX(lng,cameraZoom)
+                - PedalMapTiles.worldX(cameraLng,cameraZoom));
     }
     private float projectY(double lat, Bounds b, float h, float pad) {
-        return h - pad - (float)((lat - b.minLat)/(b.maxLat-b.minLat)) * Math.max(1, h - pad*2);
+        return h * .5f + (float)(PedalMapTiles.worldY(lat,cameraZoom)
+                - PedalMapTiles.worldY(cameraLat,cameraZoom));
     }
     private float dp(float v) { return v * getResources().getDisplayMetrics().density; }
 
