@@ -53,7 +53,7 @@ expect "$NATIVE/NativeSocialActivity.java" 'api.post("pp_follow_toggle"' "Follow
 expect "$NATIVE/NativeSocialActivity.java" 'api.post("pp_kudos_toggle"' "Kudos backend action preserved"
 expect "$NATIVE/NativeAdvancedActivity.java" 'pp_segment_create_from_ride' "Segment action preserved"
 expect "$NATIVE/NativeAdvancedActivity.java" 'pp_route_pack' "Offline pack action preserved"
-expect "$NATIVE/NativeRouteView.java" 'PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom)' "Native raster basemap present"
+expect "$NATIVE/NativeRouteView.java" 'PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,' "Native raster basemap present"
 expect "$NATIVE/NativeRouteView.java" 'new ScaleGestureDetector' "Native pinch zoom"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'Class.forName("org.neshan.mapsdk.MapView")' "Licensed Neshan Android MapView adapter"
 expect "$NATIVE/NeshanDirectionsClient.java" 'https://api.neshan.org/v2/direction' "Official Neshan road-direction endpoint"
