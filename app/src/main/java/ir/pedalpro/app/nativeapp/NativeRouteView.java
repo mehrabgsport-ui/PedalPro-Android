@@ -6,6 +6,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.location.Location;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -35,6 +38,13 @@ public final class NativeRouteView extends View {
     private int cameraZoom = 15;
     private double cameraLat = Double.NaN;
     private double cameraLng = Double.NaN;
+    private boolean userCamera = false;
+    private double userLat, userLng;
+    private int userZoom = 15;
+    private float lastTouchX, lastTouchY;
+    private float pinchAccum = 1f;
+    private GestureDetector tapDetector;
+    private ScaleGestureDetector scaleDetector;
 
     public NativeRouteView(Context context) { super(context); init(); }
     public NativeRouteView(Context context, AttributeSet attrs) { super(context, attrs); init(); }
@@ -56,6 +66,96 @@ public final class NativeRouteView extends View {
         current.setColor(Color.rgb(47, 228, 159));
         text.setColor(Color.rgb(165, 191, 204));
         text.setTextSize(dp(11));
+        setClickable(true);
+        setFocusable(true);
+        setContentDescription("نقشه مسیر؛ حرکت با کشیدن انگشت، بزرگ‌نمایی با دو انگشت، بازگشت به مسیر با لمس طولانی");
+        tapDetector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onDown(MotionEvent e) { return true; }
+            @Override public boolean onDoubleTap(MotionEvent e) {
+                ensureUserCamera();
+                userZoom = Math.min(18, userZoom + 1);
+                invalidate();
+                return true;
+            }
+            @Override public void onLongPress(MotionEvent e) {
+                userCamera = false;
+                invalidate();
+            }
+        });
+        scaleDetector = new ScaleGestureDetector(getContext(), new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override public boolean onScale(ScaleGestureDetector detector) {
+                ensureUserCamera();
+                pinchAccum *= detector.getScaleFactor();
+                if (pinchAccum >= 1.4f) {
+                    userZoom = Math.min(18, userZoom + 1);
+                    pinchAccum = 1f;
+                    invalidate();
+                } else if (pinchAccum <= .72f) {
+                    userZoom = Math.max(3, userZoom - 1);
+                    pinchAccum = 1f;
+                    invalidate();
+                }
+                return true;
+            }
+            @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
+                pinchAccum = 1f;
+                return true;
+            }
+        });
+    }
+
+    private void ensureUserCamera() {
+        if (userCamera || !Double.isFinite(cameraLat) || !Double.isFinite(cameraLng)) return;
+        userLat = cameraLat;
+        userLng = cameraLng;
+        userZoom = cameraZoom;
+        userCamera = true;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (scaleDetector != null) scaleDetector.onTouchEvent(e);
+        if (tapDetector != null) tapDetector.onTouchEvent(e);
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                lastTouchX = e.getX();
+                lastTouchY = e.getY();
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (e.getPointerCount() == 1 && (scaleDetector == null || !scaleDetector.isInProgress())) {
+                    float dx = e.getX() - lastTouchX, dy = e.getY() - lastTouchY;
+                    if (Math.abs(dx) + Math.abs(dy) > dp(1)) {
+                        ensureUserCamera();
+                        if (userCamera) {
+                            double wx = PedalMapTiles.worldX(userLng, userZoom) - dx;
+                            double wy = PedalMapTiles.worldY(userLat, userZoom) - dy;
+                            double world = PedalMapTiles.TILE * (1 << userZoom);
+                            userLng = wx / world * 360.0 - 180.0;
+                            double mercator = Math.PI * (1 - 2 * Math.max(0, Math.min(world, wy)) / world);
+                            userLat = Math.toDegrees(Math.atan(Math.sinh(mercator)));
+                            invalidate();
+                        }
+                    }
+                    lastTouchX = e.getX();
+                    lastTouchY = e.getY();
+                }
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                lastTouchX = e.getX(0);
+                lastTouchY = e.getY(0);
+                return true;
+            case MotionEvent.ACTION_UP:
+                performClick();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                return true;
+        }
+        return true;
+    }
+
+    @Override public boolean performClick() {
+        super.performClick();
+        return true;
     }
 
     public void setPoints(JSONArray rows) {
@@ -128,6 +228,11 @@ public final class NativeRouteView extends View {
             double spanY = PedalMapTiles.worldY(b.minLat, cameraZoom)
                     - PedalMapTiles.worldY(b.maxLat, cameraZoom);
             if (spanX <= w - pad * 2 && spanY <= h - pad * 2) break;
+        }
+        if (userCamera) {
+            cameraLat = userLat;
+            cameraLng = userLng;
+            cameraZoom = userZoom;
         }
         PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom);
         Path p = new Path();
