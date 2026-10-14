@@ -3243,70 +3243,11 @@ public final class NativeMainActivity extends Activity {
 
 
     private void showGroupChat() {
-        enterPage("chat");
-        if (!signedIn()) { showLogin(); return; }
-        selectNav(null);
-        content.removeAllViews();
-        addHero("گفتگوی گروهی", "");
-
-        chatMessagesHost = new LinearLayout(this);
-        chatMessagesHost.setOrientation(LinearLayout.VERTICAL);
-        content.addView(chatMessagesHost);
-
-        LinearLayout composer = card();
-        EditText input = input("پیام…");
-        input.setSingleLine(false);
-        input.setMinLines(2);
-        Button send = primaryButton("ارسال");
-        composer.addView(input);
-        composer.addView(send);
-        content.addView(composer, cardLp());
-
-        send.setOnClickListener(v -> {
-            String body = input.getText().toString().trim();
-            if (body.isBlank() || chatRoomId <= 0) return;
-            hideKeyboard();
-            send.setEnabled(false);
-            io.execute(() -> {
-                try {
-                    JSONObject d = api.post("chat_send", new JSONObject()
-                            .put("room_id", chatRoomId)
-                            .put("body", body)
-                            .put("reply_to_id", 0)
-                            .put("client_token", java.util.UUID.randomUUID().toString()));
-                    main.post(() -> {
-                        input.setText("");
-                        send.setEnabled(true);
-                        loadGroupChatMessages(true);
-                    });
-                } catch (Exception e) {
-                    main.post(() -> {
-                        send.setEnabled(true);
-                        toast(e.getMessage());
-                    });
-                }
-            });
-        });
-
-        io.execute(() -> {
-            try {
-                JSONObject boot = api.get("chat_bootstrap");
-                JSONObject group = boot.optJSONObject("group");
-                if (group == null || group.optInt("id", 0) <= 0) throw new IllegalStateException("چت گروهی در دسترس نیست.");
-                chatRoomId = group.optInt("id");
-                main.post(() -> {
-                    loadGroupChatMessages(true);
-                    main.removeCallbacks(chatPoll);
-                    main.postDelayed(chatPoll, 4500L);
-                });
-            } catch (Exception e) {
-                main.post(() -> {
-                    LinearLayout box = card();
-                    box.addView(text("چت دریافت نشد: " + e.getMessage(), 12, false, MUTED));
-                    chatMessagesHost.addView(box, cardLp());
-                });
-            }
-        });
+        if(!signedIn()){showLogin();return;}
+        // The dedicated native screen supports both private and group chats and
+        // bounded scrolling; do not render the obsolete full-height inline room.
+        Intent intent=new Intent(this,NativeChatActivity.class);
+        startActivity(intent);
     }
 
     private void loadGroupChatMessages(boolean full) {
