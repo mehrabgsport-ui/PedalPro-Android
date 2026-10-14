@@ -1734,7 +1734,7 @@ public final class NativeMainActivity extends Activity {
             socialRow.setOrientation(LinearLayout.HORIZONTAL);
             socialRow.setGravity(Gravity.CENTER_VERTICAL);
             socialRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-            PedalIconView symbol=new PedalIconView(this,PedalIconView.Icon.CHAT,
+            SocialNetworkIconView symbol=new SocialNetworkIconView(this,row[0],
                     connected?Color.rgb(34,222,233):Color.rgb(115,126,139));
             socialRow.addView(symbol,new LinearLayout.LayoutParams(dp(25),dp(25)));
             TextView title=text(row[0],14,true,connected?TEXT:Color.rgb(133,148,163));
