@@ -849,7 +849,7 @@ public final class NativeMainActivity extends Activity {
         card.setContentDescription(title);
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
+                new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
         bg.setCornerRadius(dp(26));
         bg.setStroke(dp(1), Color.argb(54, 255, 255, 255));
         card.setBackground(bg);
@@ -1041,7 +1041,7 @@ public final class NativeMainActivity extends Activity {
         }
 
         LinearLayout report = new LinearLayout(this);
-        report.setOrientation(LinearLayout.VERTICAL);
+        report.setOrientation(LinearLayout.HORIZONTAL);
         report.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         report.setGravity(Gravity.CENTER_VERTICAL);
         report.setPadding(dp(8), dp(10), dp(8), dp(10));
@@ -1053,33 +1053,33 @@ public final class NativeMainActivity extends Activity {
         report.setBackground(bg);
 
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_PROGRAMS,
-                JalaliDate.fa(programs), "برنامه برگزار شده"), new LinearLayout.LayoutParams(-1, dp(82)));
-        report.addView(homeReportMobileSeparator());
+                JalaliDate.fa(programs), "برنامه برگزار شده"), new LinearLayout.LayoutParams(0, dp(92), 1f));
+        report.addView(homeReportSeparator());
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_MEMBERS,
-                JalaliDate.fa(memberCount), "عضو فعال"), new LinearLayout.LayoutParams(-1, dp(82)));
-        report.addView(homeReportMobileSeparator());
+                JalaliDate.fa(memberCount), "عضو فعال"), new LinearLayout.LayoutParams(0, dp(92), 1f));
+        report.addView(homeReportSeparator());
         report.addView(homeReportItem(PedalIconView.Icon.REPORT_DISTANCE,
-                JalaliDate.fa(Math.round(totalKm)), "کیلومتر رکاب زده"), new LinearLayout.LayoutParams(-1, dp(82)));
+                JalaliDate.fa(Math.round(totalKm)), "کیلومتر رکاب زده"), new LinearLayout.LayoutParams(0, dp(92), 1f));
         return report;
     }
 
     private View homeReportItem(PedalIconView.Icon icon, String value, String label) {
         LinearLayout item = new LinearLayout(this);
-        item.setOrientation(LinearLayout.HORIZONTAL);
-        item.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         item.setGravity(Gravity.CENTER);
         item.setPadding(dp(7), dp(6), dp(7), dp(6));
 
         PedalIconView iv = new PedalIconView(this, icon, Color.rgb(19, 231, 239));
-        item.addView(iv, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        item.addView(iv, new LinearLayout.LayoutParams(dp(27), dp(27)));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setGravity(Gravity.END);
         copy.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        TextView number = text(value, 26, true, TEXT);
+        TextView number = text(value, 19, true, TEXT);
         number.setIncludeFontPadding(false);
-        TextView caption = text(label, 11, true, Color.rgb(237, 245, 250));
+        TextView caption = text(label, 10, true, Color.rgb(237, 245, 250));
         caption.setIncludeFontPadding(false);
         LinearLayout.LayoutParams captionLp = new LinearLayout.LayoutParams(-2, -2);
         captionLp.setMargins(0, dp(7), 0, 0);
@@ -1095,7 +1095,7 @@ public final class NativeMainActivity extends Activity {
     private View homeReportSeparator() {
         View line = new View(this);
         line.setBackgroundColor(Color.argb(43, 255, 255, 255));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(1), dp(72));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(1), dp(80));
         line.setLayoutParams(lp);
         return line;
     }
@@ -5633,7 +5633,7 @@ public final class NativeMainActivity extends Activity {
         box.setPadding(dp(16), dp(15), dp(16), dp(15));
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(41, 23, 54, 77), Color.argb(56, 8, 28, 45)});
+                new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
         g.setCornerRadius(dp(radius));
         g.setStroke(dp(1), Color.argb(54, 255, 255, 255));
         box.setBackground(g);
@@ -5648,7 +5648,7 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable headerGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(87, 24, 59, 82), Color.argb(107, 8, 31, 49)});
+                new int[]{Color.argb(251, 17, 49, 70), Color.argb(253, 5, 25, 42)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         return g;
@@ -5656,7 +5656,7 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable bottomGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(102, 24, 59, 82), Color.argb(122, 8, 31, 49)});
+                new int[]{Color.argb(250, 13, 44, 64), Color.argb(254, 5, 24, 42)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
         g.setStroke(dp(1), Color.argb(61, 255, 255, 255));
         return g;
@@ -5804,7 +5804,7 @@ public final class NativeMainActivity extends Activity {
         panel.setPadding(dp(12), dp(18), dp(12), dp(12));
         GradientDrawable drawerBg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(240, 11, 41, 64), Color.argb(247, 4, 22, 37)});
+                new int[]{Color.argb(254, 11, 41, 64), Color.argb(255, 4, 22, 37)});
         drawerBg.setCornerRadii(new float[]{dp(28),dp(28),0,0,0,0,dp(28),dp(28)});
         drawerBg.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         panel.setBackground(drawerBg);
