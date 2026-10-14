@@ -43,6 +43,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private TextView distance,bearing,status;
     private PedalIconView arrow;
     private boolean busy=false;
+    private boolean groupArrivalNotified;
+    private float currentAccuracy=Float.MAX_VALUE;
     private boolean screenVisible;
     private TextView roadStatus;
     private Button roadToggle;
@@ -57,7 +59,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         @Override public void run(){
             if(isFinishing()||!screenVisible)return;
             refresh();
-            main.postDelayed(this,3000);
+            main.postDelayed(this,"group".equals(mode)?10000L:3000L);
         }
     };
 
@@ -85,6 +87,20 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         routeView=new PedalNeshanMapSurface(this);
         routeView.setNavigationMode(true);
         content.addView(routeView,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(360)));
+        if("group".equals(mode)){
+            Button cancel=normal("لغو رسیدن به گروه · ادامه رکاب‌زنی عادی");
+            cancel.setOnClickListener(v->{
+                roadEnabled=false;
+                routeView.clearNavigationRoute();
+                Intent ride=new Intent(this,NativeMainActivity.class);
+                ride.putExtra("page","ride");
+                ride.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(ride);
+                finish();
+            });
+            content.addView(cancel,cardLp());
+            addCard("ثبت رکاب‌زنی","GPS رکاب‌زنی فعال مستقل از این صفحه ادامه دارد؛ برای ثبت حرکت باید رکاب‌زنی را قبلاً در PedalPro شروع کرده باشید.");
+        }
 
         LinearLayout routing=card();
         routing.addView(text("مسیریابی خیابانی نشان",17,true,TEXT));
@@ -201,6 +217,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 .addOnSuccessListener(this,loc->{
                     if(loc==null)return;
                     currentLat=loc.getLatitude();currentLng=loc.getLongitude();
+                    currentAccuracy=loc.hasAccuracy()?loc.getAccuracy():Float.MAX_VALUE;
                     routeView.setCurrent(currentLat,currentLng);
                     if(loc.hasBearing() && loc.hasSpeed() && loc.getSpeed()>1.3f)
                         routeView.setHeadingDegrees(loc.getBearing());
@@ -233,13 +250,15 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
             return;
         }
         long now=SystemClock.elapsedRealtime();
-        if(now-lastDirectionAttempt<45_000L && lastDirectionAttempt>0)return;
+        if(now-lastDirectionAttempt<("group".equals(mode)?10_000L:45_000L)
+                && lastDirectionAttempt>0)return;
         boolean haveRoute=Double.isFinite(lastRouteFromLat)&&Double.isFinite(lastRouteToLat);
         if(haveRoute) {
             float[] from=new float[1],to=new float[1];
             Location.distanceBetween(lastRouteFromLat,lastRouteFromLng,currentLat,currentLng,from);
             Location.distanceBetween(lastRouteToLat,lastRouteToLng,targetLat,targetLng,to);
-            if(from[0]<80f && to[0]<80f)return;
+            if(from[0]<("group".equals(mode)?25f:80f) &&
+               to[0]<("group".equals(mode)?20f:80f))return;
         }
         lastDirectionAttempt=now;
         directionInFlight=true;
@@ -286,6 +305,21 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         double km=r[0]/1000.0;
         float deg=(r.length>1?r[1]:0);
         distance.setText(String.format(Locale.US,km<1?"%.2f km":"%.1f km",km));
+        if("group".equals(mode)&&!groupArrivalNotified
+                && currentAccuracy<=30f&&r[0]<=Math.max(35f,currentAccuracy*1.5f)){
+            groupArrivalNotified=true;
+            status.setText("به گروه رسیدی؛ رکاب‌زنی شما همچنان ثبت می‌شود.");
+            new AlertDialog.Builder(this)
+                .setTitle("به گروه رسیدی")
+                .setMessage("می‌توانی تا پایان رکاب‌زنی کنار گروه ادامه بدهی؛ مسافت ثبت‌شده از بین نمی‌رود.")
+                .setPositiveButton("همراه گروه می‌مانم",(dialog,which)->{})
+                .setNegativeButton("لغو رسیدن به گروه",(dialog,which)->{
+                    Intent ride=new Intent(this,NativeMainActivity.class);
+                    ride.putExtra("page","ride");
+                    ride.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(ride);finish();
+                }).show();
+        }
         bearing.setText("جهت جغرافیایی: "+Math.round((deg+360)%360)+"°");
         arrow.setRotation(deg);
         arrow.setContentDescription("جهت جغرافیایی هدف: "+Math.round((deg+360)%360)+" درجه");
