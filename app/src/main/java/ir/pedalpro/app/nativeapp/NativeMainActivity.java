@@ -6216,7 +6216,7 @@ public final class NativeMainActivity extends Activity {
         row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         row.setPadding(dp(12), 0, dp(12), 0);
         row.setBackground(roundRect(
-                active ? Color.argb(23, 32, 228, 241) : Color.TRANSPARENT,
+                active ? Color.rgb(11,91,109) : Color.rgb(11,36,53),
                 14,
                 0));
         row.setClickable(true);
@@ -6242,7 +6242,7 @@ public final class NativeMainActivity extends Activity {
     private View drawerSection(String title, String groupGlyph, String[] itemGlyphs, String[] labels, Runnable[] actions, boolean startOpen) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
-        host.setBackground(roundRect(Color.argb(6, 255, 255, 255), 15, Color.argb(18, 255, 255, 255)));
+        host.setBackground(roundRect(Color.rgb(13,42,60),17,Color.argb(95,96,159,182)));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
         hp.setMargins(0, dp(5), 0, 0);
         host.setLayoutParams(hp);
@@ -6277,7 +6277,7 @@ public final class NativeMainActivity extends Activity {
             sub.setGravity(Gravity.CENTER_VERTICAL);
             sub.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
             sub.setPadding(dp(10), 0, dp(10), 0);
-            sub.setBackground(roundRect(Color.TRANSPARENT, 11, 0));
+            sub.setBackground(roundRect(Color.rgb(10,36,51),12,Color.argb(45,112,171,195)));
             sub.setClickable(true);
             sub.setFocusable(true);
 
