@@ -721,16 +721,21 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                     card.addView(photo,new LinearLayout.LayoutParams(-1,dp(82)));
                 }
                 card.addView(text(m.optString("title","مدال"), 15, true, TEXT));
-                String meta = m.optString("metric","") + " · هدف " + m.optString("target_value","") +
+                String meta = m.optString("metric_type","") + " · هدف " + m.optString("target_value","") +
                         " · " + (m.optInt("is_active",1)==1 ? "فعال" : "غیرفعال") +
                         " · ترتیب " + m.optInt("sort_order",100);
                 card.addView(text(meta, 11, false, MUTED));
                 int id = m.optInt("id",0);
-                Button del = danger("حذف");
-                del.setOnClickListener(v -> {
-                    JSONObject p = new JSONObject(); try { p.put("id", id); } catch(Exception ignored){}
-                    postAndReload("medal_delete", p, del, "مدال حذف شد");
-                });
+                Button del = danger("حذف مدال");
+                del.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                        .setTitle("حذف مدال")
+                        .setMessage("حذف این مدال، سوابق اعطای آن به اعضا را نیز حذف می‌کند. تأیید می‌کنید؟")
+                        .setNegativeButton("انصراف",null)
+                        .setPositiveButton("حذف",(dialog,which)->{
+                            JSONObject payload = new JSONObject();
+                            try { payload.put("id", id); } catch(Exception ignored){}
+                            postAndReload("medal_delete", payload, del, "مدال حذف شد");
+                        }).show());
                 Button image=normal("بارگذاری تصویر PNG");
                 image.setOnClickListener(v -> {
                     pendingMedalImageId=id;
@@ -741,6 +746,19 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                     startActivityForResult(pick, REQ_MEDAL_IMAGE);
                 });
                 card.addView(image);
+                if (!medalPhoto.isBlank()) {
+                    Button clear=normal("حذف تصویر مدال");
+                    clear.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                            .setTitle("حذف تصویر مدال")
+                            .setMessage("فقط تصویر حذف می‌شود؛ خود مدال و امتیازهای اعضا باقی می‌ماند.")
+                            .setNegativeButton("انصراف",null)
+                            .setPositiveButton("حذف تصویر",(dialog,which)->{
+                                JSONObject payload=new JSONObject();
+                                try {payload.put("medal_id",id);}catch(Exception ignored){}
+                                postAndReload("medal_image_clear",payload,clear,"تصویر مدال حذف شد");
+                            }).show());
+                    card.addView(clear);
+                }
                 card.addView(del);
                 content.addView(card, cardLp());
             }

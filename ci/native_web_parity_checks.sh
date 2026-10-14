@@ -209,6 +209,11 @@ assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
 PY
 
+# RC20 medal-image source-backed contracts.
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'postAndReload("medal_image_clear"' "Manager can clear an uploaded medal image without deleting the medal"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'm.optString("metric_type","")' "Correct display of medal definition metric"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'new android.app.AlertDialog.Builder(this)' "Destructive admin actions require confirmation"
+
 # RC18 bicycle-only navigation and route-bound GNSS identifiers.
 expect "$NATIVE/CyclingDirectionsClient.java" 'api.get("pp_cycling_directions",query)' "Backend bicycle-only routing adapter"
 expect "$NATIVE/CyclingDirectionsClient.java" '"cycling-regular".equals(data.optString("profile"))' "Car profiles are never treated as bike routes"
