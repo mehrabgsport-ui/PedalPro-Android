@@ -34,7 +34,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     @Override protected void onScreenReady() {
         appReleaseAdmin = new NativeAppReleaseAdminController(this, api, io);
         fcmAdmin = new NativeFcmAdminController(this, api, io);
-        load("general");
+        String requested = getIntent().getStringExtra("section");
+        load("sms".equals(requested) ? "sms" : "general");
     }
 
     private void load(String tab) {
