@@ -57,6 +57,12 @@ public final class PedalProApiClient {
 
     public JSONObject postMultipart(String action, java.util.Map<String,String> fields,
                                     Uri fileUri, String fileField, String fileName, String mimeType) throws Exception {
+        return postMultipartRetried(action,fields,fileUri,fileField,fileName,mimeType,false);
+    }
+
+    private JSONObject postMultipartRetried(String action, java.util.Map<String,String> fields,
+                                    Uri fileUri, String fileField, String fileName, String mimeType,
+                                    boolean retried419) throws Exception {
         String boundary="----PedalPro"+System.currentTimeMillis();
         HttpURLConnection c=null;
         try{
@@ -88,6 +94,13 @@ public final class PedalProApiClient {
             int status=c.getResponseCode();captureCookies(c);
             String raw=readBody(status>=400?c.getErrorStream():c.getInputStream());
             JSONObject json=new JSONObject(raw==null||raw.isBlank()?"{}":raw);
+            String responseCsrf=json.optString("csrf","");
+            if(!responseCsrf.isEmpty())session.saveCsrf(responseCsrf);
+            // CSRF is checked before the PHP upload handler; retry once is safe.
+            if(status==419&&!retried419){
+                bootstrap();
+                return postMultipartRetried(action,fields,fileUri,fileField,fileName,mimeType,true);
+            }
             if(status<200||status>=300||!json.optBoolean("ok",true))throw new IllegalStateException(json.optString("error","HTTP "+status));
             return json;
         }finally{if(c!=null)c.disconnect();}
@@ -102,6 +115,19 @@ public final class PedalProApiClient {
             String mimeType,
             long offset,
             long length) throws Exception {
+        return postMultipartChunkRetried(action,fields,fileUri,fileField,fileName,mimeType,offset,length,false);
+    }
+
+    private JSONObject postMultipartChunkRetried(
+            String action,
+            java.util.Map<String,String> fields,
+            Uri fileUri,
+            String fileField,
+            String fileName,
+            String mimeType,
+            long offset,
+            long length,
+            boolean retried419) throws Exception {
         String boundary="----PedalProChunk"+System.currentTimeMillis();
         HttpURLConnection c=null;
         try{
@@ -158,6 +184,10 @@ public final class PedalProApiClient {
             JSONObject json=new JSONObject(raw==null||raw.isBlank()?"{}":raw);
             String responseCsrf=json.optString("csrf","");
             if(!responseCsrf.isBlank())session.saveCsrf(responseCsrf);
+            if(status==419&&!retried419){
+                bootstrap();
+                return postMultipartChunkRetried(action,fields,fileUri,fileField,fileName,mimeType,offset,length,true);
+            }
             if(status<200||status>=300||!json.optBoolean("ok",true)){
                 throw new IllegalStateException(json.optString("error","HTTP "+status));
             }

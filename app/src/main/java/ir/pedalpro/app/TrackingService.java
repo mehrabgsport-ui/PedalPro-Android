@@ -1109,10 +1109,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
         try {
             JSONArray arr = new JSONArray(prefs.getString("pending", "[]"));
             arr.put(point);
-            if (arr.length() > 3000) {
-                JSONArray trimmed = new JSONArray();
-                for (int i = arr.length() - 3000; i < arr.length(); i++) trimmed.put(arr.get(i));
-                arr = trimmed;
+            if (arr.length() > 3000 && arr.length() % 200 == 1) {
+                // Never truncate the oldest unsent ride points: those are the
+                // only recoverable record of an offline ride.
+                broadcastStatus("صف ارسال GPS طولانی شده است (" + arr.length() + " نقطه)؛ اینترنت را بررسی کنید.", true);
             }
             prefs.edit().putString("pending", arr.toString()).apply();
         } catch (Exception ignored) { }
@@ -1144,7 +1144,21 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     if (p == null) break;
                     SendResult result = sendPoint(p, false);
                     if (!result.ok) break;
+                    // An ignored GPS point was intentionally discarded by the server.
+                    // Do not label it stored or replay it as a confirmed track point.
+                    boolean ignored = false;
+                    String reason = "";
+                    try {
+                        JSONObject acknowledgment = new JSONObject(result.body);
+                        ignored = acknowledgment.optBoolean("ignored", false);
+                        reason = acknowledgment.optString("reason", "");
+                    } catch (Exception ignoredJson) { }
                     removeFirstPending();
+                    if (ignored) {
+                        broadcastStatus("نقطه GPS توسط فیلتر سرور رد شد" +
+                                (reason.isEmpty() ? "" : " · " + reason), false);
+                        continue;
+                    }
                     // Do not replay historical queued points into WebView. The point was
                     // already delivered when it was recorded; only a near-current server
                     // acknowledgement is useful to the UI.
@@ -1216,29 +1230,22 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private boolean refreshCsrf() {
-        HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(API + "?action=bootstrap").openConnection();
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(12000);
-            c.setRequestProperty("Accept", "application/json");
-            String cookie = effectiveSessionCookie();
-            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
-            int code = c.getResponseCode();
-            if (code < 200 || code >= 300) return false;
-            JSONObject j = new JSONObject(readBody(c.getInputStream()));
-            String token = j.optString("csrf", "");
-            String key = firstNeshanKey(j);
-            SharedPreferences.Editor e = prefs.edit();
-            if (NeshanRoadMatcher.validKey(key)) {
-                neshanServiceKey = key.trim();
-                e.putString("neshan_service_key", neshanServiceKey);
+            // Share cookie/CSRF rotation with the authenticated Native API transport.
+            JSONObject data = new ir.pedalpro.app.nativeapp.PedalProApiClient(this).bootstrap();
+            String newToken = data.optString("csrf", "");
+            String serviceKey = firstNeshanKey(data);
+            SharedPreferences.Editor editor = prefs.edit();
+            if (NeshanRoadMatcher.validKey(serviceKey)) {
+                neshanServiceKey = serviceKey.trim();
+                editor.putString("neshan_service_key", neshanServiceKey);
             }
-            if (token.isEmpty()) { e.apply(); return false; }
-            e.putString("csrf", token).apply();
-            return true;
-        } catch (Exception e) { return false; }
-        finally { if (c != null) c.disconnect(); }
+            if (!newToken.isEmpty()) editor.putString("csrf", newToken);
+            editor.apply();
+            return !newToken.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String firstNeshanKey(JSONObject root) {
