@@ -20,7 +20,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private JSONObject boot;
     private String tab="overview";
 
-    @Override protected String screenTitle(){return "امکانات حرفه‌ای";}
+    @Override protected String screenTitle(){return "PedalPro Pro";}
 
     @Override protected void onScreenReady(){
         String requested=getIntent().getStringExtra("section");
@@ -42,11 +42,11 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
 
     private void render(){
         content.removeAllViews();
-        setSubtitle("تحلیل حرفه‌ای رکاب‌زنی و باشگاه",GREEN);
+        setSubtitle("سگمنت، Heatmap، Training Load، Privacy Zones، Replay، رتبه‌بندی باشگاه، تحلیل هوا/ارتفاع و سنسورهای دوچرخه",MUTED);
         renderTabs();
         switch(tab){
-            case "social": openScreen(NativeSocialActivity.class); break;
-            case "recommend": openScreen(NativeSocialActivity.class); break;
+            case "social": openSocial("social"); break;
+            case "recommend": openSocial("recommend"); break;
             case "globalheat": openScreen(NativeHeatmapActivity.class); break;
             case "flyover": renderRideData("Flyover 3D","pp_flyover"); break;
             case "discover": renderDiscover(); break;
@@ -82,7 +82,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
 
     private void addTab(LinearLayout row,String key,String label){
         Button b=normal(label);b.setOnClickListener(v->{tab=key;render();});
-        if(key.equals(tab)){b.setTextColor(android.graphics.Color.rgb(4,36,24));android.graphics.drawable.GradientDrawable g=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,new int[]{android.graphics.Color.rgb(23,201,145),android.graphics.Color.rgb(46,230,166)});g.setCornerRadius(dp(12));b.setBackground(g);}
+        if(key.equals(tab)){b.setTextColor(android.graphics.Color.rgb(5,34,53));android.graphics.drawable.GradientDrawable g=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{android.graphics.Color.rgb(20,223,237),android.graphics.Color.rgb(36,185,237)});g.setCornerRadius(dp(999));b.setBackground(g);}
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(label.length()>11?150:118),dp(44));lp.setMargins(dp(4),dp(5),dp(4),dp(5));row.addView(b,lp);
     }
 
@@ -142,8 +142,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         io.execute(()->{try{JSONObject d=api.get("pp_maintenance_list");JSONArray items=d.optJSONArray("items");main.post(()->{if(items==null||items.length()==0){addCard("سرویس","یادآور سرویس ندارید.");return;}for(int i=0;i<items.length();i++){JSONObject x=items.optJSONObject(i);if(x==null)continue;LinearLayout r=card();r.addView(text(x.optString("title","سرویس"),14,true,TEXT));r.addView(text("سرویس هر "+x.optInt("interval_km",0)+" km · موعد "+x.optDouble("next_due_km",0)+" km",11,false,MUTED));int id=x.optInt("id",0);Button done=normal("سرویس انجام شد");done.setOnClickListener(v->{JSONObject p=new JSONObject();try{p.put("id",id);}catch(Exception ignored){}post("pp_maintenance_complete",p,done,"کیلومتر سرویس بروزرسانی شد",this::render);});r.addView(done);content.addView(r,cardLp());}VazirmatnLoader.apply(this,content);});}catch(Exception e){main.post(()->addCard("خطا",e.getMessage()));}});
     }
 
-    private void openGroup(){Intent i=new Intent(this,NativeLiveNavigationActivity.class);i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");startActivity(i);finish();}
-    private void openScreen(Class<?> cls){startActivity(new Intent(this,cls));finish();}
+    private void openGroup(){Intent i=new Intent(this,NativeLiveNavigationActivity.class);i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");startActivity(i);}
+    private void openSocial(String section){Intent i=new Intent(this,NativeSocialActivity.class);i.putExtra(NativeSocialActivity.EXTRA_SECTION,section);startActivity(i);}
+
+    private void openScreen(Class<?> cls){startActivity(new Intent(this,cls));}
 
     private void post(String action,JSONObject p,Button b,String ok,Runnable after){b.setEnabled(false);io.execute(()->{try{api.post(action,p);main.post(()->{b.setEnabled(true);toast(ok);after.run();});}catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}});}
     private int iv(EditText e,int fallback){try{return Integer.parseInt(e.getText().toString().trim());}catch(Exception x){return fallback;}}
