@@ -41,8 +41,8 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'android:name=".nativeapp.NativeMainActivity"' app/src/main/AndroidManifest.xml
-          grep -q 'versionCode 48' app/build.gradle
-          grep -q "versionName '2.0.0-native-rc4'" app/build.gradle
+          grep -q 'versionCode 49' app/build.gradle
+          grep -q "versionName '2.0.0-native-rc5'" app/build.gradle
           ! grep -q 'new WebView' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
           ! grep -q 'WeatherUiModel' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
           test -f app/src/main/java/ir/pedalpro/app/nativeapp/LowPowerRideActivity.java
@@ -107,12 +107,12 @@ jobs:
           "$AAPT" dump badging "$BAZAAR" | tee /tmp/bazaar-badging.txt
           "$AAPT" dump badging "$MYKET" | tee /tmp/myket-badging.txt
           grep -q "package: name='ir.pedalpro.app'" /tmp/bazaar-badging.txt
-          grep -q "versionCode='48'" /tmp/bazaar-badging.txt
-          grep -q "versionName='2.0.0-native-rc4'" /tmp/bazaar-badging.txt
+          grep -q "versionCode='49'" /tmp/bazaar-badging.txt
+          grep -q "versionName='2.0.0-native-rc5'" /tmp/bazaar-badging.txt
           grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/bazaar-badging.txt
           grep -q "package: name='ir.pedalpro.app'" /tmp/myket-badging.txt
-          grep -q "versionCode='48'" /tmp/myket-badging.txt
-          grep -q "versionName='2.0.0-native-rc4'" /tmp/myket-badging.txt
+          grep -q "versionCode='49'" /tmp/myket-badging.txt
+          grep -q "versionName='2.0.0-native-rc5'" /tmp/myket-badging.txt
           grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/myket-badging.txt
 
       - name: Enforce lint success
