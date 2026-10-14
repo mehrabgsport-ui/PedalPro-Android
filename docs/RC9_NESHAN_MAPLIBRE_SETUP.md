@@ -44,3 +44,14 @@ This file replaces RC8 expired-legacy SDK requirements.
    recorded track alignment and live/group display.
 5. Compare overlays to supplied Neshan reference screenshots.
 6. Keep PR Draft and do not merge to main or publish automatically.
+
+## RC10 keyed-build acceptance (2026-10-14)
+The owner reports registering the `NESHAN_MOBILE_API_KEY` Actions secret. A fresh
+`2.0.0-native-rc10` / versionCode `54` build is required; previous RC9
+signed APKs were demonstrably XYZ fallback.
+
+The signed release workflow now **fails closed** when the MOBILE secret is absent,
+and validates both Bazaar/Myket APK AndroidManifest metadata without printing
+the credential. The SDK adapter still runs through compilation QA; only actual
+device rendering verifies that the service accepts the provider key and Neshan
+vector styles. No marketplace publication or main merge.

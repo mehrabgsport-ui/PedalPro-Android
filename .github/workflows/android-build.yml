@@ -41,14 +41,15 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Neshan MOBILE API key check
+      - name: Require genuine Neshan MOBILE key for signed release
         shell: bash
         run: |
-          if [ -n "${NESHAN_MOBILE_API_KEY:-}" ]; then
-            echo "Current Neshan MapLibre SDK selected."
-          else
-            echo "::warning::NESHAN_MOBILE_API_KEY unset: output will use labelled XYZ fallback."
+          set -euo pipefail
+          if [ -z "${NESHAN_MOBILE_API_KEY:-}" ]; then
+            echo "::error::NESHAN_MOBILE_API_KEY missing. Refusing to publish fallback-labelled signed artifacts."
+            exit 1
           fi
+          echo "Official Neshan MapLibre provider enabled for this signed build."
 
       - name: Configure signing key
         env:
@@ -69,6 +70,23 @@ jobs:
         run: |
           gradle :app:assembleBazaarRelease :app:assembleMyketRelease \
             --stacktrace
+
+      - name: Verify Neshan API-key metadata without revealing its value
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt | sort | tail -1)"
+          test -x "$AAPT"
+          for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk; do
+            test -f "$apk"
+            # Never display AndroidManifest: its compiled meta-data contains the MOBILE key.
+            "$AAPT" dump xmltree "$apk" AndroidManifest.xml | grep -Fq 'org.maplibre.android.API_KEY'
+            if "$AAPT" dump xmltree "$apk" AndroidManifest.xml | grep -Fq 'UNCONFIGURED'; then
+              echo "::error::Neshan AndroidManifest contains the no-key fallback placeholder."
+              exit 1
+            fi
+          done
+          echo "Both APK manifests declare the Neshan MOBILE key metadata."
 
       - name: Sign APKs
         env:
