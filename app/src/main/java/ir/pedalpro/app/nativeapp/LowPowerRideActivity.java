@@ -36,6 +36,9 @@ public final class LowPowerRideActivity extends Activity {
     public static final String EXTRA_RIDE_ID="ride_id";
     public static final String EXTRA_BASE_SECONDS="base_seconds";
     public static final String EXTRA_DISTANCE_KM="distance_km";
+    public static final String EXTRA_IS_PAUSED="is_paused";
+    public static final String EXTRA_RESULT_PAUSED="result_paused";
+    public static final String EXTRA_RESULT_SECONDS="result_seconds";
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private int rideId;
@@ -52,10 +55,7 @@ public final class LowPowerRideActivity extends Activity {
 
     private final Runnable tick=new Runnable(){
         @Override public void run(){
-            long sec=baseSeconds;
-            if(!paused&&anchor>0){
-                sec+=Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L);
-            }
+            long sec=displaySeconds();
             if(time!=null)time.setText(format(sec));
             main.postDelayed(this,1000L);
         }
@@ -89,7 +89,8 @@ public final class LowPowerRideActivity extends Activity {
         rideId=getIntent().getIntExtra(EXTRA_RIDE_ID,0);
         baseSeconds=Math.max(0,getIntent().getLongExtra(EXTRA_BASE_SECONDS,0));
         distanceKm=Math.max(0,getIntent().getDoubleExtra(EXTRA_DISTANCE_KM,0));
-        anchor=SystemClock.elapsedRealtime();
+        paused=getIntent().getBooleanExtra(EXTRA_IS_PAUSED,false);
+        anchor=paused?0:SystemClock.elapsedRealtime();
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(),false);
         getWindow().setStatusBarColor(Color.BLACK);
@@ -155,8 +156,8 @@ public final class LowPowerRideActivity extends Activity {
         pause.setBackgroundColor(Color.TRANSPARENT);
         pause.setClickable(true);
         pause.setFocusable(true);
-        pause.setContentDescription("توقف ثبت");
-        pauseIcon=new PedalIconView(this,PedalIconView.Icon.PAUSE,Color.WHITE);
+        pause.setContentDescription(paused?"ادامه ثبت":"توقف ثبت");
+        pauseIcon=new PedalIconView(this,paused?PedalIconView.Icon.PLAY:PedalIconView.Icon.PAUSE,Color.WHITE);
         pause.addView(pauseIcon,new FrameLayout.LayoutParams(dp(46),dp(46),Gravity.CENTER));
         pause.setOnClickListener(v->togglePause());
         FrameLayout.LayoutParams pauseLp=new FrameLayout.LayoutParams(dp(86),dp(72),Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM);
@@ -224,6 +225,23 @@ public final class LowPowerRideActivity extends Activity {
     private void register(){
         IntentFilter f=new IntentFilter(TrackingService.ACTION_UPDATE);
         ContextCompat.registerReceiver(this,receiver,f,ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+
+    private long displaySeconds(){
+        long seconds=baseSeconds;
+        if(!paused&&anchor>0){
+            seconds+=Math.max(0,(SystemClock.elapsedRealtime()-anchor)/1000L);
+        }
+        return seconds;
+    }
+
+    @Override public void finish(){
+        Intent result=new Intent();
+        result.putExtra(EXTRA_RIDE_ID,rideId);
+        result.putExtra(EXTRA_RESULT_PAUSED,paused);
+        result.putExtra(EXTRA_RESULT_SECONDS,displaySeconds());
+        setResult(RESULT_OK,result);
+        super.finish();
     }
 
     private String format(long sec){
