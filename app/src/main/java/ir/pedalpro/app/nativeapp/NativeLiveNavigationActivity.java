@@ -42,6 +42,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private TextView distance,bearing,status;
     private PedalIconView arrow;
     private boolean busy=false;
+    private boolean screenVisible;
     private TextView roadStatus;
     private Button roadToggle;
     private boolean roadEnabled;
@@ -53,7 +54,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
 
     private final Runnable tick=new Runnable(){
         @Override public void run(){
-            if(!isFinishing())refresh();
+            if(isFinishing()||!screenVisible)return;
+            refresh();
             main.postDelayed(this,3000);
         }
     };
@@ -91,8 +93,14 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         roadToggle.setOnClickListener(v->{
             roadEnabled=!roadEnabled;
             roadToggle.setText(roadEnabled?"غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
-            if(!roadEnabled){routeView.clearNavigationRoute();roadStatus.setText("نمایش فاصله مستقیم؛ مسیر خیابانی خاموش است.");}
-            else maybeFetchDirections();
+            if(!roadEnabled){
+                routeView.clearNavigationRoute();
+                invalidateDirectionCache();
+                roadStatus.setText("نمایش فاصله مستقیم؛ مسیر خیابانی خاموش است.");
+            } else {
+                invalidateDirectionCache();
+                maybeFetchDirections();
+            }
         });
         routing.addView(roadToggle);
         Button credential=normal("تنظیم کلید سرویس نشان");
@@ -102,7 +110,25 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         if(!NeshanServiceCredentials.hasKey(this))
             roadStatus.setText("برای مسیریابی خیابانی، کلید «سرویس‌ها»ی نشان را روی این دستگاه وارد کنید. مسیر مستقیم همچنان فعال است.");
         addCard("راهنما","خط مستقیم موقعیت هدف را نشان می‌دهد. مسیر خیابانی تنها پس از فعال‌کردن و دریافت پاسخ معتبر نشان نمایش داده می‌شود.");
+    }
+
+    @Override protected void onResume(){
+        super.onResume();
+        screenVisible=true;
+        main.removeCallbacks(tick);
         main.post(tick);
+    }
+
+    @Override protected void onPause(){
+        screenVisible=false;
+        main.removeCallbacks(tick);
+        super.onPause();
+    }
+
+    private void invalidateDirectionCache(){
+        lastDirectionAttempt=0L;
+        lastRouteFromLat=Double.NaN;
+        lastRouteToLat=Double.NaN;
     }
 
     private void refresh(){
@@ -115,7 +141,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     JSONObject d=api.get("group_nav_state");
                     JSONObject g=d.optJSONObject("group");
                     if(g==null||!g.optBoolean("has_location",false)){
-                        main.post(()->status.setText("موقعیت زنده گروه در دسترس نیست."));
+                        main.post(()->{
+                            status.setText("موقعیت زنده گروه در دسترس نیست.");
+                            routeView.clearNavigationRoute();
+                        });
                     }else{
                         double lat=g.optDouble("last_lat",Double.NaN),lng=g.optDouble("last_lng",Double.NaN);
                         String leader=g.optString("leader_name","سرگروه");
@@ -131,7 +160,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     JSONArray pts=d.optJSONArray("points");
                     long newLast=d.optLong("last_id",lastPointId);
                     if(r==null||!"active".equals(r.optString("status"))){
-                        main.post(()->status.setText("انتشار زنده این رکاب‌زن متوقف شده است."));
+                        main.post(()->{
+                            status.setText("انتشار زنده این رکاب‌زن متوقف شده است.");
+                            routeView.clearNavigationRoute();
+                        });
                     }else{
                         double lat=r.optDouble("last_lat",Double.NaN),lng=r.optDouble("last_lng",Double.NaN);
                         lastPointId=Math.max(lastPointId,newLast);
@@ -189,6 +221,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 .setNeutralButton("پاک‌کردن کلید",(dialog,which)->{
                     NeshanServiceCredentials.clear(this);
                     roadEnabled=false;
+                    invalidateDirectionCache();
                     roadToggle.setText("فعال‌سازی مسیر خیابانی");
                     routeView.clearNavigationRoute();
                     roadStatus.setText("کلید سرویس حذف شد؛ فقط فاصله مستقیم نمایش داده می‌شود.");
@@ -199,7 +232,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                         Toast.makeText(this,"کلید سرویس در گوشی ذخیره شد.",Toast.LENGTH_SHORT).show();
                         roadEnabled=true;
                         roadToggle.setText("غیرفعال‌سازی مسیر خیابانی");
-                        lastDirectionAttempt=0L;
+                        invalidateDirectionCache();
+                        routeView.clearNavigationRoute();
                         maybeFetchDirections();
                     } catch(Exception e) {
                         roadStatus.setText(e.getMessage()==null?"ذخیره کلید انجام نشد.":e.getMessage());
