@@ -27,6 +27,7 @@ public final class NativeRouteView extends View {
     private final Paint grid = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint route = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint live = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint roadRoute = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint target = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint current = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -35,6 +36,7 @@ public final class NativeRouteView extends View {
     private CameraListener cameraListener;
     private boolean externalBasemap;
     private final List<P> points = new ArrayList<>();
+    private final List<P> navigationPoints = new ArrayList<>();
     private P currentPoint;
     private P targetPoint;
     private boolean showTargetLine = false;
@@ -61,6 +63,11 @@ public final class NativeRouteView extends View {
         route.setStyle(Paint.Style.STROKE);
         route.setStrokeCap(Paint.Cap.ROUND);
         route.setStrokeJoin(Paint.Join.ROUND);
+        roadRoute.setColor(Color.rgb(255, 195, 62));
+        roadRoute.setStrokeWidth(dp(5));
+        roadRoute.setStyle(Paint.Style.STROKE);
+        roadRoute.setStrokeCap(Paint.Cap.ROUND);
+        roadRoute.setStrokeJoin(Paint.Join.ROUND);
         live.setColor(Color.rgb(255, 205, 64));
         live.setStrokeWidth(dp(3));
         live.setStyle(Paint.Style.STROKE);
@@ -203,6 +210,22 @@ public final class NativeRouteView extends View {
         invalidate();
     }
 
+    /** Display-only suggested Neshan road route; never part of recorded GPS samples. */
+    public void setNavigationRoute(JSONArray rows) {
+        navigationPoints.clear();
+        if (rows != null) for (int i = 0; i < rows.length() && i < 12000; i++) {
+            JSONObject o = rows.optJSONObject(i);
+            if (o == null) continue;
+            double lat = o.optDouble("lat", Double.NaN);
+            double lng = o.optDouble("lng", Double.NaN);
+            if (Double.isFinite(lat) && Double.isFinite(lng) && Math.abs(lat) <= 85.0 && Math.abs(lng) <= 180.0)
+                navigationPoints.add(new P(lat, lng));
+        }
+        invalidate();
+    }
+
+    public void clearNavigationRoute() { navigationPoints.clear(); invalidate(); }
+
     public void clearTarget() {
         targetPoint = null;
         showTargetLine = false;
@@ -267,6 +290,17 @@ public final class NativeRouteView extends View {
         }
         if (!first) canvas.drawPath(p, route);
 
+        if (!navigationPoints.isEmpty()) {
+            Path road = new Path();
+            boolean firstRoad = true;
+            for (P r : navigationPoints) {
+                float x = projectX(r.lng, b, w, pad), y = projectY(r.lat, b, h, pad);
+                if (firstRoad) { road.moveTo(x,y); firstRoad = false; }
+                else road.lineTo(x,y);
+            }
+            canvas.drawPath(road, roadRoute);
+        }
+
         if (showTargetLine && currentPoint != null && targetPoint != null) {
             canvas.drawLine(
                     projectX(currentPoint.lng, b, w, pad),
@@ -294,12 +328,16 @@ public final class NativeRouteView extends View {
     }
 
     private Bounds bounds() {
-        if (points.isEmpty() && currentPoint == null && targetPoint == null) return null;
+        if (points.isEmpty() && navigationPoints.isEmpty() && currentPoint == null && targetPoint == null) return null;
         double minLat = Double.POSITIVE_INFINITY, maxLat = Double.NEGATIVE_INFINITY;
         double minLng = Double.POSITIVE_INFINITY, maxLng = Double.NEGATIVE_INFINITY;
         for (P p : points) {
             minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
             minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng);
+        }
+        for (P nav : navigationPoints) {
+            minLat = Math.min(minLat, nav.lat); maxLat = Math.max(maxLat, nav.lat);
+            minLng = Math.min(minLng, nav.lng); maxLng = Math.max(maxLng, nav.lng);
         }
         if (currentPoint != null) {
             minLat = Math.min(minLat, currentPoint.lat); maxLat = Math.max(maxLat, currentPoint.lat);
