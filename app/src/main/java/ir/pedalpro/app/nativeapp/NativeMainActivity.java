@@ -5352,17 +5352,45 @@ public final class NativeMainActivity extends Activity {
         int rideId = activeRide.optInt("id", 0);
         if (rideId <= 0) return;
         setProxyEnabled(button, false);
-        button.setText("در حال پایان…");
+        button.setText("در حال همگام‌سازی GPS…");
 
         io.execute(() -> {
+            boolean serverStopAttempted = false;
             try {
-                Intent stop = new Intent(this, TrackingService.class);
-                stop.setAction(TrackingService.ACTION_STOP);
-                startService(stop);
-
+                // Do not stop the ride on the server while acknowledged track points
+                // are still queued on the phone. Prepare freezes new GPS acquisition.
+                android.content.SharedPreferences tracking = getSharedPreferences(TrackingService.PREFS, MODE_PRIVATE);
+                if (tracking.getBoolean("active", false) && tracking.getInt("ride_id", 0) == rideId) {
+                    Intent prepare = new Intent(this, TrackingService.class);
+                    prepare.setAction(TrackingService.ACTION_PREPARE_FINISH);
+                    prepare.putExtra("ride_id", rideId);
+                    startService(prepare);
+                    long deadline = SystemClock.elapsedRealtime() + 25000L;
+                    boolean synchronizedTrack = false;
+                    while (SystemClock.elapsedRealtime() < deadline) {
+                        boolean prepared = tracking.getBoolean("finish_prepared", false)
+                                && tracking.getInt("finish_ride_id", 0) == rideId;
+                        String queued = tracking.getString("pending", "[]");
+                        if (prepared && (queued == null || "[]".equals(queued))) {
+                            synchronizedTrack = true;
+                            break;
+                        }
+                        Thread.sleep(250L);
+                    }
+                    if (!synchronizedTrack) {
+                        // Resume the existing activity: do not silently lose GPS points.
+                        startTrackingService(rideId);
+                        throw new IllegalStateException("نقاط GPS هنوز به سرور نرسیده‌اند. اینترنت را بررسی و دوباره پایان رکاب‌زنی را بزنید.");
+                    }
+                }
+                serverStopAttempted = true;
                 JSONObject result = api.post("stop_ride", new JSONObject()
                         .put("ride_id", rideId)
                         .put("notes", notes == null ? "" : notes));
+
+                Intent stop = new Intent(this, TrackingService.class);
+                stop.setAction(TrackingService.ACTION_STOP);
+                startService(stop);
 
                 JSONObject d = api.bootstrap();
                 bootstrap = d;
@@ -5383,6 +5411,14 @@ public final class NativeMainActivity extends Activity {
                     startActivity(detail);
                 });
             } catch (Exception e) {
+                if (serverStopAttempted) {
+                    try {
+                        JSONObject status = api.bootstrap();
+                        JSONObject stillActive = status.optJSONObject("my_active_ride");
+                        if (stillActive != null && stillActive.optInt("id", 0) == rideId)
+                            startTrackingService(rideId);
+                    } catch (Exception ignored) { }
+                }
                 main.post(() -> {
                     setProxyEnabled(button, true);
                     button.setText("پایان رکاب‌زنی");

@@ -193,6 +193,21 @@ expect "$NATIVE/NativeMainActivity.java" 'saveAttendance(int registrationId, boo
 expect "$NATIVE/NativeMainActivity.java" '"گزارشات من"' "Personal reports linked from account"
 expect "$NATIVE/NativeMainActivity.java" '"مشاور هوشمند"' "AI advisor linked from account"
 
+# RC16: the service must drain the acknowledged queue before server stop_ride.
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'ACTION_PREPARE_FINISH' "Foreground GPS service supports graceful final sync"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" '.putBoolean("finish_prepared", true).apply();' "Final GPS batch enqueued before release acknowledgement"
+expect "$NATIVE/NativeMainActivity.java" 'if (!synchronizedTrack)' "Finish fails safely rather than dropping queued GPS"
+expect "$NATIVE/NativeMainActivity.java" 'serverStopAttempted = true;' "Server stop occurs after GPS queue drain"
+python3 - "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" "$NATIVE/NativeMainActivity.java" <<'PY'
+import pathlib, sys
+service, activity = [pathlib.Path(x).read_text() for x in sys.argv[1:]]
+assert service.index('flushRoadMatchBufferRaw();',service.index('ACTION_PREPARE_FINISH.equals')) < service.index('.putBoolean("finish_prepared", true).apply();')
+block = activity[activity.index('private void finishRide('):activity.index('private boolean isTrackingServiceActive()')]
+assert block.index('if (!synchronizedTrack)') < block.index('api.post("stop_ride"') < block.index('stop.setAction(TrackingService.ACTION_STOP)')
+assert 'startTrackingService(rideId);' in block
+print('PASS graceful GPS finish flush precedes server stop and safely resumes on sync failure')
+PY
+
 # RC16: native GPS authentication, server-rejection persistence, and recorded track drawing.
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'return nativeSessionCookie();' "GPS uses same Native PHP session as API client"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" 'answer.optBoolean("ok", true)' "HTTP 200 rejection cannot drop queued GPS points"

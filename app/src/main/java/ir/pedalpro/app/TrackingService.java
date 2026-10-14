@@ -61,6 +61,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     public static final String PREFS = "pedalpro_native_tracking";
     public static final String ACTION_START = "ir.pedalpro.app.START_TRACKING";
     public static final String ACTION_STOP = "ir.pedalpro.app.STOP_TRACKING";
+    public static final String ACTION_PREPARE_FINISH = "ir.pedalpro.app.PREPARE_FINISH_TRACKING";
     public static final String ACTION_DISCARD = "ir.pedalpro.app.DISCARD_TRACKING";
     public static final String ACTION_UPDATE = "ir.pedalpro.app.TRACK_UPDATE";
     public static final String ACTION_STATUS = "ir.pedalpro.app.TRACK_STATUS";
@@ -184,6 +185,28 @@ public class TrackingService extends Service implements LocationListener, Sensor
             return START_NOT_STICKY;
         }
 
+        if (intent != null && ACTION_PREPARE_FINISH.equals(intent.getAction())) {
+            int rideId = intent.getIntExtra("ride_id", 0);
+            if (!prefs.getBoolean("active", false) || rideId <= 0 ||
+                    rideId != prefs.getInt("ride_id", 0)) {
+                broadcastStatus("فعالیت GPS برای همگام‌سازی نهایی پیدا نشد", true);
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            // Pause acquisition before flushing the last buffered accepted fixes.
+            // Keep active=true until the caller sees an empty acknowledged queue.
+            startForeground(NOTIFICATION_ID, buildNotification("همگام‌سازی نهایی مسیر GPS"));
+            prefs.edit().putBoolean("finish_prepared", false)
+                    .putInt("finish_ride_id", rideId).apply();
+            gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
+            stopAllLocationUpdates();
+            flushRoadMatchBufferRaw();
+            flushPending();
+            prefs.edit().putBoolean("finish_prepared", true).apply();
+            broadcastStatus("در حال ارسال آخرین نقاط ثبت‌شده GPS…", false);
+            return START_STICKY;
+        }
+
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             int rideId = intent.getIntExtra("ride_id", 0);
             int previousRideId = prefs.getInt("ride_id", 0);
@@ -205,6 +228,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
             prefs.edit()
                     .putBoolean("active", true)
+                    .putBoolean("finish_prepared", false)
+                    .remove("finish_ride_id")
                     .putInt("ride_id", rideId)
                     .putString("csrf", intent.getStringExtra("csrf"))
                     .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
@@ -1295,7 +1320,9 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
     private void stopTracking() {
         flushRoadMatchBufferRaw();
-        prefs.edit().putBoolean("active", false).apply();
+        prefs.edit().putBoolean("active", false)
+                .putBoolean("finish_prepared", false)
+                .remove("finish_ride_id").apply();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
         stopSensorFusion();

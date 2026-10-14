@@ -7,3 +7,9 @@
 - Build version: `2.0.0-native-rc16` (code `60`). PR #29 remains Draft; no merge or store publishing.
 - QA still required on a real device with location permissions, >150m outdoor ride, mobile connectivity and temporary network loss. Verify `ride_details` contains nonzero recorded distance and speed, persisted polyline and correct history after stopping. CI success is not a substitute for this acceptance.
 - Historical zero-distance ride root cause cannot be established without its GPS diagnostic log and server response.
+
+## Final synchronization safeguard
+- `ACTION_PREPARE_FINISH` pauses further GPS acquisition, drains road-match output and attempts to deliver every queued point while the ride is still active on the server.
+- Native stop waits up to 25 seconds for the service's readiness flag and an empty point queue before calling existing `stop_ride`; on timeout, the ride remains open and the existing tracker restarts.
+- If server `stop_ride` fails, native bootstrap is consulted before resuming that same ride. This does not invent server endpoints or claim an offline ride has been synced.
+- Pending GPS storage is preserved on failed upload. Device QA of network-loss/resume and activity termination remains required.
