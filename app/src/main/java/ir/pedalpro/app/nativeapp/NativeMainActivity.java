@@ -4727,13 +4727,15 @@ public final class NativeMainActivity extends Activity {
 
         boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
         if (admin) {
-            body.addView(drawerSection("مدیریت", "⚙",
+            View adminSection = drawerSection("مدیریت", "⚙",
                     new String[]{"⚙", "✉"},
                     new String[]{"تنظیمات سایت", "پیامک"},
                     new Runnable[]{
                             () -> { d.dismiss(); showSiteSettingsPage(); },
                             () -> { d.dismiss(); showSmsPage(); }
-                    }, false));
+                    }, false);
+            adminSection.setBackground(roundRect(Color.argb(8, 255, 174, 54), 15, Color.argb(43, 255, 190, 79)));
+            body.addView(adminSection);
         }
 
         sc.addView(body);
