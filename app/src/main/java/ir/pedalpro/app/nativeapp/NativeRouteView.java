@@ -31,6 +31,9 @@ public final class NativeRouteView extends View {
     private final Paint current = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    public interface CameraListener { void onCameraChanged(double lat, double lng, int zoom); }
+    private CameraListener cameraListener;
+    private boolean externalBasemap;
     private final List<P> points = new ArrayList<>();
     private P currentPoint;
     private P targetPoint;
@@ -208,6 +211,21 @@ public final class NativeRouteView extends View {
 
     public int pointCount() { return points.size(); }
 
+    public void setExternalBasemap(boolean useNativeProvider) {
+        externalBasemap = useNativeProvider;
+        setBackgroundColor(useNativeProvider ? Color.TRANSPARENT : Color.rgb(6, 19, 31));
+        invalidate();
+    }
+
+    public void setCameraListener(CameraListener listener) { cameraListener = listener; }
+
+    public void zoomBy(int amount) {
+        ensureUserCamera();
+        if (userCamera) { userZoom = Math.max(3, Math.min(18, userZoom + amount)); invalidate(); }
+    }
+
+    public void recenter() { userCamera = false; invalidate(); }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         final float w = getWidth(), h = getHeight();
@@ -234,7 +252,11 @@ public final class NativeRouteView extends View {
             cameraLng = userLng;
             cameraZoom = userZoom;
         }
-        PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom);
+        if (externalBasemap) {
+            if (cameraListener != null) cameraListener.onCameraChanged(cameraLat,cameraLng,cameraZoom);
+        } else {
+            PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom);
+        }
         Path p = new Path();
         boolean first = true;
         for (P x : points) {
