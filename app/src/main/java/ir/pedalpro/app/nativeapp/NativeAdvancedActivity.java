@@ -25,7 +25,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private boolean replayRunning=false;
     private int replayLoadGeneration=0;
     private long replayDelayMs=650L;
-    private NativeRouteView replayMap;
+    private PedalNeshanMapSurface replayMap;
     private TextView replayMeta;
     private PedalActionView replayPlay;
     private android.widget.SeekBar replaySlider;
@@ -35,7 +35,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private boolean flyRunning=false;
     private int flyLoadGeneration=0;
     private int flyStep=1;
-    private NativeRouteView flyMap;
+    private PedalNeshanMapSurface flyMap;
     private TextView flyMeta;
     private PedalActionView flyPlay;
 
@@ -418,7 +418,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
 
         replayMeta=noticeView("یک رکاب‌زنی را انتخاب کنید.");
         content.addView(replayMeta,cardLp());
-        replayMap=new NativeRouteView(this);
+        replayMap=new PedalNeshanMapSurface(this);
         content.addView(replayMap,new LinearLayout.LayoutParams(-1,dp(360)));
 
         load.setOnClickListener(v->loadReplayNative(rideId(ride),load));
@@ -497,7 +497,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(92),dp(46));sp.setMargins(dp(8),0,0,0);actions.addView(speed,sp);
         content.addView(actions,cardLp());
 
-        flyMap=new NativeRouteView(this);
+        flyMap=new PedalNeshanMapSurface(this);
         flyMap.setBackgroundColor(android.graphics.Color.rgb(7,19,31));
         content.addView(flyMap,new LinearLayout.LayoutParams(-1,dp(300)));
         flyMeta=text("",11,false,MUTED);flyMeta.setPadding(0,dp(8),0,0);content.addView(flyMeta,cardLp());
@@ -876,7 +876,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
             JSONArray p=source.optJSONArray(i);if(p==null||p.length()<2)continue;
             JSONObject o=new JSONObject();try{o.put("lat",p.optDouble(0));o.put("lng",p.optDouble(1));points.put(o);}catch(Exception ignored){}
         }
-        NativeRouteView map=new NativeRouteView(this);map.setPoints(points);
+        PedalNeshanMapSurface map=new PedalNeshanMapSurface(this);map.setPoints(points);
         content.addView(map,new LinearLayout.LayoutParams(-1,dp(360)));
     }
 
