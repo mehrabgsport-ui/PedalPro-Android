@@ -248,7 +248,13 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 }
             }
         }
+        // Some web backends expose Bale flags as flat fields of site/settings
+        // instead of a dedicated object; discover only real non-secret fields.
+        displayed+=appendBaleFlatFields(box,data,"bootstrap");
+        displayed+=appendBaleFlatFields(box,data==null?null:data.optJSONObject("site"),"site");
+        displayed+=appendBaleFlatFields(box,data==null?null:data.optJSONObject("ui_settings"),"ui_settings");
         JSONObject settings=data==null?null:data.optJSONObject("settings");
+        displayed+=appendBaleFlatFields(box,settings,"settings");
         if(settings!=null)for(String key:candidates) {
             JSONObject value=settings.optJSONObject(key);
             if(value!=null)displayed+=appendBaleFields(box,value,key,0);
@@ -262,6 +268,27 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         refresh.setOnClickListener(v->load("bale"));
         box.addView(refresh);
         content.addView(box,cardLp());
+    }
+
+    private int appendBaleFlatFields(LinearLayout box,JSONObject source,String scope){
+        if(source==null)return 0;
+        int count=0;
+        java.util.Iterator<String> keys=source.keys();
+        while(keys.hasNext()&&count<30){
+            String key=keys.next();
+            String normalized=key.toLowerCase(Locale.ROOT);
+            if(!(normalized.contains("bale")||normalized.startsWith("bot_"))||
+                    normalized.contains("robots")||isPrivateBaleField(key)||source.isNull(key))
+                continue;
+            Object val=source.opt(key);
+            if(val instanceof Number||val instanceof Boolean||val instanceof String){
+                String safe=String.valueOf(val);
+                if(safe.length()>160)safe=safe.substring(0,160)+"…";
+                box.addView(text(scope+"."+key+": "+safe,12,false,TEXT));
+                count++;
+            }
+        }
+        return count;
     }
 
     private int appendBaleFields(LinearLayout box,JSONObject values,String label,int depth){
