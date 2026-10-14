@@ -70,6 +70,14 @@ Status: IN PROGRESS
 - Ride detail, comments, photos, publication/privacy.
 - Preserve existing GPS/tracking/map algorithms unless separately authorized.
 
+### Phase 5 — UI-only batch 5A (2026-10-14)
+- `79f5be8d34fd`: OLED pause/resume accessibility label follows the visible control state; enforce white system bar icons on the black OLED surface.
+- `85d7dbfe2934`: Ride detail privacy and live-navigation actions now use native vector icons instead of emoji glyphs.
+- Scope: presentation/accessibility only. No changes to GPS, tracking, map calculations, API/backend, or user data.
+- Source check: both committed files inspected after push; static parity guards passed.
+- CI: Native RC QA / Android Store Release Build results for this batch are **NOT YET VERIFIED**. The available commit status endpoint returned no check contexts, and the workflow-run lookup excludes push-triggered runs. Do not declare this batch release-validated or close Phase 5 until both build results are independently confirmed.
+- Remaining Phase 5: source-by-source comparison and verified release build for start/finish, OLED, live/group navigation, Beacon/SOS/privacy, sensors, ride detail, photos, comments, and publication states.
+
 ## Phase 6 — Pro and community features
 Status: PENDING
 - Segments and leaderboard.
