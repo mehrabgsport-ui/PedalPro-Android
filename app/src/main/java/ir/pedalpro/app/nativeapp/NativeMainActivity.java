@@ -1696,8 +1696,7 @@ public final class NativeMainActivity extends Activity {
         activeRideRouteView = null;
 
         if (activeRide == null) {
-            addHero("شروع رکاب‌زنی GPS", "");
-
+            // The form already has its own heading; avoid the duplicate blank hero card.
             JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
             int uid = me == null ? 0 : me.optInt("id", 0);
             boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
@@ -5104,9 +5103,11 @@ public final class NativeMainActivity extends Activity {
     private void addHero(String title, String sub) {
         LinearLayout box = glassCard(26);
         box.addView(text(title, 22, true, TEXT));
-        TextView s = text(sub, 13, false, MUTED);
-        s.setPadding(0, dp(7), 0, 0);
-        box.addView(s);
+        if (sub != null && !sub.trim().isEmpty()) {
+            TextView s = text(sub, 13, false, MUTED);
+            s.setPadding(0, dp(7), 0, 0);
+            box.addView(s);
+        }
         content.addView(box, cardLp());
     }
 
@@ -5483,17 +5484,23 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICAL);info.setGravity(Gravity.END);
         info.addView(text(event.optString("title","برنامه"),20,true,TEXT));
-        String route=event.optString("route_name",event.optString("meeting_location","مسیر گروهی"));
+        String route=safeEventValue(event, "route_name", safeEventValue(event, "meeting_location", "مسیر گروهی"));
         String desc=event.optString("description","");
         TextView d=text(route+(desc.isBlank()?"":"، "+desc),12,false,TEXT);d.setMaxLines(3);d.setPadding(0,dp(5),0,dp(5));info.addView(d);
         LinearLayout r1=new LinearLayout(this);r1.setOrientation(LinearLayout.HORIZONTAL);
         r1.addView(metaTile(PedalIconView.Icon.DISTANCE,event.optDouble("planned_distance",0)>0?JalaliDate.fa(Math.round(event.optDouble("planned_distance",0)))+" کیلومتر":"مسافت آزاد"),rowWeightLp());
-        r1.addView(metaTile(PedalIconView.Icon.LOCATION,event.optString("meeting_location","محل قرار")),rowWeightLp());info.addView(r1);
+        r1.addView(metaTile(PedalIconView.Icon.LOCATION,safeEventValue(event,"meeting_location","محل قرار")),rowWeightLp());info.addView(r1);
         LinearLayout r2=new LinearLayout(this);r2.setOrientation(LinearLayout.HORIZONTAL);
-        r2.addView(metaTile(PedalIconView.Icon.ROUTE,event.optString("finish_location","پایان اختیاری")),rowWeightLp());
+        r2.addView(metaTile(PedalIconView.Icon.ROUTE,safeEventValue(event,"finish_location","پایان اختیاری")),rowWeightLp());
         r2.addView(metaTile(PedalIconView.Icon.CLOCK,JalaliDate.format(event.optString("event_date",""),true)),rowWeightLp());info.addView(r2);
         row.addView(info,new LinearLayout.LayoutParams(0,-2,1f));outer.addView(row);
         outer.setClickable(true);outer.setOnClickListener(v->showEventDetail(event));return outer;
+    }
+
+    private String safeEventValue(JSONObject event, String key, String fallback) {
+        if (event == null || event.isNull(key)) return fallback;
+        String value = event.optString(key, "").trim();
+        return value.isEmpty() || "null".equalsIgnoreCase(value) ? fallback : value;
     }
 
     private String eventCover(JSONObject event) {
