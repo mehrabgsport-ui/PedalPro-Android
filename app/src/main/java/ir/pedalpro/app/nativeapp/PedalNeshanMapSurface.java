@@ -32,6 +32,8 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private int lastZoom = -1;
     private boolean trafficEnabled = true;
     private boolean nightStyle = true;
+    private float lastSdkBearing=Float.NaN;
+    private boolean lastSdkNavigationMode;
 
     public PedalNeshanMapSurface(Context context) {
         super(context);
@@ -101,6 +103,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
             Method setZoom=findMethod(neshanMap.getClass(),"setZoom",2);
             if(setZoom!=null) setZoom.invoke(neshanMap,number(setZoom.getParameterTypes()[0],zoom),
                     number(setZoom.getParameterTypes()[1],0));
+            applySdkNavigationCamera();
             lastLat=lat;lastLng=lng;lastZoom=zoom;
         } catch (Throwable e) {
             Log.w(TAG,"Neshan SDK camera failed; falling back to XYZ tiles",e);
@@ -133,6 +136,34 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private static Method findMethod(Class<?> type,String name,int count) {
         for(Method m:type.getMethods())if(m.getName().equals(name)&&m.getParameterCount()==count)return m;
         return null;
+    }
+
+    private void setSdkCameraFloat(String name,float value){
+        if(neshanMap==null)return;
+        try{
+            Method method=findMethod(neshanMap.getClass(),name,2);
+            if(method==null)throw new NoSuchMethodException(name);
+            Class<?>[] types=method.getParameterTypes();
+            method.invoke(neshanMap,number(types[0],value),number(types[1],.35f));
+        }catch(Throwable e){Log.w(TAG,"Neshan navigation camera method unavailable: "+name);}
+    }
+
+    private void applySdkNavigationCamera(){
+        if(neshanMap==null)return;
+        boolean follow=overlay.isNavigationMode();
+        if(follow!=lastSdkNavigationMode){
+            // Official Neshan Android MapView: tilt=90 is top-down;
+            // a ~55 degree camera creates a readable navigation perspective.
+            setSdkCameraFloat("setTilt",follow?55f:90f);
+            lastSdkNavigationMode=follow;
+        }
+        float bearing=follow&&overlay.isHeadingUpEnabled()&&overlay.hasHeadingDegrees()
+                ?overlay.getHeadingDegrees():0f;
+        if(!Float.isFinite(lastSdkBearing)||
+                Math.abs(((bearing-lastSdkBearing+540f)%360f)-180f)>1.2f){
+            setSdkCameraFloat("setBearing",bearing);
+            lastSdkBearing=bearing;
+        }
     }
 
     private static void invoke(Object obj,String name,boolean value) {
@@ -220,6 +251,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         if(!overlay.isNavigationMode())overlay.setNavigationMode(true);
         else overlay.setHeadingUpEnabled(!overlay.isHeadingUpEnabled());
         refreshOrientationLabel();
+        applySdkNavigationCamera();
     }
 
     private void refreshOrientationLabel() {
@@ -237,10 +269,13 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     public void setNavigationMode(boolean enabled) {
         overlay.setNavigationMode(enabled);
         refreshOrientationLabel();
-        // The licensed SDK requires its own native bearing/tilt camera implementation.
+        applySdkNavigationCamera();
     }
 
-    public void setHeadingDegrees(float bearing){overlay.setHeadingDegrees(bearing);}
+    public void setHeadingDegrees(float bearing){
+        overlay.setHeadingDegrees(bearing);
+        if(neshanMap!=null)applySdkNavigationCamera();
+    }
 
     public boolean isNeshanEnabled(){return neshanMap!=null;}
     public void setPoints(JSONArray rows){overlay.setPoints(rows);}
