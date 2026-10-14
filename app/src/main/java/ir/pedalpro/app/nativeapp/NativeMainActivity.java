@@ -6324,6 +6324,14 @@ public final class NativeMainActivity extends Activity {
                         startActivity(i);
                     });
                     actionsHost.addView(details, fullActionLp(50));
+                    PedalActionView follow=action(PedalIconView.Icon.ROUTE,
+                            "مسیریابی به ابتدا / انتهای مسیر",PedalActionView.Style.PRIMARY);
+                    follow.setOnClickListener(v->{
+                        Intent intent=new Intent(this,NativeSavedRouteFollowActivity.class);
+                        intent.putExtra(NativeSavedRouteFollowActivity.EXTRA_RIDE_ID,rideId);
+                        startActivity(intent);
+                    });
+                    actionsHost.addView(follow,fullActionLp(50));
                     state.setText("");
                     VazirmatnLoader.apply(this, statsHost);
                 });

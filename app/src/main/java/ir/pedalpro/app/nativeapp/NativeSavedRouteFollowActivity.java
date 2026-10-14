@@ -1,0 +1,205 @@
+package ir.pedalpro.app.nativeapp;
+
+import android.Manifest;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.SystemClock;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.core.app.ActivityCompat;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import ir.pedalpro.app.TrackingService;
+
+/** Reuses the recorded GPS polyline; never writes or duplicates tracking points. */
+public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
+    public static final String EXTRA_RIDE_ID="ride_id";
+    private static final int PHASE_TO_TARGET=0, PHASE_FOLLOW=1;
+    private int rideId,phase=PHASE_TO_TARGET;
+    private boolean toBeginning=true,visible,arrived;
+    private JSONArray recorded=new JSONArray();
+    private PedalNeshanMapSurface mapView;
+    private TextView status;
+    private double goalLat=Double.NaN,goalLng=Double.NaN;
+    private final Runnable tick=new Runnable(){
+        @Override public void run(){
+            if(!visible||isFinishing())return;
+            updateLocation();
+            main.postDelayed(this,8000L);
+        }
+    };
+
+    @Override protected String screenTitle(){return "دنبال‌کردن مسیر GPS";}
+    @Override protected void onScreenReady(){
+        rideId=getIntent().getIntExtra(EXTRA_RIDE_ID,0);
+        if(rideId<=0){addCard("خطا","شناسه مسیر نامعتبر است.");return;}
+        LinearLayout intro=card();
+        intro.addView(text("دو مرحله: رسیدن به مسیر، سپس دنبال‌کردن خط GPS اصلی",15,true,TEXT));
+        intro.addView(text("مسیریاب نشان مقصد انتخابی را باز می‌کند. ثبت رکاب‌زنی در PedalPro فقط در صورت فعال بودن رکاب‌زنی GPS ادامه دارد.",11,false,MUTED));
+        content.addView(intro,cardLp());
+
+        mapView=new PedalNeshanMapSurface(this);
+        content.addView(mapView,new LinearLayout.LayoutParams(-1,dp(440)));
+        status=text("در حال دریافت نقاط مسیر…",13,true,TEXT);
+        LinearLayout card=card();card.addView(status);
+        Button choose=primary("انتخاب ابتدا یا انتهای مسیر");
+        choose.setOnClickListener(v->chooseDestination());
+        card.addView(choose);
+        Button external=normal("بازکردن مقصد انتخابی در نشان");
+        external.setOnClickListener(v->openNeshanDestination());
+        card.addView(external);
+        Button follow=normal("دنبال‌کردن مسیر اصلی در PedalPro");
+        follow.setOnClickListener(v->startFollow());
+        card.addView(follow);
+        Button backToRide=normal("رفتن به ثبت رکاب‌زنی");
+        backToRide.setOnClickListener(v->{
+            Intent i=new Intent(this,NativeMainActivity.class);
+            i.putExtra("page","ride");
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(i);
+        });
+        card.addView(backToRide);
+        content.addView(card,cardLp());
+        loadTrack();
+    }
+    private void loadTrack(){
+        status.setText("در حال دریافت نقاط مسیر ثبت‌شده…");
+        io.execute(()->{
+            try{
+                Map<String,Object> q=new HashMap<>();
+                q.put("ride_id",rideId);q.put("point_mode","nav");
+                JSONObject payload=api.get("ride_details",q);
+                JSONObject ride=payload.optJSONObject("ride");
+                JSONArray points=ride==null?null:ride.optJSONArray("points");
+                if(points==null||points.length()<2)
+                    throw new IllegalStateException("این رکاب‌زنی نقاط معتبر برای دنبال‌کردن ندارد.");
+                main.post(()->{
+                    recorded=points;
+                    mapView.setPoints(recorded);
+                    status.setText("مسیر دریافت شد ("+recorded.length()+" نقطه). مقصد را انتخاب کنید.");
+                    chooseDestination();
+                });
+            }catch(Exception e){main.post(()->status.setText(
+                    "خطای دریافت مسیر: "+(e.getMessage()==null?"نامشخص":e.getMessage())));}
+        });
+    }
+    private JSONObject endpoint(boolean first){
+        if(recorded==null)return null;
+        int i=first?0:recorded.length()-1, step=first?1:-1;
+        while(i>=0&&i<recorded.length()){
+            JSONObject p=recorded.optJSONObject(i);
+            if(p!=null){
+                double la=p.optDouble("lat",Double.NaN),lo=p.optDouble("lng",Double.NaN);
+                if(Double.isFinite(la)&&Double.isFinite(lo)&&Math.abs(la)<85&&Math.abs(lo)<180)
+                    return p;
+            }
+            i+=step;
+        }
+        return null;
+    }
+    private void chooseDestination(){
+        if(recorded.length()<2){status.setText("ابتدا باید مسیر GPS بارگذاری شود.");return;}
+        new AlertDialog.Builder(this).setTitle("می‌خواهید به کدام نقطه بروید؟")
+                .setItems(new String[]{"ابتدای مسیر","انتهای مسیر"},(d,choice)->{
+                    toBeginning=choice==0;
+                    JSONObject point=endpoint(toBeginning);
+                    if(point==null){status.setText("نقطه مقصد معتبر نیست.");return;}
+                    goalLat=point.optDouble("lat",Double.NaN);
+                    goalLng=point.optDouble("lng",Double.NaN);
+                    phase=PHASE_TO_TARGET;arrived=false;
+                    mapView.setNavigationMode(false);
+                    mapView.setTarget(goalLat,goalLng);
+                    status.setText("مقصد: "+(toBeginning?"ابتدای":"انتهای")+
+                            " مسیر. نشان را باز کنید و از داخل نشان مسیریابی را شروع کنید.");
+                    ensureTrackingNotice();
+                }).show();
+    }
+    private boolean recording(){
+        return getSharedPreferences(TrackingService.PREFS,MODE_PRIVATE)
+                .getBoolean("active",false);
+    }
+    private void ensureTrackingNotice(){
+        if(!recording())new AlertDialog.Builder(this)
+            .setTitle("ثبت رکاب‌زنی فعال نیست")
+            .setMessage("برای ذخیره مسیر طی‌شده ابتدا رکاب‌زنی GPS را در PedalPro شروع کنید. بازکردن نشان به‌تنهایی رکاب‌زنی را ثبت نمی‌کند.")
+            .setPositiveButton("متوجه شدم",null).show();
+    }
+    private void openNeshanDestination(){
+        if(!Double.isFinite(goalLat)){chooseDestination();return;}
+        ensureTrackingNotice();
+        // The official point link selects the destination in Neshan; starting
+        // turn-by-turn is controlled by its own app. Arbitrary GPX import is
+        // NOT assumed to be supported by Neshan.
+        try{
+            Uri uri=Uri.parse("https://nshn.ir?lat="+
+                    String.format(Locale.US,"%.7f",goalLat)+"&lng="+
+                    String.format(Locale.US,"%.7f",goalLng));
+            Intent i=new Intent(Intent.ACTION_VIEW,uri);
+            i.setPackage("org.rajman.neshan.traffic.tehran.navigator");
+            startActivity(i);
+        }catch(Exception e){
+            try{
+                Uri geo=Uri.parse("geo:"+goalLat+","+goalLng+"?q="+goalLat+","+goalLng);
+                startActivity(new Intent(Intent.ACTION_VIEW,geo));
+            }catch(Exception missing){status.setText("مسیریاب نشان روی دستگاه در دسترس نیست.");}
+        }
+    }
+    private void startFollow(){
+        if(recorded.length()<2)return;
+        phase=PHASE_FOLLOW;arrived=true;
+        mapView.clearTarget();mapView.setPoints(recorded);
+        mapView.setNavigationMode(true);
+        status.setText("دنبال‌کردن مسیر اصلی فعال است؛ برای ثبت مسافت، رکاب‌زنی GPS باید فعال باشد.");
+        ensureTrackingNotice();
+    }
+    private void updateLocation(){
+        if(ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)
+                !=PackageManager.PERMISSION_GRANTED){
+            status.setText("اجازه Location دقیق برای دنبال‌کردن مسیر لازم است.");
+            return;
+        }
+        LocationServices.getFusedLocationProviderClient(this)
+            .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY,new CancellationTokenSource().getToken())
+            .addOnSuccessListener(this,loc->{
+                if(loc==null)return;
+                mapView.setCurrent(loc.getLatitude(),loc.getLongitude());
+                if(loc.hasSpeed()&&loc.hasBearing()&&loc.getSpeed()>1.3f)
+                    mapView.setHeadingDegrees(loc.getBearing());
+                if(phase!=PHASE_TO_TARGET||!Double.isFinite(goalLat))return;
+                float[] dist=new float[1];
+                Location.distanceBetween(loc.getLatitude(),loc.getLongitude(),goalLat,goalLng,dist);
+                status.setText(String.format(Locale.US,"تا %s مسیر %.0f متر · GPS ±%.0f متر",
+                        toBeginning?"ابتدا":"انتها",dist[0],loc.hasAccuracy()?loc.getAccuracy():999f));
+                if(arrived||!loc.hasAccuracy()||loc.getAccuracy()>30f||
+                    dist[0]>Math.max(35f,loc.getAccuracy()*1.5f))return;
+                arrived=true;
+                if(toBeginning){
+                    new AlertDialog.Builder(this).setTitle("به ابتدای مسیر رسیدی")
+                        .setMessage("اکنون مسیر GPS رکاب‌زن قبلی روی نقشه نمایش داده می‌شود.")
+                        .setPositiveButton("دنبال‌کردن مسیر", (d,w)->startFollow())
+                        .setNegativeButton("بعداً",null).show();
+                } else status.setText("به انتهای مسیر رسیدی.");
+            });
+    }
+    @Override protected void onResume(){
+        super.onResume();visible=true;
+        main.removeCallbacks(tick);main.post(tick);
+    }
+    @Override protected void onPause(){
+        visible=false;main.removeCallbacks(tick);super.onPause();
+    }
+}

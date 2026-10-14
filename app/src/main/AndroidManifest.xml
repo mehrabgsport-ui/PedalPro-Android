@@ -61,6 +61,7 @@
         <activity android:name=".nativeapp.NativeLauncherActivity" android:exported="false" />
         <activity android:name=".nativeapp.LowPowerRideActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".nativeapp.NativeRideDetailActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSavedRouteFollowActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeLiveNavigationActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeClubActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativePerformanceActivity" android:exported="false" />

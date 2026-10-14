@@ -149,7 +149,7 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         double lng=ride.optDouble("last_lng",Double.NaN);
         if(Double.isFinite(lat)&&Double.isFinite(lng)){
             Button directions=normal("مسیریابی تا موقعیت فعلی");
-            directions.setOnClickListener(v->openCurrentPosition(lat,lng));
+            directions.setOnClickListener(v->openRouteFollower());
             content.addView(directions,cardLp());
         }
 
@@ -489,6 +489,12 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
                 main.post(()->{button.setEnabled(true);toast(e.getMessage());});
             }
         });
+    }
+
+    private void openRouteFollower(){
+        Intent i=new Intent(this,NativeSavedRouteFollowActivity.class);
+        i.putExtra(NativeSavedRouteFollowActivity.EXTRA_RIDE_ID,rideId);
+        startActivity(i);
     }
 
     private void openCurrentPosition(double lat,double lng){
