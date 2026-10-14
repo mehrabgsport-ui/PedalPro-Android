@@ -124,7 +124,7 @@ final class NativeRidePrivacyDialog {
                             .put("viewer_user_ids",ids));
                     activity.runOnUiThread(()->{
                         dialog.dismiss();
-                        activity.showToast(isPublic?"مسیر عمومی شد.":"مسیر خصوصی شد؛ فقط افراد انتخابی آن را می‌بینند.");
+                        activity.toast(isPublic?"مسیر عمومی شد.":"مسیر خصوصی شد؛ فقط افراد انتخابی آن را می‌بینند.");
                         if(listener!=null)listener.onSaved(isPublic);
                     });
                 }catch(Exception e){
