@@ -129,8 +129,6 @@ public final class NativeMainActivity extends Activity {
     private String currentPage = "dashboard";
     private boolean manualPaused = false;
     private boolean serverOnline = false;
-    private TextView serverStatusLabel;
-    private View serverStatusDot;
     private String launchPage = "";
     private int launchEventId = 0;
     private NativeRouteView activeRideRouteView;
@@ -275,12 +273,6 @@ public final class NativeMainActivity extends Activity {
 
         stageRoot.addView(appRoot, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-
-        FrameLayout.LayoutParams serverLp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT, dp(36), Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        serverLp.bottomMargin = dp(122);
-        stageRoot.addView(buildViewportServerStatus(), serverLp);
-
         setContentView(stageRoot);
         VazirmatnLoader.apply(this, stageRoot);
     }
@@ -368,7 +360,6 @@ public final class NativeMainActivity extends Activity {
                     } else {
                         setTopStatus("متصل · " + user.optString("display_name", user.optString("username", "PedalPro")), GREEN);
                     }
-                    updateServerStatusPill();
                     if (firstLaunch) handleLaunchPage();
                     else refreshVisibleScreen();
                 });
@@ -376,7 +367,6 @@ public final class NativeMainActivity extends Activity {
                 main.post(() -> {
                     serverOnline = false;
                     setTopStatus("خطا در اتصال به سرور", RED);
-                    updateServerStatusPill();
                     if (firstLaunch) showError("ارتباط با PedalPro برقرار نشد.", e.getMessage(), () -> refreshBootstrap(true));
                 });
             }
@@ -4339,11 +4329,11 @@ public final class NativeMainActivity extends Activity {
         nav.setPadding(dp(10), dp(16), dp(10), dp(10));
         nav.setBackground(bottomGradient());
 
-        navHome = bottomIconItem(PedalIconView.Icon.HOME, "خانه", this::showHome);
-        navActivities = bottomIconItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها", this::showActivities);
+        navHome = bottomGlyphItem("⌂", "خانه", this::showHome);
+        navActivities = bottomGlyphItem("🗓️", "فعالیت‌ها", this::showActivities);
         navRide = centerRideItem();
-        navRoutes = bottomIconItem(PedalIconView.Icon.ROUTE, "مسیرها", this::showRoutes);
-        navMe = bottomIconItem(PedalIconView.Icon.USER, "من", this::showMe);
+        navRoutes = bottomGlyphItem("📍", "مسیرها", this::showRoutes);
+        navMe = bottomGlyphItem("👤", "من", this::showMe);
 
         nav.addView(navHome, bottomWeightLp(1f, 90));
         nav.addView(navActivities, bottomWeightLp(1f, 90));
@@ -4362,7 +4352,7 @@ public final class NativeMainActivity extends Activity {
 
     
 
-    private View bottomIconItem(PedalIconView.Icon iconType, String label, Runnable run) {
+    private View bottomGlyphItem(String glyph, String label, Runnable run) {
         LinearLayout host = new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
@@ -4371,7 +4361,9 @@ public final class NativeMainActivity extends Activity {
         host.setPadding(dp(6), dp(10), dp(6), dp(8));
         host.setContentDescription(label);
 
-        PedalIconView icon = new PedalIconView(this, iconType, Color.rgb(238, 248, 255));
+        TextView icon = text(glyph, 24, false, Color.rgb(238, 248, 255));
+        icon.setGravity(Gravity.CENTER);
+        icon.setIncludeFontPadding(false);
         host.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
 
         TextView tv = text(label, 11, true, Color.rgb(238, 248, 255));
@@ -4746,6 +4738,7 @@ public final class NativeMainActivity extends Activity {
 
         sc.addView(body);
         panel.addView(sc, new LinearLayout.LayoutParams(-1, 0, 1f));
+        panel.addView(drawerConnectionPill(), drawerConnectionPillLp());
 
         FrameLayout.LayoutParams pp = new FrameLayout.LayoutParams(
                 Math.min(dp(350), (int) (getResources().getDisplayMetrics().widthPixels * .86f)),
@@ -4782,37 +4775,38 @@ public final class NativeMainActivity extends Activity {
         VazirmatnLoader.apply(this, panel);
     }
 
-    private View buildViewportServerStatus() {
+    private View drawerConnectionPill() {
         LinearLayout pill = new LinearLayout(this);
         pill.setOrientation(LinearLayout.HORIZONTAL);
         pill.setGravity(Gravity.CENTER);
         pill.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        pill.setPadding(dp(12), dp(7), dp(12), dp(7));
+        pill.setPadding(dp(12), dp(9), dp(12), dp(9));
         GradientDrawable bg = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(232, 7, 31, 48), Color.argb(238, 5, 23, 36)});
+                new int[]{Color.argb(245, 7, 31, 48), Color.argb(245, 5, 23, 36)});
         bg.setCornerRadius(dp(999));
         bg.setStroke(dp(1), Color.argb(77, 108, 179, 209));
         pill.setBackground(bg);
         pill.setElevation(dp(8));
 
-        serverStatusLabel = text("در حال بررسی سرور", 11, false, Color.rgb(213, 226, 238));
-        serverStatusDot = new View(this);
-        pill.addView(serverStatusLabel);
-        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(8), dp(8));
-        dotLp.setMargins(dp(8), 0, 0, 0);
-        pill.addView(serverStatusDot, dotLp);
-        updateServerStatusPill();
-        return pill;
-    }
-
-    private void updateServerStatusPill() {
-        if (serverStatusLabel == null || serverStatusDot == null) return;
-        serverStatusLabel.setText(serverOnline ? "متصل به سرور" : "اتصال سرور قطع — ذخیره محلی");
+        TextView dot = new TextView(this);
         GradientDrawable dotBg = new GradientDrawable();
         dotBg.setShape(GradientDrawable.OVAL);
         dotBg.setColor(serverOnline ? GREEN : RED);
-        serverStatusDot.setBackground(dotBg);
+        dot.setBackground(dotBg);
+
+        TextView status = text(serverOnline ? "متصل به سرور" : "اتصال سرور قطع — ذخیره محلی", 12, false, Color.rgb(213, 226, 238));
+        pill.addView(status);
+        LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(dp(9), dp(9));
+        dotLp.setMargins(dp(8), 0, 0, 0);
+        pill.addView(dot, dotLp);
+        return pill;
+    }
+
+    private LinearLayout.LayoutParams drawerConnectionPillLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(40));
+        lp.setMargins(dp(4), dp(8), dp(4), dp(2));
+        return lp;
     }
 
     private View drawerItem(String glyph, String label, Runnable run, boolean active) {
@@ -4830,7 +4824,8 @@ public final class NativeMainActivity extends Activity {
         row.setContentDescription(label);
 
         int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
-        PedalIconView icon = new PedalIconView(this, drawerIcon(glyph), fg);
+        TextView icon = text(glyph, 16, false, fg);
+        icon.setGravity(Gravity.CENTER);
         row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView tv = text(label, 13, true, fg);
@@ -4859,7 +4854,8 @@ public final class NativeMainActivity extends Activity {
         head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         head.setPadding(dp(12), 0, dp(12), 0);
 
-        PedalIconView sectionIcon = new PedalIconView(this, drawerIcon(groupGlyph), Color.rgb(220, 234, 243));
+        TextView sectionIcon = text(groupGlyph, 16, false, Color.rgb(220, 234, 243));
+        sectionIcon.setGravity(Gravity.CENTER);
         TextView titleView = text(title, 13, true, Color.rgb(220, 234, 243));
         TextView chevron = text(startOpen ? "⌃" : "⌄", 15, false, Color.rgb(128, 164, 187));
         chevron.setGravity(Gravity.CENTER);
@@ -4888,7 +4884,8 @@ public final class NativeMainActivity extends Activity {
             sub.setFocusable(true);
 
             String glyph = itemGlyphs != null && i < itemGlyphs.length ? itemGlyphs[i] : "";
-            PedalIconView gi = new PedalIconView(this, drawerIcon(glyph), Color.rgb(220, 234, 243));
+            TextView gi = text(glyph, 16, false, Color.rgb(220, 234, 243));
+            gi.setGravity(Gravity.CENTER);
             sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
             TextView label = text(labels[i], 12, false, Color.rgb(220, 234, 243));
@@ -4916,50 +4913,6 @@ public final class NativeMainActivity extends Activity {
 
         host.addView(subs);
         return host;
-    }
-
-    private PedalIconView.Icon drawerIcon(String glyph) {
-        if (glyph == null) return PedalIconView.Icon.DETAILS;
-        switch (glyph) {
-            case "⌂": return PedalIconView.Icon.HOME;
-            case "🗓️": return PedalIconView.Icon.CALENDAR;
-            case "📍":
-            case "⌖":
-            case "🧭": return PedalIconView.Icon.ROUTE;
-            case "🚴":
-            case "🚲": return PedalIconView.Icon.RIDE;
-            case "▶":
-            case "◈": return PedalIconView.Icon.PLAY;
-            case "⌁":
-            case "▰":
-            case "◫":
-            case "◩":
-            case "📈":
-            case "▥":
-            case "↗": return PedalIconView.Icon.CHART;
-            case "◎":
-            case "◉": return PedalIconView.Icon.BEACON;
-            case "👥": return PedalIconView.Icon.GROUP;
-            case "👤": return PedalIconView.Icon.USER;
-            case "💬":
-            case "✉": return PedalIconView.Icon.CHAT;
-            case "▧":
-            case "📘": return PedalIconView.Icon.GALLERY;
-            case "🛡️":
-            case "SOS":
-            case "◌": return PedalIconView.Icon.SHIELD;
-            case "⚙":
-            case "⚒": return PedalIconView.Icon.SETTINGS;
-            case "⬇":
-            case "⬆":
-            case "✦":
-            case "🏆":
-            case "🥇":
-            case "⌕":
-            case "ⓘ": return PedalIconView.Icon.DETAILS;
-            case "♥": return PedalIconView.Icon.USER;
-            default: return PedalIconView.Icon.DETAILS;
-        }
     }
 
     private void updateHeaderAccess(JSONObject data) {
