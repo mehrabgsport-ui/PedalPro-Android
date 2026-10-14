@@ -5257,6 +5257,19 @@ public final class NativeMainActivity extends Activity {
         PedalActionView cancel=action(PedalIconView.Icon.BACK,"انصراف",PedalActionView.Style.OUTLINE);
 
         save.setOnClickListener(v->{
+            if(activeRide!=null&&activeRide.optInt("event_id",0)>0&&
+                    bootstrap!=null&&(bootstrap.optBoolean("is_admin",false)||
+                    bootstrap.optInt("is_admin",0)==1)){
+                new android.app.AlertDialog.Builder(this)
+                    .setTitle("پایان برنامه گروهی")
+                    .setMessage("آیا از پایان برنامه گروهی مطمئن هستید؟ GPS مدیر ذخیره می‌شود. تخصیص اعتبار مسافت به حاضران و جلوگیری از همپوشانی رکوردها بر عهده قواعد موجود سرور است.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("پایان و ذخیره",(dialog,which)->{
+                        d.dismiss();
+                        finishRide(hiddenButtonProxy(trigger),notes.getText().toString());
+                    }).show();
+                return;
+            }
             d.dismiss();
             finishRide(hiddenButtonProxy(trigger),notes.getText().toString());
         });
