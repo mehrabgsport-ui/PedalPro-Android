@@ -237,6 +237,13 @@ public final class NativeSafetyActivity extends NativeScreenBase {
         Button create=primary("ساخت لینک زنده");
         Button stop=normal("پایان اشتراک");
         card.addView(rides);card.addView(create);card.addView(stop);
+        if(activeRideId(rides)<=0){
+            create.setEnabled(false);
+            create.setAlpha(.55f);
+            TextView noRide=text("برای ساخت لینک Beacon ابتدا یک رکاب‌زنی فعال شروع کنید.",12,false,MUTED);
+            noRide.setPadding(0,dp(8),0,0);
+            card.addView(noRide);
+        }
 
         LinearLayout result=new LinearLayout(this);
         result.setOrientation(LinearLayout.VERTICAL);
