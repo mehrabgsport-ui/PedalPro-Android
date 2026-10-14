@@ -3036,7 +3036,8 @@ public final class NativeMainActivity extends Activity {
             hideKeyboard();
             send.setEnabled(false);
             send.setText("در حال دریافت پاسخ…");
-            addAiBubble(messages, "شما", message, false);
+            messages.setTag(Boolean.TRUE); // A pending history fetch cannot overwrite this send.
+            LinearLayout pendingBubble = addAiBubble(messages, "شما", message, false);
             prompt.setText("");
             io.execute(() -> {
                 try {
@@ -3052,6 +3053,8 @@ public final class NativeMainActivity extends Activity {
                     });
                 } catch (Exception e) {
                     main.post(() -> {
+                        messages.removeView(pendingBubble);
+                        if (prompt.getText().toString().isBlank()) prompt.setText(message);
                         send.setEnabled(true);
                         send.setText("ارسال");
                         toast(e.getMessage());
@@ -3066,23 +3069,28 @@ public final class NativeMainActivity extends Activity {
             try {
                 JSONObject d = api.get("ai_history");
                 JSONArray rows = d.optJSONArray("messages");
+                if (rows == null) rows = d.optJSONArray("items");
+                JSONArray historyRows = rows;
                 main.post(() -> {
+                    if (host.getParent() != content || Boolean.TRUE.equals(host.getTag())) return;
                     host.removeAllViews();
-                    if (rows == null || rows.length() == 0) {
+                    if (historyRows == null || historyRows.length() == 0) {
                         LinearLayout e = card();
                         e.addView(text("گفتگو هنوز شروع نشده است.", 12, false, MUTED));
                         host.addView(e, cardLp());
                         return;
                     }
-                    for (int i = 0; i < rows.length(); i++) {
-                        JSONObject m = rows.optJSONObject(i);
+                    for (int i = 0; i < historyRows.length(); i++) {
+                        JSONObject m = historyRows.optJSONObject(i);
                         if (m == null) continue;
                         boolean assistant = "assistant".equals(m.optString("role"));
-                        addAiBubble(host, assistant ? "PedalPro AI" : "شما", m.optString("body", ""), assistant);
+                        addAiBubble(host, assistant ? "PedalPro AI" : "شما",
+                                m.optString("body", m.optString("content", m.optString("message", ""))), assistant);
                     }
                 });
             } catch (Exception e) {
                 main.post(() -> {
+                    if (host.getParent() != content || Boolean.TRUE.equals(host.getTag())) return;
                     LinearLayout box = card();
                     box.addView(text("تاریخچه AI دریافت نشد: " + e.getMessage(), 12, false, MUTED));
                     host.addView(box, cardLp());
@@ -3091,7 +3099,7 @@ public final class NativeMainActivity extends Activity {
         });
     }
 
-    private void addAiBubble(LinearLayout host, String sender, String body, boolean assistant) {
+    private LinearLayout addAiBubble(LinearLayout host, String sender, String body, boolean assistant) {
         LinearLayout box = card();
         box.setBackgroundColor(assistant ? Color.rgb(10, 54, 67) : Color.rgb(24, 45, 66));
         box.addView(text(sender, 11, true, assistant ? ACCENT : ORANGE));
@@ -3099,6 +3107,7 @@ public final class NativeMainActivity extends Activity {
         msg.setPadding(0, dp(6), 0, 0);
         box.addView(msg);
         host.addView(box, cardLp());
+        return box;
     }
 
     private void showPerformance() {
