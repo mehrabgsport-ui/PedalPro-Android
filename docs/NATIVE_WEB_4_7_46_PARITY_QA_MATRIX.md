@@ -1,0 +1,74 @@
+# PedalPro Android Native — Web 4.7.46 Parity QA Matrix
+
+- Reference: PedalPro Web 4.7.46, restore archive `PedalPro_RestorePoint_2026-10-13_Pre_Native_2.0.0.ppup`.
+- Target: branch `native/web-parity`; **never merge to `main` without explicit approval**.
+- Constraints: **no WebView**, no changes to GPS/tracking/map algorithms, backend contracts, or user data.
+- Evidence levels: **CODE PRESENT** means UI/action was found in native source, not that on-device behavior or pixel alignment passed. **NOT VERIFIED** means build/device/reference evidence is missing.
+- Reference availability: the named PPUP was not available through accessible project/library or connected Drive during this run. Exact text/color/spacing/pixel comparison is **NOT VERIFIED**.
+
+## Phase 5: ride, navigation, safety
+
+| Feature | Native implementation | Status / outstanding acceptance |
+|---|---|---|
+| Ride start, GPS preflight, finish | `NativeMainActivity.showRide`, `createRideAndStartTracking`, `confirmFinishRide` | CODE PRESENT; live device state transitions NOT VERIFIED |
+| Pause/resume and OLED clock | `NativeMainActivity`, `LowPowerRideActivity` | UI state synchronization patched; background / process recreation NOT VERIFIED |
+| OLED iconography, dark screen, time/distance/speed | `LowPowerRideActivity`, `PedalIconView` | CODE PRESENT; reference screenshot geometry NOT VERIFIED |
+| Rider detail, comments, photos, publication/privacy | `NativeRideDetailActivity`, `NativeRidePhotoController`, `NativeRidePrivacyDialog` | CODE PRESENT; guest/owner/admin device matrix NOT VERIFIED |
+| Live and group navigation | `NativeLiveNavigationActivity` | CODE PRESENT; native heading icon; dynamic target/map behavior NOT VERIFIED |
+| Beacon, SOS and Privacy Zones | `NativeSafetyActivity` | CODE PRESENT; service/API and external-link expiry NOT VERIFIED |
+| Cadence, Power and heart rate | `NativeMainActivity`, `NativeSensorsActivity` | CODE PRESENT; pairing with physical BLE devices NOT VERIFIED |
+
+## Phase 6: Pro and community
+
+| Feature | Native implementation | Status / outstanding acceptance |
+|---|---|---|
+| Segments and leaderboard | `NativeAdvancedActivity`, `NativeSegmentLeaderboardActivity` | CODE PRESENT; invalid submissions gated; leaderboard QA NOT VERIFIED |
+| Personal/club/global heatmap | `NativeHeatmapActivity` | CODE PRESENT; overlay and privacy QA NOT VERIFIED |
+| Training Load and fitness | `NativeAdvancedActivity` | CODE PRESENT; score/value parity NOT VERIFIED |
+| Replay and Flyover | `NativeAdvancedActivity` | CODE PRESENT; playback and 3D visual parity NOT VERIFIED |
+| Weather and elevation | `NativeAdvancedActivity` | CODE PRESENT; numerical parity NOT VERIFIED |
+| Offline Routes | `NativeAdvancedActivity` | CODE PRESENT; destructive cache clear now confirmed; offline tile/device QA NOT VERIFIED |
+| Maintenance | `NativeAdvancedActivity` | CODE PRESENT; task lifecycle QA NOT VERIFIED |
+| Social / Follow / Kudos / recommendations | `NativeSocialActivity` | CODE PRESENT; vector Kudos; feed/privacy QA NOT VERIFIED |
+| AI Advisor | `NativeAiActivity`, `NativeMainActivity` | CODE PRESENT; API/chat interaction QA NOT VERIFIED |
+| Group Chat | `NativeChatActivity`, `NativeMainActivity` | CODE PRESENT; private/group moderation QA NOT VERIFIED |
+| Challenges | `NativeMainActivity` | CODE PRESENT; full guest/member/admin QA NOT VERIFIED |
+
+## Phase 7: administration
+
+| Feature | Native implementation | Status / outstanding acceptance |
+|---|---|---|
+| Site general / appearance | `NativeSiteSettingsActivity` | CODE PRESENT; web-setting persistence NOT VERIFIED |
+| Medals | `NativeSiteSettingsActivity` | CODE PRESENT; edit/recalculate QA NOT VERIFIED |
+| Users / roles | `NativeSiteSettingsActivity` | CODE PRESENT; one-tap editor and safe partial updates; role/security QA NOT VERIFIED |
+| FarazSMS status, sender, OTP patterns, custom send, logs | `NativeSiteSettingsActivity` | CODE PRESENT; direct SMS panel access patched; real provider QA NOT VERIFIED |
+| Pattern send / bulk SMS | Source action contract not verified against Web 4.7.46 | **OUTSTANDING; do not invent backend actions** |
+| Release manager / chunked APK upload | `NativeAppReleaseAdminController` | CODE PRESENT; worker/thread handling patched; remote upload/signing QA NOT VERIFIED |
+| Release rollback | No verified native+backend contract in inspected files | **OUTSTANDING** |
+| Notifications / history | `NativeAppReleaseAdminController` | CODE PRESENT; delivery/target QA NOT VERIFIED |
+| FCM configuration and test | `NativeFcmAdminController` | CODE PRESENT; token/credentials and device QA NOT VERIFIED |
+| System status | `NativeSiteSettingsActivity` | CODE PRESENT; backend data QA NOT VERIFIED |
+
+## Phase 8: mandatory verification gates
+
+1. **Web source**: obtain the exact 4.7.46 restore snapshot/screens (guest, member, admin, offline, active ride), and compare UI route by route; do not compare to an unverified newer public website.
+2. **Architecture**: `bash ci/native_web_parity_checks.sh` passes, and no native WebView is instantiated.
+3. **Build**: Native RC QA `success` for the final HEAD; compile, tests, lint, manifest inspections pass.
+4. **Store**: Android Store Release Build `success` for the **same HEAD**; two APK artifacts exist, signed with the correct established Bazaar/Myket upload keys; verify signatures/certificates and package/version codes. Do not invent artifacts.
+5. **Device**: test RTL, typography, card radius/spacing, Android back/modal/drawer, guest/member/admin permissions, GPS/Tracking service continuity, BLE and navigation, both app flavors, privacy and deep links.
+6. **Acceptance**: no unverified scope/placeholder/raw JSON UI, no user-data loss, no merge to main prior to explicit sign-off.
+
+### Current automated coverage
+
+The push-triggered `Native RC QA` workflow includes source checks, UI contract assertions, Android unit tests, lint, and Bazaar/Myket release smoke builds. A separate `ci/native_web_parity_checks.sh` covers cross-screen invariants. These do **not** replace a signed store workflow or on-device Web-reference comparison.
+
+### Build commands
+
+```bash
+bash ci/native_web_parity_checks.sh
+gradle :app:testBazaarReleaseUnitTest :app:testMyketReleaseUnitTest --stacktrace
+gradle :app:lintBazaarRelease :app:lintMyketRelease --stacktrace
+gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
+```
+
+**Overall status: IN PROGRESS / NOT RELEASE-READY** until the independent CI, signature, device, and Web 4.7.46 acceptance gates pass.
