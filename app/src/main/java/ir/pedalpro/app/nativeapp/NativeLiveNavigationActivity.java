@@ -31,7 +31,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private double targetLat=Double.NaN,targetLng=Double.NaN;
     private double currentLat=Double.NaN,currentLng=Double.NaN;
     private NativeRouteView routeView;
-    private TextView distance,bearing,status,arrow;
+    private TextView distance,bearing,status;
+    private PedalIconView arrow;
     private boolean busy=false;
 
     private final Runnable tick=new Runnable(){
@@ -53,11 +54,13 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         setSubtitle("live".equals(mode)?"تا "+targetName:"تا گروه در حال حرکت",GREEN);
 
         LinearLayout hud=card();
-        arrow=text("↑",52,true,ORANGE);arrow.setGravity(android.view.Gravity.CENTER);
+        arrow=new PedalIconView(this,PedalIconView.Icon.HEADING,ORANGE);
+        arrow.setContentDescription("جهت هدف زنده");
         distance=text("— km",28,true,TEXT);distance.setGravity(android.view.Gravity.CENTER);
         bearing=text("جهت: —",13,false,MUTED);bearing.setGravity(android.view.Gravity.CENTER);
         status=text("در حال دریافت موقعیت…",12,false,MUTED);status.setGravity(android.view.Gravity.CENTER);
-        hud.addView(arrow);hud.addView(distance);hud.addView(bearing);hud.addView(status);
+        hud.addView(arrow,new LinearLayout.LayoutParams(-1,dp(78)));
+        hud.addView(distance);hud.addView(bearing);hud.addView(status);
         content.addView(hud,cardLp());
 
         routeView=new NativeRouteView(this);
@@ -144,6 +147,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         distance.setText(String.format(Locale.US,km<1?"%.2f km":"%.1f km",km));
         bearing.setText("جهت جغرافیایی: "+Math.round((deg+360)%360)+"°");
         arrow.setRotation(deg);
+        arrow.setContentDescription("جهت جغرافیایی هدف: "+Math.round((deg+360)%360)+" درجه");
     }
 
     @Override protected void onDestroy(){
