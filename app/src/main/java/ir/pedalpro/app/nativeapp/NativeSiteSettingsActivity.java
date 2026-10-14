@@ -35,7 +35,17 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         appReleaseAdmin = new NativeAppReleaseAdminController(this, api, io);
         fcmAdmin = new NativeFcmAdminController(this, api, io);
         String requested = getIntent().getStringExtra("section");
-        load("sms".equals(requested) ? "sms" : "general");
+        load(isValidSection(requested) ? requested : "general");
+    }
+
+    private boolean isValidSection(String tab) {
+        if (tab == null) return false;
+        switch (tab) {
+            case "general": case "seo": case "appearance": case "medals":
+            case "users": case "sms": case "appmanager": case "push": case "system":
+                return true;
+            default: return false;
+        }
     }
 
     private void load(String tab) {
@@ -68,6 +78,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         setSubtitle("مدیریت PedalPro", GREEN);
         renderTabs();
         switch (activeTab) {
+            case "seo": renderSeo(); break;
             case "appearance": renderAppearance(); break;
             case "medals": renderMedals(); break;
             case "users": renderUsers(); break;
@@ -89,6 +100,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         tabButtons.clear();
 
         addTab(row, "general", "عمومی");
+        addTab(row, "seo", "SEO / Robots");
         addTab(row, "appearance", "ظاهر سایت و اپ");
         addTab(row, "medals", "مدال‌ها");
         addTab(row, "users", "کاربران");
@@ -167,6 +179,50 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         });
         box.addView(save);
         content.addView(box, cardLp());
+    }
+
+    private void renderSeo() {
+        JSONObject original=data.optJSONObject("site");
+        if(original==null)original=new JSONObject();
+        final JSONObject site=original;
+        LinearLayout card=card();
+        card.addView(text("SEO، Robots و تنظیمات جستجو",18,true,TEXT));
+        card.addView(text("Robots مربوط به ربات‌های موتور جستجو است؛ تنظیمات بات‌ها یا سرویس‌های خارجی جداگانه‌اند. فقط فیلدهای شناخته‌شده سایت ذخیره می‌شوند.",11,false,MUTED));
+
+        EditText title=input("عنوان SEO");
+        title.setText(site.optString("seo_title",""));
+        EditText description=input("Meta Description");
+        description.setSingleLine(false);description.setMinLines(2);
+        description.setText(site.optString("seo_description",""));
+        EditText keywords=input("Meta Keywords");
+        keywords.setText(site.optString("seo_keywords",""));
+        EditText robots=input("Robots / index,follow / noindex,nofollow");
+        robots.setText(site.optString("seo_robots","index,follow"));
+        EditText extra=input("HEAD اضافی");
+        extra.setSingleLine(false);extra.setMinLines(3);
+        extra.setText(site.optString("seo_extra_head",""));
+        card.addView(title);card.addView(description);card.addView(keywords);
+        card.addView(robots);card.addView(extra);
+
+        Button save=primary("ذخیره SEO و Robots");
+        save.setOnClickListener(v->{
+            // Preserve unchanged general settings; some backends treat omitted fields as empty.
+            JSONObject payload=new JSONObject();
+            try{
+                payload.put("club_name",site.optString("club_name",""));
+                payload.put("club_subtitle",site.optString("club_subtitle",""));
+                payload.put("about_title",site.optString("about_title",""));
+                payload.put("about_body",site.optString("about_body",""));
+                payload.put("seo_title",title.getText().toString());
+                payload.put("seo_description",description.getText().toString());
+                payload.put("seo_keywords",keywords.getText().toString());
+                payload.put("seo_robots",robots.getText().toString());
+                payload.put("seo_extra_head",extra.getText().toString());
+            }catch(Exception ignored){}
+            postAndReload("site_settings_save",payload,save,"تنظیمات SEO و Robots ذخیره شد");
+        });
+        card.addView(save);
+        content.addView(card,cardLp());
     }
 
     private void renderAppearance() {
