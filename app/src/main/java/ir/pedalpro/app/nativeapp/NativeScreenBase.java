@@ -142,7 +142,7 @@ abstract class NativeScreenBase extends Activity {
         webHeader.setBackground(headerGradient());
 
         ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setImageResource(R.drawable.pedalpro_logo);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         logo.setOnClickListener(v->openMain("dashboard"));
@@ -176,8 +176,8 @@ abstract class NativeScreenBase extends Activity {
         nav.setPadding(dp(10),dp(16),dp(10),dp(10));
         nav.setBackground(bottomGradient());
 
-        nav.addView(bottomItem("⌂","خانه",()->openMain("dashboard")),bottomWeight(1f,90));
-        nav.addView(bottomItem("🗓️","فعالیت‌ها",()->openMain("activities")),bottomWeight(1f,90));
+        nav.addView(bottomItem(PedalIconView.Icon.HOME,"خانه",()->openMain("dashboard")),bottomWeight(1f,90));
+        nav.addView(bottomItem(PedalIconView.Icon.CALENDAR,"فعالیت‌ها",()->openMain("activities")),bottomWeight(1f,90));
 
         LinearLayout center=new LinearLayout(this);
         center.setGravity(Gravity.CENTER);
@@ -187,12 +187,12 @@ abstract class NativeScreenBase extends Activity {
         center.addView(ride,new LinearLayout.LayoutParams(dp(106),dp(106)));
         nav.addView(center,new LinearLayout.LayoutParams(0,dp(106),1.12f));
 
-        nav.addView(bottomItem("📍","مسیرها",()->openMain("routes")),bottomWeight(1f,90));
-        nav.addView(bottomItem("👤","من",()->openMain("me")),bottomWeight(1f,90));
+        nav.addView(bottomItem(PedalIconView.Icon.ROUTE,"مسیرها",()->openMain("routes")),bottomWeight(1f,90));
+        nav.addView(bottomItem(PedalIconView.Icon.USER,"من",()->openMain("me")),bottomWeight(1f,90));
         return nav;
     }
 
-    private View bottomItem(String glyph,String label,Runnable run){
+    private View bottomItem(PedalIconView.Icon iconType,String label,Runnable run){
         LinearLayout host=new LinearLayout(this);
         host.setOrientation(LinearLayout.VERTICAL);
         host.setGravity(Gravity.CENTER);
@@ -201,9 +201,7 @@ abstract class NativeScreenBase extends Activity {
         host.setFocusable(true);
         host.setContentDescription(label);
 
-        TextView icon=text(glyph,24,false,Color.rgb(238,248,255));
-        icon.setGravity(Gravity.CENTER);
-        icon.setIncludeFontPadding(false);
+        PedalIconView icon=new PedalIconView(this,iconType,Color.rgb(238,248,255));
         host.addView(icon,new LinearLayout.LayoutParams(dp(30),dp(30)));
 
         TextView name=text(label,11,true,Color.rgb(238,248,255));
