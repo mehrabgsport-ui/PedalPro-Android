@@ -23,6 +23,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private JSONArray replayPoints=new JSONArray();
     private int replayIndex=0;
     private boolean replayRunning=false;
+    private int replayLoadGeneration=0;
     private long replayDelayMs=650L;
     private NativeRouteView replayMap;
     private TextView replayMeta;
@@ -32,6 +33,7 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private JSONArray flyPoints=new JSONArray();
     private int flyIndex=0;
     private boolean flyRunning=false;
+    private int flyLoadGeneration=0;
     private int flyStep=1;
     private NativeRouteView flyMap;
     private TextView flyMeta;
@@ -40,7 +42,10 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private final Runnable replayTick=new Runnable(){
         @Override public void run(){
             if(!replayRunning||replayPoints==null||replayIndex>=replayPoints.length()){stopReplayNative();return;}
-            replayPaintNative(replayIndex++);
+            // replayPaintNative updates replayIndex, so increment only after painting.
+            int next=replayIndex;
+            replayPaintNative(next);
+            replayIndex=next+1;
             main.postDelayed(this,replayDelayMs);
         }
     };
@@ -75,6 +80,11 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void render(){
+        // Hidden replay/flyover views must not keep their animation callbacks alive.
+        stopReplayNative();
+        stopFlyNative();
+        replayLoadGeneration++;
+        flyLoadGeneration++;
         content.removeAllViews();
         setSubtitle("سگمنت، Heatmap، Training Load، Privacy Zones، Replay، رتبه‌بندی باشگاه، تحلیل هوا/ارتفاع و سنسورهای دوچرخه",MUTED);
         renderTabs();
@@ -429,7 +439,9 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void loadReplayNative(int rideId,Button load){
+        if(rideId<=0){toast("یک رکاب‌زنی معتبر برای Replay انتخاب کنید.");return;}
         stopReplayNative();load.setEnabled(false);
+        final int generation=++replayLoadGeneration;
         io.execute(()->{
             try{
                 Map<String,Object> q=new HashMap<>();q.put("ride_id",rideId);
@@ -437,12 +449,13 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
                 JSONArray pts=d.optJSONArray("points");if(pts==null)pts=new JSONArray();
                 JSONArray finalPts=pts;
                 main.post(()->{
+                    if(generation!=replayLoadGeneration||!"replay".equals(tab))return;
                     load.setEnabled(true);replayPoints=finalPts;replayIndex=0;
                     if(replayMap!=null)replayMap.setPoints(finalPts);
                     if(replaySlider!=null){replaySlider.setMax(Math.max(0,finalPts.length()-1));replaySlider.setProgress(0);}
                     replayPaintNative(0);
                 });
-            }catch(Exception e){main.post(()->{load.setEnabled(true);toast(e.getMessage());});}
+            }catch(Exception e){main.post(()->{if(generation!=replayLoadGeneration||!"replay".equals(tab))return;load.setEnabled(true);toast(e.getMessage());});}
         });
     }
 
@@ -496,7 +509,9 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void loadFlyNative(int rideId,Button load){
+        if(rideId<=0){toast("یک رکاب‌زنی معتبر برای Flyover انتخاب کنید.");return;}
         stopFlyNative();load.setEnabled(false);
+        final int generation=++flyLoadGeneration;
         io.execute(()->{
             try{
                 Map<String,Object> q=new HashMap<>();q.put("ride_id",rideId);
@@ -504,11 +519,12 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
                 JSONArray pts=d.optJSONArray("points");if(pts==null)pts=new JSONArray();
                 JSONArray finalPts=pts;
                 main.post(()->{
+                    if(generation!=flyLoadGeneration||!"flyover".equals(tab))return;
                     load.setEnabled(true);flyPoints=finalPts;flyIndex=0;
                     if(flyMap!=null)flyMap.setPoints(finalPts);
                     flyPaintNative(0);
                 });
-            }catch(Exception e){main.post(()->{load.setEnabled(true);toast(e.getMessage());});}
+            }catch(Exception e){main.post(()->{if(generation!=flyLoadGeneration||!"flyover".equals(tab))return;load.setEnabled(true);toast(e.getMessage());});}
         });
     }
 
@@ -866,7 +882,15 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     private void post(String action,JSONObject p,Button b,String ok,Runnable after){b.setEnabled(false);io.execute(()->{try{api.post(action,p);main.post(()->{b.setEnabled(true);toast(ok);after.run();});}catch(Exception e){main.post(()->{b.setEnabled(true);toast(e.getMessage());});}});}
     private int iv(EditText e,int fallback){try{return Integer.parseInt(e.getText().toString().trim());}catch(Exception x){return fallback;}}
     private String formatSeconds(long v){long s=Math.max(0,v);return String.format(Locale.US,"%02d:%02d:%02d",s/3600,(s%3600)/60,s%60);}
+    @Override protected void onStop(){
+        stopReplayNative();
+        stopFlyNative();
+        super.onStop();
+    }
+
     @Override protected void onDestroy(){
+        replayLoadGeneration++;
+        flyLoadGeneration++;
         stopReplayNative();
         stopFlyNative();
         super.onDestroy();
