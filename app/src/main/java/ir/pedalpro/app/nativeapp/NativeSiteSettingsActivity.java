@@ -27,6 +27,8 @@ import java.util.Locale;
  */
 public final class NativeSiteSettingsActivity extends NativeScreenBase {
     private JSONObject data;
+    private static final int REQ_MEDAL_IMAGE = 2911;
+    private int pendingMedalImageId;
     private final ArrayList<Button> tabButtons = new ArrayList<>();
     private String activeTab = "general";
     private NativeAppReleaseAdminController appReleaseAdmin;
@@ -519,7 +521,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         LinearLayout head = card();
         head.addView(text("مدیریت مدال‌ها", 18, true, TEXT));
         head.addView(text("معیار، مقدار هدف، بازه زمانی، تصویر و ترتیب نمایش مدال‌ها", 11, false, MUTED));
-        head.addView(text("آپلود مستقیم تصویر به قرارداد معتبر Backend نیاز دارد؛ فعلاً مسیر تصویر موجود در سایت قابل تنظیم است.",11,false,ORANGE));
+        head.addView(text("تصویر مدال را از فایل PNG انتخاب و مستقیم به سرور ارسال کنید. ابتدا مدال را ذخیره کنید.",11,false,MUTED));
         Button recalc = normal("محاسبه مجدد همه");
         recalc.setOnClickListener(v -> postAndReload("medals_recalculate", new JSONObject(), recalc, "مدال‌ها دوباره محاسبه شدند"));
         head.addView(recalc);
@@ -548,6 +550,16 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                     JSONObject p = new JSONObject(); try { p.put("id", id); } catch(Exception ignored){}
                     postAndReload("medal_delete", p, del, "مدال حذف شد");
                 });
+                Button image=normal("بارگذاری تصویر PNG");
+                image.setOnClickListener(v -> {
+                    pendingMedalImageId=id;
+                    Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    pick.setType("image/png");
+                    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    startActivityForResult(pick, REQ_MEDAL_IMAGE);
+                });
+                card.addView(image);
                 card.addView(del);
                 content.addView(card, cardLp());
             }
@@ -563,9 +575,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         EditText window = input("بازه زمانی (روز)؛ ۰ = بدون محدودیت");
         EditText sort = input("ترتیب نمایش"); sort.setText("100");
         EditText match = input("فیلتر عنوان (اختیاری)");
-        EditText imagePath = input("مسیر تصویر موجود در سایت (image_path)");
-        EditText active = input("وضعیت: 1 فعال / 0 غیرفعال"); active.setText("1");
-        form.addView(id);form.addView(title);form.addView(desc);form.addView(metric);form.addView(target);form.addView(window);form.addView(sort);form.addView(match);form.addView(imagePath);form.addView(active);
+         EditText active = input("وضعیت: 1 فعال / 0 غیرفعال"); active.setText("1");
+        form.addView(id);form.addView(title);form.addView(desc);form.addView(metric);form.addView(target);form.addView(window);form.addView(sort);form.addView(match);form.addView(active);
         Button save = primary("ذخیره مدال");
         save.setOnClickListener(v -> {
             JSONObject p = new JSONObject();
@@ -573,14 +584,11 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 p.put("id", intValue(id,0));
                 p.put("title", title.getText().toString());
                 p.put("description", desc.getText().toString());
-                p.put("metric", metric.getText().toString());
+                p.put("metric_type", metric.getText().toString().trim());
                 p.put("target_value", decimalValue(target,0));
                 p.put("window_days", intValue(window,0));
                 p.put("sort_order", intValue(sort,100));
-                p.put("match_title", match.getText().toString());
-                String image=imagePath.getText().toString().trim();
-                if(!image.isBlank()&&!image.contains("..")&&!image.startsWith("javascript:"))
-                    p.put("image_path",image);
+                p.put("match_text", match.getText().toString());
                 p.put("is_active", intValue(active,1));
             } catch(Exception ignored){}
             postAndReload("medal_save", p, save, "مدال ذخیره شد");
@@ -756,8 +764,34 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
 
     @Override protected void onActivityResult(int requestCode,int resultCode,android.content.Intent intent) {
         super.onActivityResult(requestCode,resultCode,intent);
+        if (requestCode == REQ_MEDAL_IMAGE) {
+            int id=pendingMedalImageId;
+            pendingMedalImageId=0;
+            if (resultCode==RESULT_OK && intent!=null && intent.getData()!=null && id>0) {
+                Uri uri=intent.getData();
+                try {getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}
+                uploadMedalImage(id,uri);
+            }
+            return;
+        }
         if(appReleaseAdmin!=null && appReleaseAdmin.onActivityResult(requestCode,resultCode,intent)) return;
         if(fcmAdmin!=null) fcmAdmin.onActivityResult(requestCode,resultCode,intent);
+    }
+
+    private void uploadMedalImage(int medalId,Uri uri) {
+        setSubtitle("در حال آپلود تصویر مدال…",MUTED);
+        io.execute(()->{
+            try {
+                String type=getContentResolver().getType(uri);
+                if (type!=null && !"image/png".equalsIgnoreCase(type))
+                    throw new IllegalArgumentException("فقط تصویر PNG مجاز است.");
+                java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();
+                fields.put("medal_id",String.valueOf(medalId));
+                api.postMultipart("medal_image_upload",fields,uri,"photo","medal-"+medalId+".png","image/png");
+                JSONObject updated=api.bootstrap();
+                main.post(()->{data=updated;toast("تصویر مدال ذخیره شد.");render();});
+            }catch(Exception e){main.post(()->{setSubtitle("خطای آپلود تصویر مدال",RED);toast(e.getMessage());});}
+        });
     }
 
     private void postAndReload(String action,JSONObject payload,Button button,String success){
