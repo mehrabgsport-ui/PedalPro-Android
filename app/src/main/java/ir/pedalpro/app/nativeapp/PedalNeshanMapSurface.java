@@ -27,6 +27,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private final NativeRouteView overlay;
     private View neshanMap;
     private LinearLayout mapControls;
+    private TextView navigationControl;
     private double lastLat = Double.NaN, lastLng = Double.NaN;
     private int lastZoom = -1;
     private boolean trafficEnabled = true;
@@ -158,7 +159,10 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         mapControls=controls;
         controls.addView(control("+","بزرگ‌نمایی نقشه",()->overlay.zoomBy(1)));
         controls.addView(control("−","کوچک‌نمایی نقشه",()->overlay.zoomBy(-1)));
-        controls.addView(control("◎","نمایش کامل مسیر",overlay::recenter));
+        controls.addView(control("◎","بازگشت به موقعیت رکاب‌زن",overlay::recenter));
+        navigationControl=(TextView)control("↗","تغییر حالت نقشه ناویگیشن",()->
+                setNavigationMode(!overlay.isNavigationMode()));
+        controls.addView(navigationControl);
         if (neshanMap != null) {
             controls.addView(control("☾","تغییر حالت روز و شب نشان",()->{
                 nightStyle=!nightStyle;
@@ -211,6 +215,20 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         mapControls.setLayoutParams(lp);
         mapControls.setElevation(dp(9));
     }
+
+    /** Navigation camera affects visual presentation only, not GPS/tracking. */
+    public void setNavigationMode(boolean enabled) {
+        overlay.setNavigationMode(enabled);
+        if(navigationControl!=null){
+            navigationControl.setText(enabled?"⬆":"↗");
+            navigationControl.setContentDescription(enabled?
+                    "حالت دنبال‌کردن رکاب‌زن فعال":"فعال‌کردن حالت ناویگیشن");
+        }
+        // The licensed SDK must implement its road layers and bearing/tilt natively;
+        // the fallback renderer keeps the track and basemap aligned on rotation.
+    }
+
+    public void setHeadingDegrees(float bearing){overlay.setHeadingDegrees(bearing);}
 
     public boolean isNeshanEnabled(){return neshanMap!=null;}
     public void setPoints(JSONArray rows){overlay.setPoints(rows);}
