@@ -180,7 +180,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 if("group".equals(mode)){
                     JSONObject d=api.get("group_nav_state");
                     JSONObject g=d.optJSONObject("group");
-                    if(g==null||!g.optBoolean("has_location",false)){
+                    if(g==null||!g.optBoolean("has_location",false)||!groupTargetFresh(g)){
                         main.post(()->{
                             // Never continue navigating to a stale leader fix.
                             targetLat=Double.NaN;
@@ -190,7 +190,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                             invalidateDirectionCache();
                             distance.setText("— km");
                             bearing.setText("جهت: —");
-                            status.setText("موقعیت زنده گروه در دسترس نیست؛ ثبت GPS شما ادامه دارد.");
+                            status.setText("موقعیت گروه قدیمی یا نامعتبر است؛ مسیریابی متوقف شد ولی ثبت GPS شما ادامه دارد.");
                         });
                     }else{
                         double lat=g.optDouble("last_lat",Double.NaN),lng=g.optDouble("last_lng",Double.NaN);
@@ -218,9 +218,45 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     }
                 }
             }catch(Exception e){
-                main.post(()->status.setText("خطای موقت دریافت موقعیت: "+e.getMessage()));
+                main.post(()->{
+                    if("group".equals(mode)){
+                        targetLat=Double.NaN;targetLng=Double.NaN;
+                        routeView.clearTarget();routeView.clearNavigationRoute();
+                        invalidateDirectionCache();arrivalCandidateTime=0L;arrivalCandidateFixTime=0L;
+                    }
+                    status.setText("خطای دریافت موقعیت؛ مقصد قدیمی حذف شد: "+e.getMessage());
+                });
             }finally{busy=false;}
         });
+    }
+
+
+    private static boolean groupTargetFresh(JSONObject group){
+        if(group.has("location_age_seconds")&&!group.isNull("location_age_seconds")){
+            double age=group.optDouble("location_age_seconds",Double.POSITIVE_INFINITY);
+            return Double.isFinite(age)&&age>=0d&&age<=30d;
+        }
+        // Legacy 4.7.46 response: timestamp is in server Asia/Tehran timezone.
+        String date=group.optString("recorded_at","");
+        if(date.isBlank()||"null".equalsIgnoreCase(date))return false;
+        try{
+            java.text.SimpleDateFormat format=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS",Locale.US);
+            format.setLenient(false);
+            format.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Tehran"));
+            java.util.Date stamped=format.parse(date);
+            if(stamped==null)return false;
+            long age=System.currentTimeMillis()-stamped.getTime();
+            return age>=-3000L&&age<=30000L;
+        }catch(Exception e){
+            try{
+                java.text.SimpleDateFormat format=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.US);
+                format.setLenient(false);
+                format.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Tehran"));
+                java.util.Date stamped=format.parse(date);
+                return stamped!=null && System.currentTimeMillis()-stamped.getTime()>=-3000L
+                    &&System.currentTimeMillis()-stamped.getTime()<=30000L;
+            }catch(Exception bad){return false;}
+        }
     }
 
     private void updateCurrentLocation(){
