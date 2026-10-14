@@ -337,7 +337,6 @@ public final class NativeMainActivity extends Activity {
                 main.postDelayed(() -> showAuthDialog("login"), 120L);
                 break;
             case "menu":
-                showHome();
                 main.postDelayed(this::showDrawer, 120L);
                 break;
             case "dashboard":
@@ -4831,8 +4830,7 @@ public final class NativeMainActivity extends Activity {
         row.setContentDescription(label);
 
         int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
-        TextView icon = text(glyph, 16, false, fg);
-        icon.setGravity(Gravity.CENTER);
+        PedalIconView icon = new PedalIconView(this, drawerIcon(glyph), fg);
         row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         TextView tv = text(label, 13, true, fg);
@@ -4861,8 +4859,7 @@ public final class NativeMainActivity extends Activity {
         head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         head.setPadding(dp(12), 0, dp(12), 0);
 
-        TextView sectionIcon = text(groupGlyph, 16, false, Color.rgb(220, 234, 243));
-        sectionIcon.setGravity(Gravity.CENTER);
+        PedalIconView sectionIcon = new PedalIconView(this, drawerIcon(groupGlyph), Color.rgb(220, 234, 243));
         TextView titleView = text(title, 13, true, Color.rgb(220, 234, 243));
         TextView chevron = text(startOpen ? "⌃" : "⌄", 15, false, Color.rgb(128, 164, 187));
         chevron.setGravity(Gravity.CENTER);
@@ -4891,8 +4888,7 @@ public final class NativeMainActivity extends Activity {
             sub.setFocusable(true);
 
             String glyph = itemGlyphs != null && i < itemGlyphs.length ? itemGlyphs[i] : "";
-            TextView gi = text(glyph, 16, false, Color.rgb(220, 234, 243));
-            gi.setGravity(Gravity.CENTER);
+            PedalIconView gi = new PedalIconView(this, drawerIcon(glyph), Color.rgb(220, 234, 243));
             sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
             TextView label = text(labels[i], 12, false, Color.rgb(220, 234, 243));
@@ -4920,6 +4916,50 @@ public final class NativeMainActivity extends Activity {
 
         host.addView(subs);
         return host;
+    }
+
+    private PedalIconView.Icon drawerIcon(String glyph) {
+        if (glyph == null) return PedalIconView.Icon.DETAILS;
+        switch (glyph) {
+            case "⌂": return PedalIconView.Icon.HOME;
+            case "🗓️": return PedalIconView.Icon.CALENDAR;
+            case "📍":
+            case "⌖":
+            case "🧭": return PedalIconView.Icon.ROUTE;
+            case "🚴":
+            case "🚲": return PedalIconView.Icon.RIDE;
+            case "▶":
+            case "◈": return PedalIconView.Icon.PLAY;
+            case "⌁":
+            case "▰":
+            case "◫":
+            case "◩":
+            case "📈":
+            case "▥":
+            case "↗": return PedalIconView.Icon.CHART;
+            case "◎":
+            case "◉": return PedalIconView.Icon.BEACON;
+            case "👥": return PedalIconView.Icon.GROUP;
+            case "👤": return PedalIconView.Icon.USER;
+            case "💬":
+            case "✉": return PedalIconView.Icon.CHAT;
+            case "▧":
+            case "📘": return PedalIconView.Icon.GALLERY;
+            case "🛡️":
+            case "SOS":
+            case "◌": return PedalIconView.Icon.SHIELD;
+            case "⚙":
+            case "⚒": return PedalIconView.Icon.SETTINGS;
+            case "⬇":
+            case "⬆":
+            case "✦":
+            case "🏆":
+            case "🥇":
+            case "⌕":
+            case "ⓘ": return PedalIconView.Icon.DETAILS;
+            case "♥": return PedalIconView.Icon.USER;
+            default: return PedalIconView.Icon.DETAILS;
+        }
     }
 
     private void updateHeaderAccess(JSONObject data) {
