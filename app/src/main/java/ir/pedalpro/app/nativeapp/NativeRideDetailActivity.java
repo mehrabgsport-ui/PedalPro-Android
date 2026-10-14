@@ -155,12 +155,13 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         LinearLayout notice=noticeCard();
         notice.addView(text(ride.optString("title","رکاب‌زنی"),15,true,TEXT));
-        notice.addView(text("👤 "+ride.optString("owner_name",""),12,false,TEXT));
-        notice.addView(text("🚲 "+bikeText(findBike(ride.optInt("bike_id",0))),12,false,TEXT));
+        notice.addView(detailMetaRow(PedalIconView.Icon.USER,ride.optString("owner_name",""),MUTED));
+        notice.addView(detailMetaRow(PedalIconView.Icon.RIDE,bikeText(findBike(ride.optInt("bike_id",0))),MUTED));
         if(!ride.optString("challenge_title","").isBlank()){
-            notice.addView(text("🏆 "+ride.optString("challenge_title"),12,false,TEXT));
+            notice.addView(detailMetaRow(PedalIconView.Icon.DETAILS,ride.optString("challenge_title"),MUTED));
         }
-        notice.addView(text(active?"🟢 در حال اجرا":"✓ پایان یافته",12,true,active?GREEN:MUTED));
+        notice.addView(detailMetaRow(active?PedalIconView.Icon.PLAY:PedalIconView.Icon.DETAILS,
+                active?"در حال اجرا":"پایان یافته",active?GREEN:MUTED));
         content.addView(notice,cardLp());
 
         content.addView(metricGrid(),cardLp());
@@ -228,6 +229,21 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         });
         host.addView(show,new LinearLayout.LayoutParams(dp(190),dp(50)));
         return host;
+    }
+
+    private View detailMetaRow(PedalIconView.Icon icon,String value,int color){
+        LinearLayout row=new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setPadding(0,dp(5),0,0);
+        PedalIconView iv=new PedalIconView(this,icon,color);
+        row.addView(iv,new LinearLayout.LayoutParams(dp(20),dp(20)));
+        TextView label=text(value==null?"":value,12,false,color);
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1f);
+        lp.setMargins(dp(7),0,0,0);
+        row.addView(label,lp);
+        return row;
     }
 
     private View metricGrid(){
