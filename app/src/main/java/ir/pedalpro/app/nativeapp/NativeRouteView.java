@@ -40,6 +40,9 @@ public final class NativeRouteView extends View {
     private P currentPoint;
     private P targetPoint;
     private boolean showTargetLine = false;
+    private boolean navigationMode;
+    private float navigationBearing;
+    private boolean hasNavigationBearing;
     private int cameraZoom = 15;
     private double cameraLat = Double.NaN;
     private double cameraLng = Double.NaN;
@@ -249,6 +252,27 @@ public final class NativeRouteView extends View {
 
     public void recenter() { userCamera = false; invalidate(); }
 
+    /** UI-only navigation camera: heading-up map, without changing recorded GPS samples. */
+    public void setNavigationMode(boolean enabled) {
+        navigationMode=enabled;
+        if(enabled)userCamera=false;
+        invalidate();
+    }
+
+    public boolean isNavigationMode() { return navigationMode; }
+
+    /** Android Location bearing: 0=north, 90=east. Ignore invalid/unknown fixes. */
+    public void setHeadingDegrees(float bearing) {
+        if(!Float.isFinite(bearing))return;
+        bearing=((bearing%360f)+360f)%360f;
+        if(!hasNavigationBearing) { navigationBearing=bearing;hasNavigationBearing=true; }
+        else {
+            float delta=((bearing-navigationBearing+540f)%360f)-180f;
+            if(Math.abs(delta)>1.5f)navigationBearing=((navigationBearing+delta*.30f)+360f)%360f;
+        }
+        if(navigationMode && !userCamera)invalidate();
+    }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         final float w = getWidth(), h = getHeight();
@@ -270,15 +294,30 @@ public final class NativeRouteView extends View {
                     - PedalMapTiles.worldY(b.maxLat, cameraZoom);
             if (spanX <= w - pad * 2 && spanY <= h - pad * 2) break;
         }
+        if (navigationMode && currentPoint != null && !userCamera) {
+            // Fixed navigation zoom follows the rider, not the entire recorded track.
+            cameraLat=currentPoint.lat;
+            cameraLng=currentPoint.lng;
+            cameraZoom=16;
+        }
         if (userCamera) {
             cameraLat = userLat;
             cameraLng = userLng;
             cameraZoom = userZoom;
         }
+        // The XYZ fallback has a lightweight visual 2.5D pitch; the external SDK
+        // supplies its own transform and must not be distorted by Canvas rotation.
+        int mapSave=canvas.save();
+        boolean headingUp=navigationMode && !userCamera && !externalBasemap;
+        if(headingUp){
+            canvas.rotate(-navigationBearing,w*.5f,h*.5f);
+            canvas.scale(1f,.86f,w*.5f,h*.5f);
+        }
         if (externalBasemap) {
             if (cameraListener != null) cameraListener.onCameraChanged(cameraLat,cameraLng,cameraZoom);
         } else {
-            PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom);
+            PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,
+                    headingUp ? 1.50f : 1.0f);
         }
         Path p = new Path();
         boolean first = true;
@@ -324,6 +363,22 @@ public final class NativeRouteView extends View {
                     projectY(targetPoint.lat, b, h, pad), dp(13), ring);
         }
 
+        canvas.restoreToCount(mapSave);
+        if(navigationMode && !userCamera && currentPoint!=null) {
+            // Rider remains upright while the street background turns underneath.
+            Paint bike=new Paint(Paint.ANTI_ALIAS_FLAG);
+            bike.setColor(Color.rgb(9,46,66));
+            bike.setStyle(Paint.Style.FILL);
+            canvas.drawCircle(w*.5f,h*.5f,dp(18),bike);
+            bike.setColor(Color.rgb(21,227,239));
+            Path heading=new Path();
+            heading.moveTo(w*.5f,h*.5f-dp(18));
+            heading.lineTo(w*.5f-dp(10),h*.5f+dp(12));
+            heading.lineTo(w*.5f,h*.5f+dp(6));
+            heading.lineTo(w*.5f+dp(10),h*.5f+dp(12));
+            heading.close();
+            canvas.drawPath(heading,bike);
+        }
         canvas.drawText(points.size() + " نقطه GPS", dp(10), h - dp(10), text);
     }
 
