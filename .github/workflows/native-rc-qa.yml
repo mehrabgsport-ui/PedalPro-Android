@@ -3,6 +3,8 @@ name: Native RC QA
 on:
   push:
     branches: [ native/android-2.0.0, native/web-parity ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
