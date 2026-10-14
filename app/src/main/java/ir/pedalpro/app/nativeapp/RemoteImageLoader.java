@@ -24,6 +24,18 @@ final class RemoteImageLoader {
 
     static void load(Context c, ImageView view, String rawUrl, int fallbackRes){
         if(rawUrl==null||rawUrl.isBlank()){view.setImageResource(fallbackRes);return;}
+        if(rawUrl.startsWith("data:image/")){
+            try{
+                int comma=rawUrl.indexOf(',');
+                if(comma>0){
+                    byte[] bytes=android.util.Base64.decode(rawUrl.substring(comma+1),android.util.Base64.DEFAULT);
+                    Bitmap bmp=BitmapFactory.decodeByteArray(bytes,0,bytes.length);
+                    if(bmp!=null){view.setImageBitmap(bmp);return;}
+                }
+            }catch(Throwable ignored){}
+            view.setImageResource(fallbackRes);
+            return;
+        }
         String url=absolute(rawUrl);
         Bitmap cached=CACHE.get(url);
         if(cached!=null){view.setImageBitmap(cached);return;}
