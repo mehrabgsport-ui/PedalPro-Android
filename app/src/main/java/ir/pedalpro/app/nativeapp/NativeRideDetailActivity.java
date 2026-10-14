@@ -220,7 +220,7 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         show.setOnClickListener(v->{
             host.removeAllViews();
             host.setPadding(0,0,0,0);
-            NativeRouteView route=new NativeRouteView(this);
+            PedalNeshanMapSurface route=new PedalNeshanMapSurface(this);
             route.setPoints(ride.optJSONArray("points"));
             double lat=ride.optDouble("last_lat",Double.NaN);
             double lng=ride.optDouble("last_lng",Double.NaN);
