@@ -1705,8 +1705,10 @@ public final class NativeMainActivity extends Activity {
             RemoteImageLoader.load(this,image,medal.optString("image_path",""),
                     R.drawable.pedalpro_app_icon);
             if(!earned){
-                image.setColorFilter(Color.GRAY,android.graphics.PorterDuff.Mode.SRC_IN);
-                image.setAlpha(.50f);
+                android.graphics.ColorMatrix grey=new android.graphics.ColorMatrix();
+                grey.setSaturation(0f);
+                image.setColorFilter(new android.graphics.ColorMatrixColorFilter(grey));
+                image.setAlpha(.58f);
             }
             cell.addView(image,new LinearLayout.LayoutParams(dp(49),dp(49)));
             TextView label=text(medal.optString("title","مدال"),10,false,
