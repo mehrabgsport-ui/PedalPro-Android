@@ -3455,19 +3455,84 @@ public final class NativeMainActivity extends Activity {
         if (bikes == null || bikes.length() == 0) { addEmpty("هنوز دوچرخه‌ای ثبت نشده است."); return; }
         for (int i = 0; i < bikes.length(); i++) {
             JSONObject bike = bikes.optJSONObject(i); if (bike == null) continue;
+            JSONObject captured = bike;
             LinearLayout box = glassCard(24);
-            String photo=bike.optString("photo_path","");
-            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);im.setClipToOutline(true);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);box.addView(im,new LinearLayout.LayoutParams(-1,dp(160)));}
-            String title = bike.optString("brand_model", bike.optString("bike_type", "دوچرخه"));
-            if (bike.optInt("is_primary", 0) == 1) title = "★ " + title;
-            box.addView(text(title, 16, true, TEXT));
-            String meta = bike.optString("bike_type", "");
-            if (!bike.optString("wheel_size", "").isBlank()) meta += " · چرخ " + bike.optString("wheel_size");
-            if (bike.optDouble("weight_kg", 0) > 0) meta += " · " + JalaliDate.fa(bike.optString("weight_kg")) + " kg";
-            box.addView(text(meta, 11, false, MUTED));
+
+            String photo = bike.optString("photo_path", "");
+            if (photo.isBlank()) photo = bike.optString("photo_data", "");
+            if (!photo.isBlank()) {
+                ImageView im = new ImageView(this);
+                im.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                im.setClipToOutline(true);
+                RemoteImageLoader.load(this, im, photo, R.drawable.pedalpro_logo);
+                LinearLayout.LayoutParams imLp = new LinearLayout.LayoutParams(-1, dp(170));
+                imLp.setMargins(0, 0, 0, dp(12));
+                box.addView(im, imLp);
+            } else {
+                TextView placeholder = text("🚲", 46, false, Color.rgb(208, 231, 240));
+                placeholder.setGravity(Gravity.CENTER);
+                placeholder.setBackground(roundRect(Color.argb(20,255,255,255), 18, Color.argb(38,255,255,255)));
+                LinearLayout.LayoutParams phLp = new LinearLayout.LayoutParams(-1, dp(150));
+                phLp.setMargins(0, 0, 0, dp(12));
+                box.addView(placeholder, phLp);
+            }
+
+            LinearLayout titleRow = new LinearLayout(this);
+            titleRow.setOrientation(LinearLayout.HORIZONTAL);
+            titleRow.setGravity(Gravity.CENTER_VERTICAL);
+            titleRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            String title = bike.optString("brand_model", "").trim();
+            if (title.isBlank()) title = "دوچرخه";
+            titleRow.addView(text(title, 16, true, TEXT), new LinearLayout.LayoutParams(0, -2, 1f));
+            if (bike.optInt("is_primary", 0) == 1) {
+                TextView primary = text("دوچرخه اصلی", 10, true, Color.rgb(22,228,239));
+                primary.setGravity(Gravity.CENTER);
+                primary.setPadding(dp(9), dp(6), dp(9), dp(6));
+                primary.setBackground(roundRect(Color.argb(24,22,228,239), 14, Color.argb(76,22,228,239)));
+                titleRow.addView(primary);
+            }
+            box.addView(titleRow);
+
+            StringBuilder meta = new StringBuilder();
+            String rawType = bike.optString("bike_type", "");
+            if (!rawType.isBlank()) meta.append(bikeTypeLabel(rawType));
+            String frame = bike.optString("frame_size", "");
+            if (!frame.isBlank()) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append("فریم ").append(frame);
+            }
+            String wheel = bike.optString("wheel_size", "");
+            if (!wheel.isBlank()) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append("چرخ ").append(wheel);
+            }
+            String color = bike.optString("color", "");
+            if (!color.isBlank()) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append(color);
+            }
+            if (bike.optDouble("weight_kg", 0) > 0) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append(JalaliDate.fa(bike.optString("weight_kg"))).append(" kg");
+            }
+            if (meta.length() > 0) {
+                TextView metaView = text(meta.toString(), 11, false, MUTED);
+                metaView.setPadding(0, dp(5), 0, dp(8));
+                box.addView(metaView);
+            }
+
+            LinearLayout actions = new LinearLayout(this);
+            actions.setOrientation(LinearLayout.HORIZONTAL);
+            actions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
             PedalActionView edit = action(PedalIconView.Icon.EDIT,"ویرایش",PedalActionView.Style.OUTLINE);
-            JSONObject captured = bike; edit.setOnClickListener(v -> showBikeEditor(captured));
-            box.addView(edit,fullActionLp(50));
+            edit.setOnClickListener(v -> showBikeEditor(captured));
+            PedalActionView delete = action(PedalIconView.Icon.CLOSE,"حذف",PedalActionView.Style.OUTLINE);
+            delete.setAccent(RED);
+            delete.setOnClickListener(v -> deleteBike(captured.optInt("id", 0), hiddenButtonProxy(delete)));
+            actions.addView(edit, actionWeightLp());
+            actions.addView(delete, actionWeightLp());
+            box.addView(actions);
+
             content.addView(box, cardLp());
         }
         VazirmatnLoader.apply(this,content);animatePageIn();
@@ -3483,6 +3548,23 @@ public final class NativeMainActivity extends Activity {
         LinearLayout box = glassCard(24);
         EditText brand = input("برند / مدل");
         EditText type = input("نوع دوچرخه");
+        type.setFocusable(false);
+        type.setClickable(true);
+        type.setCompoundDrawablesWithIntrinsicBounds(0, 0, android.R.drawable.arrow_down_float, 0);
+        final int[] selectedType = new int[]{bikeTypeIndex(bike == null ? "" : bike.optString("bike_type", ""))};
+        type.setText(bikeTypeLabel(bike == null ? "" : bike.optString("bike_type", "")));
+        type.setOnClickListener(v -> {
+            String[] labels = bikeTypeLabels();
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle("نوع دوچرخه")
+                    .setSingleChoiceItems(labels, selectedType[0], (dialog, which) -> {
+                        selectedType[0] = which;
+                        type.setText(labels[which]);
+                        dialog.dismiss();
+                    })
+                    .show();
+        });
+
         EditText frame = input("سایز فریم");
         EditText wheel = input("سایز چرخ");
         EditText color = input("رنگ");
@@ -3491,8 +3573,10 @@ public final class NativeMainActivity extends Activity {
         CheckBox primary = new CheckBox(this);primary.setText("دوچرخه اصلی");primary.setTextColor(TEXT);
 
         if (bike != null) {
-            brand.setText(bike.optString("brand_model", ""));type.setText(bike.optString("bike_type", ""));frame.setText(bike.optString("frame_size", ""));wheel.setText(bike.optString("wheel_size", ""));color.setText(bike.optString("color", ""));weight.setText(bike.optString("weight_kg", ""));primary.setChecked(bike.optInt("is_primary", 0) == 1);
-            String photo=bike.optString("photo_path","");if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
+            brand.setText(bike.optString("brand_model", ""));frame.setText(bike.optString("frame_size", ""));wheel.setText(bike.optString("wheel_size", ""));color.setText(bike.optString("color", ""));weight.setText(bike.optString("weight_kg", ""));primary.setChecked(bike.optInt("is_primary", 0) == 1);
+            String photo=bike.optString("photo_path","");
+            if(photo.isBlank())photo=bike.optString("photo_data","");
+            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
         }
         box.addView(brand);box.addView(type);box.addView(frame);box.addView(wheel);box.addView(color);box.addView(weight);box.addView(primary);
         PedalActionView photo=action(PedalIconView.Icon.PLUS,"انتخاب عکس دوچرخه",PedalActionView.Style.OUTLINE);photo.setOnClickListener(v->pickImage(REQ_BIKE_PHOTO));box.addView(photo,fullActionLp(50));
@@ -3508,7 +3592,7 @@ public final class NativeMainActivity extends Activity {
             save.setEnabled(false);int id = bike == null ? 0 : bike.optInt("id", 0);
             io.execute(() -> {
                 try {
-                    JSONObject saved=api.post("bike_save",new JSONObject().put("id",id).put("brand_model",brand.getText().toString().trim()).put("bike_type",type.getText().toString().trim()).put("frame_size",frame.getText().toString().trim()).put("wheel_size",wheel.getText().toString().trim()).put("color",color.getText().toString().trim()).put("weight_kg",JalaliDate.en(weight.getText().toString().trim())).put("is_primary",primary.isChecked()));
+                    JSONObject saved=api.post("bike_save",new JSONObject().put("id",id).put("brand_model",brand.getText().toString().trim()).put("bike_type",bikeTypeValue(selectedType[0])).put("frame_size",frame.getText().toString().trim()).put("wheel_size",wheel.getText().toString().trim()).put("color",color.getText().toString().trim()).put("weight_kg",JalaliDate.en(weight.getText().toString().trim())).put("is_primary",primary.isChecked()));
                     int bikeId=saved.optInt("id",id);
                     if(pendingBikePhotoUri!=null&&bikeId>0){
                         java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();fields.put("bike_id",String.valueOf(bikeId));
@@ -3543,6 +3627,37 @@ public final class NativeMainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private String[] bikeTypeLabels() {
+        return new String[]{"کوهستان (MTB)", "جاده (Road)", "گراول", "شهری", "تاشو", "برقی", "سایر"};
+    }
+
+    private String[] bikeTypeValues() {
+        return new String[]{"mtb", "road", "gravel", "city", "folding", "electric", "other"};
+    }
+
+    private int bikeTypeIndex(String raw) {
+        String value = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        String[] values = bikeTypeValues();
+        String[] labels = bikeTypeLabels();
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(value) || labels[i].equalsIgnoreCase(raw == null ? "" : raw.trim())) return i;
+        }
+        if ("کوهستان".equals(raw)) return 0;
+        if ("جاده".equals(raw)) return 1;
+        return 6;
+    }
+
+    private String bikeTypeValue(int index) {
+        String[] values = bikeTypeValues();
+        return index >= 0 && index < values.length ? values[index] : "other";
+    }
+
+    private String bikeTypeLabel(String raw) {
+        String[] labels = bikeTypeLabels();
+        int index = bikeTypeIndex(raw);
+        return index >= 0 && index < labels.length ? labels[index] : "سایر";
     }
 
     private void showFitness() {
