@@ -62,14 +62,24 @@ final class PedalMapTiles {
     }
 
     static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom) {
+        draw(target,c,centerLat,centerLng,zoom,1.0f);
+    }
+
+    static void draw(View target, Canvas c, double centerLat, double centerLng, int zoom,
+                     float overscan) {
         if (!Double.isFinite(centerLat) || !Double.isFinite(centerLng)) return;
         float w = target.getWidth(), h = target.getHeight();
         double worldX = worldX(centerLng, zoom), worldY = worldY(centerLat, zoom);
         double left = worldX - w / 2.0, top = worldY - h / 2.0;
-        int firstX = (int) Math.floor(left / TILE);
-        int firstY = (int) Math.floor(top / TILE);
-        int lastX = (int) Math.floor((left + w) / TILE);
-        int lastY = (int) Math.floor((top + h) / TILE);
+        // Fetch diagonal coverage only when rotating the camera. Visible tile positions
+        // remain relative to the original viewport, avoiding a shifted GPS overlay.
+        double extent = Math.hypot(w,h) * 1.05;
+        double rangeW = overscan > 1.01f ? extent : w;
+        double rangeH = overscan > 1.01f ? extent : h;
+        int firstX = (int) Math.floor((worldX - rangeW/2) / TILE);
+        int firstY = (int) Math.floor((worldY - rangeH/2) / TILE);
+        int lastX = (int) Math.floor((worldX + rangeW/2) / TILE);
+        int lastY = (int) Math.floor((worldY + rangeH/2) / TILE);
         int n = 1 << zoom;
         int available = 0;
         for (int ty = firstY; ty <= lastY; ty++) {
