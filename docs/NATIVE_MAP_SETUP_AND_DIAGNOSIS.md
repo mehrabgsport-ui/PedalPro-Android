@@ -9,6 +9,7 @@ The older `NativeRouteView.java` drew **only a six-by-six dark grid and GPS poly
 - `NativeRouteView.java` retains the app's existing `setPoints`, `appendPoints`, `setCurrent`, `setTarget` route and marker interfaces. Camera/projection is now Web Mercator to align track, marker and tile pixels.
 - `PedalMapTiles.java` fetches native HTTPS XYZ raster images (no WebView), with a bounded two-thread downloader, 72-image memory cache, seven-day local file cache, application-specific User-Agent and visible attribution.
 - Error and HTTP 401/403/429 backoff is included; the last valid GPS/route overlay is still drawn if the tile server fails. This does **not** affect the TrackingService GPS filter, speed, distance, persistence, location permission handling or backend endpoints.
+- Native map gestures: drag to pan, pinch or double-tap to zoom, and long-press to return to automatic route framing; these adjust **camera presentation only**, not GPS coordinates.
 - The validated starting GPS fix seeds the **visible map camera** immediately on entering a new ride; subsequent GPS/UI updates remain unchanged.
 - OpenStreetMap public raster tiles are used **only as the test/development fallback**. Their public servers are not an assured production service; bulk/offline prefetch from OSM public tiles is forbidden. See <https://operations.osmfoundation.org/policies/tiles/>.
 
@@ -33,7 +34,7 @@ If a provider specifies an attribution requirement, set `pedalproMapAttribution`
 3. When there are route points, the cyan polyline, live current position and yellow target must align with street geometry.
 4. Disconnect the internet: cached tiles can display; GPS/route overlay must still be visible. Do not prefetch public OSM tiles for offline routes.
 5. With an invalid tile API key, an intelligible map-access error should appear; the GPS metrics and recorder must continue functioning.
-6. Compare with the exact PedalPro Web 4.7.46 map screenshots and test Android touch interaction/performance. **Pixel parity, map pan/pinch and device behavior are still unverified**.
+6. Compare with the exact PedalPro Web 4.7.46 map screenshots and test Android drag/pinch/long-press interaction and performance. **Pixel parity and device behavior are still unverified**.
 
 ## Other screenshot differences corrected
 
