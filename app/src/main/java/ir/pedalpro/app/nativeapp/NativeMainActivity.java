@@ -1676,33 +1676,218 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(navRide);
         content.removeAllViews();
-        activeRideRouteView=null;
+        activeRideRouteView = null;
 
         if (activeRide == null) {
-            addHero("شروع رکاب‌زنی", "ثبت مسیر فقط بعد از دریافت موقعیت تازه و دقیق شروع می‌شود.");
+            addHero("شروع رکاب‌زنی GPS", "");
+
+            JSONObject me = bootstrap == null ? null : bootstrap.optJSONObject("user");
+            int uid = me == null ? 0 : me.optInt("id", 0);
+            boolean admin = bootstrap != null && (bootstrap.optBoolean("is_admin", false) || bootstrap.optInt("is_admin", 0) == 1);
+
+            LinearLayout form = glassCard(28);
+            form.addView(text("شروع رکاب‌زنی GPS", 20, true, TEXT));
+
+            java.util.ArrayList<String> challengeLabels = new java.util.ArrayList<>();
+            JSONArray challengeIds = new JSONArray();
+            challengeLabels.add("بدون چالش");
+            challengeIds.put(0);
+            JSONArray challenges = bootstrap == null ? null : bootstrap.optJSONArray("challenges");
+            if (challenges != null) {
+                for (int i = 0; i < challenges.length(); i++) {
+                    JSONObject ch = challenges.optJSONObject(i);
+                    if (ch == null || ch.optInt("creator_user_id", 0) != uid) continue;
+                    String status = ch.optString("status", "");
+                    if (!"planned".equals(status) && !"active".equals(status)) continue;
+                    challengeLabels.add(ch.optString("title", "چالش") + (ch.optInt("is_official", 0) == 1 ? " — رسمی" : ""));
+                    challengeIds.put(ch.optInt("id", 0));
+                }
+            }
+            TextView challengeLabel = text("چالش رسمی / چالش من", 11, false, MUTED);
+            challengeLabel.setPadding(0, dp(10), 0, 0);
+            form.addView(challengeLabel);
+            android.widget.Spinner challengeSpinner = challengeSpinner(challengeLabels.toArray(new String[0]), 0);
+            form.addView(challengeSpinner);
+
+            java.util.ArrayList<String> eventLabels = new java.util.ArrayList<>();
+            JSONArray eventIds = new JSONArray();
+            eventLabels.add("بدون برنامه");
+            eventIds.put(0);
+            JSONArray events = bootstrap == null ? null : bootstrap.optJSONArray("events");
+            if (admin && events != null) {
+                for (int i = 0; i < events.length(); i++) {
+                    JSONObject e = events.optJSONObject(i);
+                    if (e == null) continue;
+                    String status = e.optString("status", "");
+                    if (!"planned".equals(status) && !"active".equals(status)) continue;
+                    eventLabels.add(e.optString("title", "برنامه"));
+                    eventIds.put(e.optInt("id", 0));
+                }
+            }
+            android.widget.Spinner eventSpinner = challengeSpinner(eventLabels.toArray(new String[0]), 0);
+            if (admin) {
+                TextView eventLabel = text("برنامه رسمی", 11, false, MUTED);
+                eventLabel.setPadding(0, dp(5), 0, 0);
+                form.addView(eventLabel);
+                form.addView(eventSpinner);
+            }
+
+            java.util.ArrayList<String> bikeLabels = new java.util.ArrayList<>();
+            JSONArray bikeIds = new JSONArray();
+            bikeLabels.add("دوچرخه پیش‌فرض / ثبت‌نشده");
+            bikeIds.put(0);
+            int primaryBikePosition = 0;
+            JSONArray bikes = bootstrap == null ? null : bootstrap.optJSONArray("my_bikes");
+            if (bikes != null) {
+                for (int i = 0; i < bikes.length(); i++) {
+                    JSONObject b = bikes.optJSONObject(i);
+                    if (b == null) continue;
+                    String label = b.optString("brand_model", "").trim();
+                    if (label.isBlank()) label = b.optString("bike_type", "").trim();
+                    if (label.isBlank()) label = "دوچرخه " + b.optInt("id", 0);
+                    bikeLabels.add(label);
+                    bikeIds.put(b.optInt("id", 0));
+                    if (b.optInt("is_primary", 0) == 1) primaryBikePosition = bikeLabels.size() - 1;
+                }
+            }
+            TextView bikeLabel = text("دوچرخه", 11, false, MUTED);
+            bikeLabel.setPadding(0, dp(5), 0, 0);
+            form.addView(bikeLabel);
+            android.widget.Spinner bikeSpinner = challengeSpinner(bikeLabels.toArray(new String[0]), primaryBikePosition);
+            form.addView(bikeSpinner);
+
+            EditText rideTitle = input("عنوان رکاب‌زنی");
+            rideTitle.setHint("مثلاً مسیر طرقبه");
+            form.addView(rideTitle);
+
+            TextView privacyLabel = text("حریم رکاب‌زنی", 11, false, MUTED);
+            privacyLabel.setPadding(0, dp(5), 0, 0);
+            form.addView(privacyLabel);
+            android.widget.Spinner privacySpinner = challengeSpinner(
+                    new String[]{"خصوصی؛ فقط افراد انتخابی", "عمومی؛ همه اعضا موقعیت زنده را ببینند"}, 0);
+            form.addView(privacySpinner);
+
+            LinearLayout viewers = glassCard(18);
+            viewers.addView(text("افراد مجاز برای دیدن رکاب خصوصی", 13, true, TEXT));
+            TextView viewerNote = text("اگر کسی انتخاب نشود، رکاب برای سایر اعضا کاملاً مخفی است.", 10, false, MUTED);
+            viewerNote.setPadding(0, dp(4), 0, dp(5));
+            viewers.addView(viewerNote);
+            java.util.ArrayList<CheckBox> viewerChecks = new java.util.ArrayList<>();
+            JSONArray members = bootstrap == null ? null : bootstrap.optJSONArray("members");
+            if (members != null) {
+                for (int i = 0; i < members.length(); i++) {
+                    JSONObject member = members.optJSONObject(i);
+                    if (member == null || member.optInt("id", 0) == uid) continue;
+                    CheckBox cb = new CheckBox(this);
+                    cb.setText(member.optString("display_name", member.optString("username", "عضو")));
+                    cb.setTextColor(TEXT);
+                    cb.setTag(member.optInt("id", 0));
+                    viewers.addView(cb, new LinearLayout.LayoutParams(-1, dp(42)));
+                    viewerChecks.add(cb);
+                }
+            }
+            if (viewerChecks.isEmpty()) viewers.addView(text("عضو دیگری برای انتخاب وجود ندارد.", 11, false, MUTED));
+            form.addView(viewers, cardLp());
+
+            TextView startNote = text("مسافت، زمان، سرعت و ارتفاع از GPS ثبت می‌شوند. کالری و کار مکانیکی بعد از پایان مسیر به‌صورت تقریبی برآورد می‌شوند.", 11, false, MUTED);
+            startNote.setPadding(dp(11), dp(10), dp(11), dp(10));
+            startNote.setBackground(roundRect(Color.argb(8,255,255,255), 14, Color.argb(28,255,255,255)));
+            form.addView(startNote);
+            content.addView(form, cardLp());
+
+            privacySpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    viewers.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+            challengeSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    int challengeId = challengeIds.optInt(position, 0);
+                    JSONObject ch = findChallengeById(challengeId);
+                    if (ch != null) rideTitle.setText(ch.optString("title", ""));
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+            eventSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    int eventId = eventIds.optInt(position, 0);
+                    JSONObject event = findEvent(eventId);
+                    if (event != null) {
+                        rideTitle.setText(event.optString("title", ""));
+                        privacySpinner.setSelection(1);
+                    }
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            });
+
             LinearLayout gate = glassCard(28);
-            LinearLayout statusRow=new LinearLayout(this);statusRow.setOrientation(LinearLayout.HORIZONTAL);statusRow.setGravity(Gravity.CENTER_VERTICAL|Gravity.END);
-            PedalIconView gpsIcon=new PedalIconView(this,PedalIconView.Icon.LOCATION,Color.rgb(31,231,242));
+            LinearLayout statusRow = new LinearLayout(this);
+            statusRow.setOrientation(LinearLayout.HORIZONTAL);
+            statusRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+            PedalIconView gpsIcon = new PedalIconView(this, PedalIconView.Icon.LOCATION, Color.rgb(31,231,242));
             TextView state = text("در حال بررسی GPS…", 16, true, TEXT);
-            statusRow.addView(state,new LinearLayout.LayoutParams(0,-2,1f));statusRow.addView(gpsIcon,new LinearLayout.LayoutParams(dp(34),dp(34)));
+            statusRow.addView(state, new LinearLayout.LayoutParams(0, -2, 1f));
+            statusRow.addView(gpsIcon, new LinearLayout.LayoutParams(dp(34), dp(34)));
             TextView accuracy = text("دقت: —", 12, false, MUTED);
-            accuracy.setPadding(0,dp(7),0,dp(4));
-            PedalActionView check = action(PedalIconView.Icon.REFRESH,"بررسی دوباره GPS",PedalActionView.Style.OUTLINE);
-            PedalActionView start = action(PedalIconView.Icon.PLAY,"شروع ثبت مسیر",PedalActionView.Style.PRIMARY);
-            start.setEnabled(false);start.setAlpha(.5f);
-            gate.addView(statusRow);gate.addView(accuracy);gate.addView(check,fullActionLp(52));gate.addView(start,fullActionLp(58));
+            accuracy.setPadding(0, dp(7), 0, dp(4));
+            PedalActionView check = action(PedalIconView.Icon.REFRESH, "بررسی دوباره GPS", PedalActionView.Style.OUTLINE);
+            PedalActionView start = action(PedalIconView.Icon.PLAY, "شروع ثبت GPS", PedalActionView.Style.PRIMARY);
+            start.setEnabled(false);
+            start.setAlpha(.5f);
+            gate.addView(statusRow);
+            gate.addView(accuracy);
+            gate.addView(check, fullActionLp(52));
+            gate.addView(start, fullActionLp(58));
             content.addView(gate, cardLp());
 
-            Button checkProxy=hiddenButtonProxy(check), startProxy=hiddenButtonProxy(start);
-            check.setOnClickListener(v->{check.setEnabled(false);startGpsPreflight(state,accuracy,startProxy,checkProxy);main.postDelayed(()->check.setEnabled(true),1600);});
-            start.setOnClickListener(v->{if(pendingFreshFix!=null)createRideAndStartTracking(startProxy,state);});
+            Button checkProxy = hiddenButtonProxy(check);
+            Button startProxy = hiddenButtonProxy(start);
+            check.setOnClickListener(v -> {
+                check.setEnabled(false);
+                startGpsPreflight(state, accuracy, startProxy, checkProxy);
+                main.postDelayed(() -> check.setEnabled(true), 1600);
+            });
+            start.setOnClickListener(v -> {
+                if (pendingFreshFix == null) return;
+                JSONArray viewerIds = new JSONArray();
+                for (CheckBox cb : viewerChecks) {
+                    if (cb.isChecked() && cb.getTag() instanceof Integer) viewerIds.put((Integer)cb.getTag());
+                }
+                createRideAndStartTracking(
+                        startProxy,
+                        state,
+                        challengeIds.optInt(challengeSpinner.getSelectedItemPosition(), 0),
+                        admin ? eventIds.optInt(eventSpinner.getSelectedItemPosition(), 0) : 0,
+                        bikeIds.optInt(bikeSpinner.getSelectedItemPosition(), 0),
+                        rideTitle.getText().toString().trim(),
+                        privacySpinner.getSelectedItemPosition() == 1,
+                        viewerIds);
+            });
             startGpsPreflight(state, accuracy, startProxy, checkProxy);
-            main.postDelayed(()->{if(pendingFreshFix!=null){start.setEnabled(true);start.setAlpha(1f);}},1200);
-            VazirmatnLoader.apply(this,content);animatePageIn();
+            main.postDelayed(() -> {
+                if (pendingFreshFix != null) {
+                    start.setEnabled(true);
+                    start.setAlpha(1f);
+                }
+            }, 1200);
+            VazirmatnLoader.apply(this, content);
+            animatePageIn();
             return;
         }
 
         addHero("رکاب‌زنی فعال", activeRide.optString("title", "PedalPro"));
+
+        LinearLayout statusCard = glassCard(24);
+        statusCard.addView(text("🚴 " + activeRide.optString("title", "رکاب‌زنی من"), 17, true, TEXT));
+        boolean publicLive = activeRide.optInt("public_tracking", 0) == 1 || activeRide.optBoolean("public_tracking", false);
+        String statusLine = "انتشار زنده: " + (publicLive ? "روشن" : "خاموش");
+        double calories = activeRide.optDouble("estimated_calories", 0);
+        if (calories > 0) statusLine += " · " + JalaliDate.fa(Math.round(calories)) + " kcal تقریبی";
+        TextView statusText = text(statusLine, 11, false, publicLive ? GREEN : MUTED);
+        statusText.setPadding(0, dp(5), 0, 0);
+        statusCard.addView(statusText);
+        content.addView(statusCard, cardLp());
 
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
@@ -1714,8 +1899,8 @@ public final class NativeMainActivity extends Activity {
         stats.addView(wrapMetric(rideSpeed, "km/h"), weightHeightLp(dp(100)));
         content.addView(stats, cardLp());
 
-        activeRideRouteView=new NativeRouteView(this);
-        content.addView(activeRideRouteView,new LinearLayout.LayoutParams(-1,dp(280)));
+        activeRideRouteView = new NativeRouteView(this);
+        content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
         loadActiveRideRoute();
 
         LinearLayout gps = glassCard(20);
@@ -1724,36 +1909,43 @@ public final class NativeMainActivity extends Activity {
         gps.addView(rideGps);
         content.addView(gps, cardLp());
 
-        PedalActionView pause=action(manualPaused?PedalIconView.Icon.PLAY:PedalIconView.Icon.PAUSE,manualPaused?"ادامه ثبت":"توقف ثبت",PedalActionView.Style.OUTLINE);
-        pause.setOnClickListener(v->toggleManualPause(pause));
-        content.addView(pause,fullActionLp(54));
+        PedalActionView live = action(PedalIconView.Icon.BEACON,
+                publicLive ? "خصوصی کن" : "انتشار زنده", PedalActionView.Style.OUTLINE);
+        live.setOnClickListener(v -> toggleActiveRideVisibility(!publicLive, live));
+        content.addView(live, fullActionLp(52));
 
-        PedalActionView groupNav=action(PedalIconView.Icon.BEACON,"رسیدن به گروه در حال حرکت",PedalActionView.Style.OUTLINE);
-        groupNav.setOnClickListener(v->openGroupNavigation());content.addView(groupNav,fullActionLp(52));
+        PedalActionView pause = action(manualPaused ? PedalIconView.Icon.PLAY : PedalIconView.Icon.PAUSE,
+                manualPaused ? "ادامه ثبت" : "توقف ثبت", PedalActionView.Style.OUTLINE);
+        pause.setOnClickListener(v -> toggleManualPause(pause));
+        content.addView(pause, fullActionLp(52));
 
-        PedalActionView sensors=action(PedalIconView.Icon.SENSOR,"سنسورهای Cadence / Power / HR",PedalActionView.Style.OUTLINE);
-        sensors.setOnClickListener(v->showSensors());content.addView(sensors,fullActionLp(52));
-
-        PedalActionView beacon=action(PedalIconView.Icon.BEACON,"اشتراک زنده Beacon و SOS",PedalActionView.Style.OUTLINE);
-        beacon.setOnClickListener(v->startActivity(new Intent(this,NativeSafetyActivity.class)));content.addView(beacon,fullActionLp(52));
-
-        PedalActionView low=action(PedalIconView.Icon.SUN,"حالت کم‌مصرف OLED",PedalActionView.Style.OUTLINE);
-        low.setOnClickListener(v->{
-            Intent i=new Intent(this,LowPowerRideActivity.class);
-            i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID,activeRide.optInt("id",0));
-            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS,activeRide.optLong("duration_seconds",0));
-            i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM,activeRide.optDouble("distance_km",0));
+        PedalActionView low = action(PedalIconView.Icon.SUN, "حالت رکاب‌زنی کم‌مصرف", PedalActionView.Style.PRIMARY);
+        low.setOnClickListener(v -> {
+            Intent i = new Intent(this, LowPowerRideActivity.class);
+            i.putExtra(LowPowerRideActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
+            i.putExtra(LowPowerRideActivity.EXTRA_BASE_SECONDS, rideBaseSeconds > 0 ? rideBaseSeconds : activeRide.optLong("duration_seconds", 0));
+            i.putExtra(LowPowerRideActivity.EXTRA_DISTANCE_KM, activeRide.optDouble("distance_km", 0));
             startActivity(i);
         });
-        content.addView(low,fullActionLp(52));
+        content.addView(low, fullActionLp(56));
 
-        PedalActionView stop=action(PedalIconView.Icon.CLOSE,"پایان رکاب‌زنی",PedalActionView.Style.OUTLINE);
-        stop.setAccent(RED);stop.setOnClickListener(v->confirmFinishRide(stop));
-        content.addView(stop,fullActionLp(54));
+        PedalActionView details = action(PedalIconView.Icon.DETAILS, "جزئیات", PedalActionView.Style.OUTLINE);
+        details.setOnClickListener(v -> {
+            Intent i = new Intent(this, NativeRideDetailActivity.class);
+            i.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, activeRide.optInt("id", 0));
+            startActivity(i);
+        });
+        content.addView(details, fullActionLp(50));
+
+        PedalActionView stop = action(PedalIconView.Icon.CLOSE, "پایان رکاب‌زنی", PedalActionView.Style.OUTLINE);
+        stop.setAccent(RED);
+        stop.setOnClickListener(v -> confirmFinishRide(stop));
+        content.addView(stop, fullActionLp(54));
 
         rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
-        rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
-        VazirmatnLoader.apply(this,content);animatePageIn();
+        rideTimerAnchorElapsed = manualPaused ? 0 : SystemClock.elapsedRealtime();
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
 
@@ -4449,21 +4641,30 @@ public final class NativeMainActivity extends Activity {
                 });
     }
 
-    private void createRideAndStartTracking(Button start, TextView state) {
+    private void createRideAndStartTracking(
+            Button start,
+            TextView state,
+            int challengeId,
+            int eventId,
+            int bikeId,
+            String title,
+            boolean publicTracking,
+            JSONArray viewerIds) {
         if (pendingFreshFix == null) return;
-        setProxyEnabled(start,false);
+        setProxyEnabled(start, false);
         state.setText("در حال شروع رکاب‌زنی…");
         Location fix = pendingFreshFix;
+        String rideTitle = title == null || title.trim().isBlank() ? "رکاب‌زنی من" : title.trim();
 
         io.execute(() -> {
             try {
                 JSONObject body = new JSONObject()
-                        .put("challenge_id", 0)
-                        .put("event_id", 0)
-                        .put("title", "رکاب‌زنی من")
-                        .put("public_tracking", false)
-                        .put("viewer_user_ids", new JSONArray())
-                        .put("bike_id", 0);
+                        .put("challenge_id", Math.max(0, challengeId))
+                        .put("event_id", Math.max(0, eventId))
+                        .put("title", rideTitle)
+                        .put("public_tracking", publicTracking)
+                        .put("viewer_user_ids", viewerIds == null ? new JSONArray() : viewerIds)
+                        .put("bike_id", Math.max(0, bikeId));
 
                 JSONObject created = api.post("start_ride", body);
                 int rideId = created.optInt("ride_id", 0);
@@ -4483,8 +4684,13 @@ public final class NativeMainActivity extends Activity {
                 bootstrap = d;
                 activeRide = d.optJSONObject("my_active_ride");
                 if (activeRide == null) {
-                    activeRide = new JSONObject().put("id", rideId).put("title", "رکاب‌زنی من").put("duration_seconds", 0);
+                    activeRide = new JSONObject()
+                            .put("id", rideId)
+                            .put("title", rideTitle)
+                            .put("public_tracking", publicTracking)
+                            .put("duration_seconds", 0);
                 }
+                manualPaused = false;
                 rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
                 rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
                 startTrackingService(rideId);
@@ -4492,13 +4698,78 @@ public final class NativeMainActivity extends Activity {
                 main.post(() -> {
                     pendingFreshFix = null;
                     showRide();
-                    toast("ثبت مسیر شروع شد.");
+                    toast("ثبت GPS شروع شد.");
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    setProxyEnabled(start,true);
+                    setProxyEnabled(start, true);
                     state.setText("شروع انجام نشد: " + e.getMessage());
                     state.setTextColor(RED);
+                });
+            }
+        });
+    }
+
+    private JSONObject findChallengeById(int id) {
+        if(id<=0)return null;
+        JSONArray rows=bootstrap==null?null:bootstrap.optJSONArray("challenges");
+        if(rows==null)return null;
+        for(int i=0;i<rows.length();i++){
+            JSONObject row=rows.optJSONObject(i);
+            if(row!=null&&row.optInt("id",0)==id)return row;
+        }
+        return null;
+    }
+
+    private void toggleActiveRideVisibility(boolean next, PedalActionView button) {
+        if(activeRide==null)return;
+        int rideId=activeRide.optInt("id",0);
+        if(rideId<=0)return;
+        button.setEnabled(false);
+        io.execute(()->{
+            try{
+                api.post("toggle_tracking",new JSONObject()
+                        .put("ride_id",rideId)
+                        .put("public_tracking",next));
+                bootstrap=api.bootstrap();
+                activeRide=bootstrap.optJSONObject("my_active_ride");
+                main.post(()->{
+                    toast(next?"انتشار زنده روشن شد":"نمایش زنده خاموش شد");
+                    showRide();
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    button.setEnabled(true);
+                    toast(e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void discardRide(Button button) {
+        if(activeRide==null)return;
+        int rideId=activeRide.optInt("id",0);
+        if(rideId<=0)return;
+        setProxyEnabled(button,false);
+        io.execute(()->{
+            try{
+                Intent stop=new Intent(this,TrackingService.class);
+                stop.setAction(TrackingService.ACTION_STOP);
+                startService(stop);
+                api.post("ride_delete",new JSONObject().put("ride_id",rideId));
+                bootstrap=api.bootstrap();
+                activeRide=bootstrap.optJSONObject("my_active_ride");
+                manualPaused=false;
+                rideTimerAnchorElapsed=0;
+                rideBaseSeconds=0;
+                main.post(()->{
+                    toast("رکاب‌زنی و ترک GPS حذف شد.");
+                    showRoutes();
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    setProxyEnabled(button,true);
+                    toast(e.getMessage());
                 });
             }
         });
@@ -4532,13 +4803,63 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void confirmFinishRide(View trigger){
-        Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout box=glassCard(28);box.addView(text("پایان رکاب‌زنی؟",20,true,TEXT));box.addView(text("مسیر و آمار نهایی ذخیره می‌شود.",12,false,MUTED));
-        PedalActionView yes=action(PedalIconView.Icon.DETAILS,"ذخیره و پایان",PedalActionView.Style.PRIMARY);
-        PedalActionView no=action(PedalIconView.Icon.BACK,"ادامه رکاب‌زنی",PedalActionView.Style.OUTLINE);
-        yes.setOnClickListener(v->{d.dismiss();finishRide(hiddenButtonProxy(trigger));});no.setOnClickListener(v->d.dismiss());
-        box.addView(yes,fullActionLp(54));box.addView(no,fullActionLp(50));d.setContentView(box);d.show();
-        Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams lp=new WindowManager.LayoutParams();lp.copyFrom(w.getAttributes());lp.width=-1;lp.height=-2;lp.gravity=Gravity.BOTTOM;w.setAttributes(lp);}
+        if(activeRide==null)return;
+        Dialog d=new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout box=glassCard(28);
+        box.addView(text("پایان رکاب‌زنی",20,true,TEXT));
+        TextView hint=text("اگر خواستی درباره مسیر، شرایط، اتفاقات یا تجربه این رکاب‌زنی مطلب بنویس. متن می‌تواند بلند باشد.",12,false,MUTED);
+        hint.setPadding(0,dp(6),0,dp(6));
+        box.addView(hint);
+
+        EditText notes=input("توضیحات فعالیت");
+        notes.setSingleLine(false);
+        notes.setMinLines(4);
+        notes.setHint("توضیحات اختیاری درباره این رکاب‌زنی...");
+        notes.setText(activeRide.optString("notes",""));
+        box.addView(notes);
+
+        PedalActionView save=action(PedalIconView.Icon.DETAILS,"پایان و ذخیره رکاب‌زنی",PedalActionView.Style.PRIMARY);
+        PedalActionView discard=action(PedalIconView.Icon.CLOSE,"پایان بدون ثبت و حذف ترک",PedalActionView.Style.OUTLINE);
+        discard.setAccent(RED);
+        PedalActionView cancel=action(PedalIconView.Icon.BACK,"انصراف",PedalActionView.Style.OUTLINE);
+
+        save.setOnClickListener(v->{
+            d.dismiss();
+            finishRide(hiddenButtonProxy(trigger),notes.getText().toString());
+        });
+        discard.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
+                .setMessage("کل این رکاب‌زنی و نقاط GPS آن حذف می‌شود و قابل بازگردانی نیست. ادامه می‌دهید؟")
+                .setPositiveButton("حذف ترک", (dialog,which)->{
+                    d.dismiss();
+                    discardRide(hiddenButtonProxy(trigger));
+                })
+                .setNegativeButton("انصراف",null)
+                .show());
+        cancel.setOnClickListener(v->d.dismiss());
+
+        box.addView(save,fullActionLp(54));
+        box.addView(discard,fullActionLp(50));
+        box.addView(cancel,fullActionLp(50));
+
+        TextView warning=text("«پایان بدون ثبت» کل این رکاب‌زنی و نقاط GPS آن را حذف می‌کند و قابل بازگردانی نیست.",10,false,ORANGE);
+        warning.setPadding(dp(10),dp(9),dp(10),dp(9));
+        warning.setBackground(roundRect(Color.argb(18,255,124,70),14,Color.argb(70,255,124,70)));
+        box.addView(warning,cardLp());
+
+        d.setContentView(box);
+        d.show();
+        Window w=d.getWindow();
+        if(w!=null){
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
+            lp.copyFrom(w.getAttributes());
+            lp.width=-1;
+            lp.height=-2;
+            lp.gravity=Gravity.BOTTOM;
+            w.setAttributes(lp);
+        }
         VazirmatnLoader.apply(this,box);
     }
 
@@ -4554,11 +4875,11 @@ public final class NativeMainActivity extends Activity {
         else startService(i);
     }
 
-    private void finishRide(Button button) {
+    private void finishRide(Button button, String notes) {
         if (activeRide == null) return;
         int rideId = activeRide.optInt("id", 0);
         if (rideId <= 0) return;
-        setProxyEnabled(button,false);
+        setProxyEnabled(button, false);
         button.setText("در حال پایان…");
 
         io.execute(() -> {
@@ -4566,19 +4887,33 @@ public final class NativeMainActivity extends Activity {
                 Intent stop = new Intent(this, TrackingService.class);
                 stop.setAction(TrackingService.ACTION_STOP);
                 startService(stop);
-                api.post("stop_ride", new JSONObject().put("ride_id", rideId).put("notes", ""));
+
+                JSONObject result = api.post("stop_ride", new JSONObject()
+                        .put("ride_id", rideId)
+                        .put("notes", notes == null ? "" : notes));
+
                 JSONObject d = api.bootstrap();
                 bootstrap = d;
                 activeRide = d.optJSONObject("my_active_ride");
+                manualPaused = false;
                 rideTimerAnchorElapsed = 0;
                 rideBaseSeconds = 0;
+
                 main.post(() -> {
-                    toast("رکاب‌زنی ذخیره شد.");
-                    showActivities();
+                    double calories = 0;
+                    JSONObject energy = result.optJSONObject("energy");
+                    if (energy != null) calories = energy.optDouble("calories_kcal", 0);
+                    toast(calories > 0
+                            ? "رکاب‌زنی ذخیره شد — حدود " + JalaliDate.fa(Math.round(calories)) + " kcal"
+                            : "رکاب‌زنی ذخیره شد");
+                    showRoutes();
+                    Intent detail = new Intent(this, NativeRideDetailActivity.class);
+                    detail.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID, rideId);
+                    startActivity(detail);
                 });
             } catch (Exception e) {
                 main.post(() -> {
-                    setProxyEnabled(button,true);
+                    setProxyEnabled(button, true);
                     button.setText("پایان رکاب‌زنی");
                     toast(e.getMessage());
                 });
