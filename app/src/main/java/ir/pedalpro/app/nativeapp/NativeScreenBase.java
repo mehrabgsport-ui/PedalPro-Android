@@ -102,7 +102,7 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout scroller=new LinearLayout(this);
         scroller.setOrientation(LinearLayout.VERTICAL);
         scroller.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        scroller.setPadding(dp(14),dp(12),dp(14),dp(26));
+        scroller.setPadding(dp(14),dp(12),dp(14),dp(112));
 
         LinearLayout pageHead=new LinearLayout(this);
         pageHead.setOrientation(LinearLayout.VERTICAL);
