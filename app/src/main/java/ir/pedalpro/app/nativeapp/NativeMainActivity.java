@@ -293,7 +293,7 @@ public final class NativeMainActivity extends Activity {
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         appRoot.addView(buildWebBottomNav(), new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(116)));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(128)));
 
         stageRoot.addView(appRoot, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -5310,14 +5310,20 @@ public final class NativeMainActivity extends Activity {
         return webHeader;
     }
 
-    private LinearLayout buildWebBottomNav() {
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER_VERTICAL);
-        nav.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        nav.setClipChildren(false);
-        nav.setPadding(dp(10), dp(16), dp(10), dp(10));
-        nav.setBackground(bottomGradient());
+    private FrameLayout buildWebBottomNav() {
+        // Keep the complete CTA inside the dock's actual layout bounds.
+        // TranslationY(-38dp) previously pushed much of its circle outside the visible dock.
+        FrameLayout dock = new FrameLayout(this);
+        dock.setClipChildren(false);
+        dock.setClipToPadding(false);
+        dock.setBackground(bottomGradient());
+        dock.setContentDescription("ناوبری پایین PedalPro");
+
+        LinearLayout links = new LinearLayout(this);
+        links.setOrientation(LinearLayout.HORIZONTAL);
+        links.setGravity(Gravity.CENTER_VERTICAL);
+        links.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        links.setPadding(dp(8), 0, dp(8), dp(3));
 
         navHome = bottomGlyphItem(PedalIconView.Icon.HOME, "خانه", this::showHome);
         navActivities = bottomGlyphItem(PedalIconView.Icon.CALENDAR, "فعالیت‌ها", this::showActivities);
@@ -5325,22 +5331,20 @@ public final class NativeMainActivity extends Activity {
         navRoutes = bottomGlyphItem(PedalIconView.Icon.ROUTE, "مسیرها", this::showRoutes);
         navMe = bottomGlyphItem(PedalIconView.Icon.USER, "من", this::showMe);
 
-        nav.addView(navHome, bottomWeightLp(1f, 90));
-        nav.addView(navActivities, bottomWeightLp(1f, 90));
+        links.addView(navHome, new LinearLayout.LayoutParams(0, dp(82), 1f));
+        links.addView(navActivities, new LinearLayout.LayoutParams(0, dp(82), 1f));
+        links.addView(new View(this), new LinearLayout.LayoutParams(0, dp(82), 1.12f));
+        links.addView(navRoutes, new LinearLayout.LayoutParams(0, dp(82), 1f));
+        links.addView(navMe, new LinearLayout.LayoutParams(0, dp(82), 1f));
+        FrameLayout.LayoutParams linkLp = new FrameLayout.LayoutParams(-1, dp(84), Gravity.BOTTOM);
+        dock.addView(links, linkLp);
 
-        LinearLayout center = new LinearLayout(this);
-        center.setGravity(Gravity.CENTER);
-        center.setClipChildren(false);
-        navRide.setTranslationY(-dp(38));
-        center.addView(navRide, new LinearLayout.LayoutParams(dp(106), dp(106)));
-        nav.addView(center, new LinearLayout.LayoutParams(0, dp(106), 1.12f));
-
-        nav.addView(navRoutes, bottomWeightLp(1f, 90));
-        nav.addView(navMe, bottomWeightLp(1f, 90));
-        return nav;
+        FrameLayout.LayoutParams rideLp = new FrameLayout.LayoutParams(
+                dp(108), dp(108), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        rideLp.topMargin = dp(1);
+        dock.addView(navRide, rideLp);
+        return dock;
     }
-
-    
 
     private View bottomGlyphItem(PedalIconView.Icon iconType, String label, Runnable run) {
         LinearLayout host = new LinearLayout(this);
@@ -5368,34 +5372,47 @@ public final class NativeMainActivity extends Activity {
 
     private View centerRideItem() {
         FrameLayout ring = new FrameLayout(this);
-        GradientDrawable outer = new GradientDrawable();
+        GradientDrawable outer = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(5, 67, 88), Color.rgb(5, 30, 53)});
         outer.setShape(GradientDrawable.OVAL);
-        outer.setColor(Color.argb(199, 16, 49, 71));
+        outer.setStroke(dp(2), Color.argb(220, 39, 233, 245));
         ring.setBackground(outer);
         ring.setElevation(dp(12));
         ring.setClickable(true);
         ring.setFocusable(true);
-        ring.setContentDescription("شروع رکاب");
+        ring.setContentDescription("شروع یا ادامه رکاب‌زنی");
+        ring.setLayerType(View.LAYER_TYPE_SOFTWARE,null);
 
         LinearLayout inner = new LinearLayout(this);
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setGravity(Gravity.CENTER);
-        inner.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable cyan = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.rgb(29, 239, 244), Color.rgb(21, 209, 238), Color.rgb(43, 178, 255)});
+                new int[]{Color.rgb(33, 234, 244), Color.rgb(25, 202, 232), Color.rgb(34, 157, 235)});
         cyan.setShape(GradientDrawable.OVAL);
         inner.setBackground(cyan);
+        inner.setClickable(false);
+        PedalIconView rideIcon = new PedalIconView(this,PedalIconView.Icon.RIDE,Color.rgb(2,51,72));
+        inner.addView(rideIcon,new LinearLayout.LayoutParams(dp(28),dp(28)));
 
-        rideDockLabel = text("شروع\nرکاب", 16, true, Color.rgb(6, 39, 55));
+        rideDockLabel = text("شروع رکاب", 13, true, Color.rgb(4, 45, 65));
         rideDockLabel.setGravity(Gravity.CENTER);
         rideDockLabel.setIncludeFontPadding(false);
-        rideDockLabel.setLineSpacing(0, 1.08f);
-        inner.addView(rideDockLabel, new LinearLayout.LayoutParams(-2, -2));
+        rideDockLabel.setMaxLines(2);
+        inner.addView(rideDockLabel,new LinearLayout.LayoutParams(-2,-2));
 
-        FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(dp(86), dp(86), Gravity.CENTER);
-        ring.addView(inner, ilp);
-        ring.setOnClickListener(v -> showRide());
+        ring.addView(inner,new FrameLayout.LayoutParams(dp(91),dp(91),Gravity.CENTER));
+        ring.setOnTouchListener((v,event)->{
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+                v.animate().scaleX(.94f).scaleY(.94f).setDuration(110).start();
+            }else if(event.getActionMasked()==MotionEvent.ACTION_UP ||
+                    event.getActionMasked()==MotionEvent.ACTION_CANCEL){
+                v.animate().scaleX(1f).scaleY(1f).setDuration(160).start();
+            }
+            return false;
+        });
+        ring.setOnClickListener(v->showRide());
         return ring;
     }
 
