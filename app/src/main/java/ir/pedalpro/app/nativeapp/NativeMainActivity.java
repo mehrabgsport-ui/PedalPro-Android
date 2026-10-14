@@ -7654,9 +7654,13 @@ public final class NativeMainActivity extends Activity {
             try{
                 api.post("attendance",new JSONObject()
                         .put("id",registrationId).put("attended",attended));
-                JSONObject updated=api.bootstrap();
+                // A successful attendance POST must not be rolled back merely
+                // because the subsequent optional bootstrap refresh times out.
+                JSONObject fresh=null;
+                try{fresh=api.bootstrap();}catch(Exception ignored){}
+                final JSONObject updated=fresh;
                 main.post(()->{
-                    bootstrap=updated;
+                    if(updated!=null)bootstrap=updated;
                     control.setEnabled(true);
                     toast("وضعیت حضور در سرور ثبت شد");
                 });
