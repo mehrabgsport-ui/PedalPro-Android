@@ -123,6 +123,17 @@ expect "$NATIVE/NativeChatActivity.java" 'if(isFinishing()||!isChatVisible)retur
 expect "$NATIVE/NativeFcmAdminController.java" 'final String credentials=serviceAccountJson;' "Firebase credentials snapshotted"
 expect "$NATIVE/NativeSocialActivity.java" 'PedalIconView.Icon.HEART' "Kudos native icon"
 
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'private String safeBaleValue(String key,Object value)' "Undocumented Bale fields are redacted"
+expect "$NATIVE/NativeRouteView.java" 'public void setHeadingUpEnabled(boolean enabled)' "North-Up and Heading-Up can be switched while following"
+expect "$NATIVE/NativeRouteView.java" 'double ahead=h*.18d;' "Rider appears below the map center"
+expect "$NATIVE/NativeRouteView.java" 'navigationZoom = Math.max(3, Math.min(18, navigationZoom + amount));' "Navigation zoom does not disable follow"
+expect "$NATIVE/NativeRouteView.java" 'PedalMapTiles.drawAttribution(this,canvas)' "Map attribution stays upright"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'overlay.setHeadingUpEnabled(!overlay.isHeadingUpEnabled())' "Heading toggle is not a follow toggle"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setNavigationMode(true)' "Live/group map follows current rider"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setHeadingDegrees(loc.getBearing())' "Live navigation heading from an actual location"
+expect "$NATIVE/PedalMapTiles.java" 'double rangeW = overscan > 1.01f ? (cos*w + sin*h)*1.08 : w;' "Rotated raster viewport bounds requests"
+expect "$NATIVE/PedalMapTiles.java" 'CACHE_SCOPE = Integer.toHexString(TILE_URL.hashCode())' "Tiles are provider-scoped"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1

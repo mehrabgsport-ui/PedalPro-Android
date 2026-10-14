@@ -43,3 +43,7 @@ The website's logged-in **administrator settings** view and its source bundle ar
 ## Map camera improvement, separate from administration
 
 The Native XYZ fallback now offers a rider-follow, bearing-up camera with a lightweight 2.5D visual pitch, sourced from TrackingService's existing `bearing` update **only when moving**; the rider marker remains upright. The authentic Neshan SDK's 3D camera is not available in default builds without `neshan.licence`. Do not claim true 3D SDK tilt or street-safe cycling routing from the fallback.
+
+## RC6 safety hardening (2026-10-14)
+
+The administrator read-only bootstrap display never renders any arbitrary string verbatim: sensitive key names are skipped, uncontracted strings are masked, and only narrowly scoped status or bot-identity fields are rendered when their values pass validation. This is intentionally conservative because the Web bot schema has not been retrieved. Existing authenticated server read endpoints were preserved. No Bale save, test, activation or webhook action has been fabricated; these remain blocked until a verified backend contract and server authorization are obtained. No secrets are included in source or APK.

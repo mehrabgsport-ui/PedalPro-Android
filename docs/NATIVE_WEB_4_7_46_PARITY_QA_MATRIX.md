@@ -72,3 +72,14 @@ gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
 ```
 
 **Overall status: IN PROGRESS / NOT RELEASE-READY** until the independent CI, signature, device, and Web 4.7.46 acceptance gates pass.
+
+## RC6 delta / unverified gates (2026-10-14)
+
+| Acceptance test | Code-level result | Verification still required |
+|---|---|---|
+| Bale bot | Read-only operational values redacted unless a safe primitive/identifier is explicitly permitted; no guessed bot action | Authenticated Web 4.7.46 fields, save/test/toggle endpoints and server-side RBAC unavailable; **not implemented** |
+| Active ride navigation | Mercator look-ahead positions rider below center; follow, independent heading/north orientation and follow-preserving zoom | Compare against Web reference and physical GPS device, screen orientation, offline/pause/resume; **not verified** |
+| Group/live route camera | Follow enabled, mobile bearing when moving, admin credentials kept in manager only | Device moving/stationary heading QA and mixed-role check; **not verified** |
+| Raster tile efficiency | Rotated tile bounds, cache scoped by provider, upright attribution, in-flight cap | Actual memory/network/battery telemetry, licence provider terms and rate limits; **not verified** |
+| Neshan SDK native camera | Conditional licensed SDK pathway unchanged; default signed build uses XYZ | Official signed licence and genuine SDK pitch/bearing integration still absent; **not verified** |
+| APK/CI RC6 | `versionCode 50`, Bazaar/Myket workflows updated for RC6 | Require both workflows success on final RC6 SHA plus certificate verification; **not yet verified** |

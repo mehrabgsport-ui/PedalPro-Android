@@ -200,6 +200,16 @@ Status: IN PROGRESS
 - RC5 `versionCode 49`; release CI/Android device testing remain a hard gate. Genuine Neshan Android SDK still requires the licensed MapView build and device-level camera alignment. Do not claim 100% web parity.
 - Keep `main` unchanged; no marketplace publication before approval.
 
+### RC6 — Bale readout privacy and display-only navigation camera hardening (2026-10-14)
+- Backed up exact RC5 baseline at `backup/pre-native-rc6-20261014` (`16f227f`).
+- Bale bootstrap readout now redacts uncontracted string values and sensitive field names, with no invented write/test action.
+- Native XYZ navigation camera keeps the moving rider approximately 68% down the display using a Mercator look-ahead; Heading-Up/North-Up switches preserve follow and HUD zoom. Panning accounts for heading/pitch transform.
+- Tile requests use rotated screen bounding boxes rather than a diagonal square; attribution stays upright; disk cache is namespaced to the configured tile provider.
+- Live/group navigation consumes valid device bearing for presentation and removes its duplicated credential shortcut.
+- `TrackingService`, GPS points/filters, speed, distance, elevation, backend APIs and user data remain unchanged.
+- RC6 Android `2.0.0-native-rc6`/`versionCode 50`. **CI and signed APK result pending separate verification on the exact final HEAD**; no claim of real Neshan tilt or Web 4.7.46 visual acceptance.
+- Remaining gates: actual authenticated Web/Bale API schema, licence-enabled Neshan SDK and real-device map/GPS tests; never merge or publish automatically.
+
 ## Phase 8 — Final parity QA and delivery
 Status: PENDING
 - Audit every route/state against Web 4.7.46 source.
