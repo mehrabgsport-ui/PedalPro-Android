@@ -92,6 +92,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         roadToggle=normal("فعال‌سازی مسیر خیابانی");
         roadToggle.setOnClickListener(v->{
             roadEnabled=!roadEnabled;
+            getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE).edit()
+                    .putBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,roadEnabled).apply();
             roadToggle.setText(roadEnabled?"غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
             if(!roadEnabled){
                 routeView.clearNavigationRoute();
@@ -103,8 +105,12 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
             }
         });
         routing.addView(roadToggle);
-        Button credential=normal("تنظیم کلید سرویس نشان");
-        credential.setOnClickListener(v->showDirectionsKeyDialog());
+        Button credential=normal("تنظیمات نشان و کلیدهای API");
+        credential.setOnClickListener(v->{
+            Intent i=new Intent(this,NativeAppSettingsActivity.class);
+            i.putExtra(NativeAppSettingsActivity.EXTRA_SECTION,NativeAppSettingsActivity.SECTION_MAP);
+            startActivity(i);
+        });
         routing.addView(credential);
         content.addView(routing,cardLp());
         if(!NeshanServiceCredentials.hasKey(this))
@@ -115,8 +121,20 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     @Override protected void onResume(){
         super.onResume();
         screenVisible=true;
+        boolean preference=getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE)
+                .getBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,false);
+        if(preference!=roadEnabled){
+            roadEnabled=preference;
+            invalidateDirectionCache();
+            if(!roadEnabled)routeView.clearNavigationRoute();
+        }
+        if(roadToggle!=null)roadToggle.setText(roadEnabled?
+                "غیرفعال‌سازی مسیر خیابانی":"فعال‌سازی مسیر خیابانی");
+        if(roadStatus!=null&&!NeshanServiceCredentials.hasKey(this))
+            roadStatus.setText("کلید مسیریابی نشان در تنظیمات اپ وارد نشده است.");
         main.removeCallbacks(tick);
         main.post(tick);
+        if(roadEnabled)maybeFetchDirections();
     }
 
     @Override protected void onPause(){
@@ -205,40 +223,6 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         status.setText("هدف زنده: "+name+" · آخرین بروزرسانی همین حالا");
         updateHud();
         maybeFetchDirections();
-    }
-
-    private void showDirectionsKeyDialog() {
-        EditText field=new EditText(this);
-        field.setHint("کلید بخش سرویس‌ها (نه MOBILE)");
-        field.setSingleLine(true);
-        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        field.setPadding(dp(16),dp(14),dp(16),dp(14));
-        new AlertDialog.Builder(this)
-                .setTitle("کلید سرویس مسیریابی نشان")
-                .setMessage("کلید فقط با Android Keystore در همین گوشی رمزگذاری می‌شود. برای کاربران عمومی، اتصال امن سروری مناسب‌تر است.")
-                .setView(field)
-                .setNegativeButton("انصراف",null)
-                .setNeutralButton("پاک‌کردن کلید",(dialog,which)->{
-                    NeshanServiceCredentials.clear(this);
-                    roadEnabled=false;
-                    invalidateDirectionCache();
-                    roadToggle.setText("فعال‌سازی مسیر خیابانی");
-                    routeView.clearNavigationRoute();
-                    roadStatus.setText("کلید سرویس حذف شد؛ فقط فاصله مستقیم نمایش داده می‌شود.");
-                })
-                .setPositiveButton("ذخیره",(dialog,which)->{
-                    try {
-                        NeshanServiceCredentials.save(this,field.getText().toString());
-                        Toast.makeText(this,"کلید سرویس در گوشی ذخیره شد.",Toast.LENGTH_SHORT).show();
-                        roadEnabled=true;
-                        roadToggle.setText("غیرفعال‌سازی مسیر خیابانی");
-                        invalidateDirectionCache();
-                        routeView.clearNavigationRoute();
-                        maybeFetchDirections();
-                    } catch(Exception e) {
-                        roadStatus.setText(e.getMessage()==null?"ذخیره کلید انجام نشد.":e.getMessage());
-                    }
-                }).show();
     }
 
     private void maybeFetchDirections() {
