@@ -9,3 +9,5 @@ Android native/web-parity version 2.0.0-native-rc20, versionCode 64.
 - No live cPanel credentials, staging server, and external ORS credential were available to this GitHub-only execution.
 - No production migration, PHP server file edit, actual Bale message, store publication or main merge was carried out.
 - PR #29 remains Draft pending environment acceptance.
+
+- RC20 chat private-room creation moved from GET to POST + CSRF in Android and backend; staging web inline chat script must also be updated with bundled one-change patch tool, otherwise server rejects legacy GET with HTTP 405.

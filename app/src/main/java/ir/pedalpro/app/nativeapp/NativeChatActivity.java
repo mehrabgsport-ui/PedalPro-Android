@@ -163,8 +163,7 @@ public final class NativeChatActivity extends NativeScreenBase {
         setSubtitle("در حال بازکردن گفتگوی خصوصی…",MUTED);
         io.execute(()->{
             try{
-                Map<String,Object> q=new HashMap<>();q.put("user_id",userId);
-                JSONObject d=api.get("chat_open_private",q);
+                JSONObject d=api.post("chat_open_private",new JSONObject().put("user_id",userId));
                 JSONObject room=d.optJSONObject("room"),other=d.optJSONObject("other");
                 int rid=room==null?0:room.optInt("id",0);
                 main.post(()->{

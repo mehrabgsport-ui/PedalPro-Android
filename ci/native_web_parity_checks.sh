@@ -209,6 +209,12 @@ assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
 PY
 
+# RC20 chat-open endpoint was not read-only: migrate to CSRF-protected POST.
+expect "$NATIVE/NativeChatActivity.java" 'api.post("chat_open_private",new JSONObject().put("user_id",userId))' "Private chat creation uses CSRF-protected POST and JSON user_id"
+if grep -Fq 'api.get("chat_open_private"' "$NATIVE/NativeChatActivity.java"; then
+  echo "Private chat must not use GET; server rejects it with HTTP 405" >&2
+  exit 1
+fi
 # RC20 medal-image source-backed contracts.
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'postAndReload("medal_image_clear"' "Manager can clear an uploaded medal image without deleting the medal"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'm.optString("metric_type","")' "Correct display of medal definition metric"
