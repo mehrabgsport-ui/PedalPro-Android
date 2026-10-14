@@ -13,7 +13,7 @@ import android.view.View;
 public final class PedalIconView extends View {
     public enum Icon {
         HOME, CALENDAR, RIDE, ROUTE, USER, MENU, SETTINGS, GROUP, CHAT, CHART,
-        SHIELD, SENSOR, BEACON, HEADING, PLUS, REFRESH, BACK, PLAY, PAUSE, CLOCK,
+        SHIELD, SENSOR, BEACON, HEADING, HEART, PLUS, REFRESH, BACK, PLAY, PAUSE, CLOCK,
         LOCATION, DISTANCE, CLOSE, EDIT, SHARE, DETAILS, SUN, CLOUD, RAIN, CHEVRON,
         GALLERY, HOME_MEMBERS, REPORT_PROGRAMS, REPORT_MEMBERS, REPORT_DISTANCE
     }
@@ -78,6 +78,13 @@ public final class PedalIconView extends View {
                 path.moveTo(cx-r,cy);path.lineTo(cx-r*.65f,cy);path.lineTo(cx-r*.38f,cy-r*.65f);path.lineTo(cx-r*.05f,cy+r*.7f);path.lineTo(cx+r*.28f,cy-r*.72f);path.lineTo(cx+r*.55f,cy);path.lineTo(cx+r,cy);c.drawPath(path,p);break;
             case BEACON:
                 c.drawCircle(cx,cy,r*.18f,p); c.drawArc(new RectF(cx-r*.55f,cy-r*.55f,cx+r*.55f,cy+r*.55f),-55,110,false,p);c.drawArc(new RectF(cx-r,cy-r,cx+r,cy+r),-55,110,false,p);c.drawArc(new RectF(cx-r*.55f,cy-r*.55f,cx+r*.55f,cy+r*.55f),125,110,false,p);c.drawArc(new RectF(cx-r,cy-r,cx+r,cy+r),125,110,false,p);break;
+            case HEART:
+                path.moveTo(cx,cy+r*.87f);
+                path.cubicTo(cx-r*.35f,cy+r*.5f,cx-r*1.14f,cy-r*.2f,cx-r*.75f,cy-r*.66f);
+                path.cubicTo(cx-r*.43f,cy-r*1.07f,cx-r*.1f,cy-r*.63f,cx,cy-r*.45f);
+                path.cubicTo(cx+r*.1f,cy-r*.63f,cx+r*.43f,cy-r*1.07f,cx+r*.75f,cy-r*.66f);
+                path.cubicTo(cx+r*1.14f,cy-r*.2f,cx+r*.35f,cy+r*.5f,cx,cy+r*.87f);
+                path.close(); c.drawPath(path,p); break;
             case HEADING:
                 path.moveTo(cx,cy+r*.9f); path.lineTo(cx,cy-r*.9f);
                 path.moveTo(cx-r*.62f,cy-r*.28f); path.lineTo(cx,cy-r*.9f); path.lineTo(cx+r*.62f,cy-r*.28f);
