@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -14,6 +17,7 @@ import org.json.JSONObject;
 import org.maplibre.android.MapLibre;
 import org.maplibre.android.annotations.Marker;
 import org.maplibre.android.annotations.MarkerOptions;
+import org.maplibre.android.annotations.IconFactory;
 import org.maplibre.android.annotations.Polyline;
 import org.maplibre.android.annotations.PolylineOptions;
 import org.maplibre.android.camera.CameraPosition;
@@ -49,6 +53,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private long lastCameraMs,lastMarkerMs,lastLineMs;
     private double lastCameraLat=Double.NaN,lastCameraLng=Double.NaN;
     private Marker rider,goal;
+    private org.maplibre.android.annotations.Icon riderIcon;
     private Polyline recorded,suggested;
     private JSONArray recordedPoints,suggestedPoints;
     private boolean started,resumed;
@@ -145,12 +150,39 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         }else updateCamera(false);
     }
 
+    /** Reuse PedalPro's existing vector bicycle icon for the actual GPS marker. */
+    private org.maplibre.android.annotations.Icon bikeMapIcon(){
+        if(riderIcon!=null)return riderIcon;
+        int side=(int)(58*activity.getResources().getDisplayMetrics().density);
+        side=Math.max(58,Math.min(side,160));
+        Bitmap bitmap=Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(bitmap);
+        Paint halo=new Paint(Paint.ANTI_ALIAS_FLAG);
+        halo.setColor(Color.rgb(8,39,57));
+        canvas.drawCircle(side/2f,side/2f,side*.46f,halo);
+        halo.setColor(Color.rgb(23,226,235));
+        halo.setStyle(Paint.Style.STROKE);
+        halo.setStrokeWidth(side*.055f);
+        canvas.drawCircle(side/2f,side/2f,side*.43f,halo);
+        PedalIconView bicycle=new PedalIconView(activity,PedalIconView.Icon.RIDE,Color.WHITE);
+        int iconSize=(int)(side*.72f);
+        int measure=View.MeasureSpec.makeMeasureSpec(iconSize,View.MeasureSpec.EXACTLY);
+        bicycle.measure(measure,measure);
+        bicycle.layout(0,0,iconSize,iconSize);
+        canvas.save();
+        canvas.translate((side-iconSize)/2f,(side-iconSize)/2f);
+        bicycle.draw(canvas);
+        canvas.restore();
+        riderIcon=IconFactory.getInstance(activity).fromBitmap(bitmap);
+        return riderIcon;
+    }
+
     private void updateRiderMarker(boolean force){
         if(!ready||!Double.isFinite(lat))return;
         long now=SystemClock.elapsedRealtime();
         if(!force&&now-lastMarkerMs<450)return;
         if(rider==null)rider=map.addMarker(new MarkerOptions()
-                .position(new LatLng(lat,lng)).title("رکاب‌زن"));
+                .position(new LatLng(lat,lng)).icon(bikeMapIcon()).title("رکاب‌زن"));
         else {rider.setPosition(new LatLng(lat,lng));map.updateMarker(rider);}
         lastMarkerMs=now;
     }
