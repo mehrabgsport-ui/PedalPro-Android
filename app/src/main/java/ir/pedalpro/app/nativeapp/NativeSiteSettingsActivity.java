@@ -276,6 +276,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         info.addView(text("مدیریت کاربران مطابق پنل وب PedalPro", 11, false, MUTED));
         content.addView(info, cardLp());
 
+        final ArrayList<Button> editUserButtons = new ArrayList<>();
+        final ArrayList<JSONObject> editableUsers = new ArrayList<>();
         JSONArray members = data.optJSONArray("members");
         if (members != null) {
             for (int i=0;i<members.length();i++) {
@@ -283,6 +285,10 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 LinearLayout row = card();
                 row.addView(text(u.optString("display_name",u.optString("username","کاربر")), 14, true, TEXT));
                 row.addView(text("@"+u.optString("username","")+" · "+u.optString("role","member")+" · "+(u.optInt("is_active",1)==1?"فعال":"غیرفعال"), 10, false, MUTED));
+                Button editUser=normal("ویرایش مشخصات");
+                row.addView(editUser);
+                editUserButtons.add(editUser);
+                editableUsers.add(u);
                 content.addView(row, cardLp());
             }
         }
@@ -327,6 +333,22 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
             postAndReload("admin_user_save",p,save,"کاربر ذخیره شد");
         });
         form.addView(save);content.addView(form,cardLp());
+        for(int i=0;i<editUserButtons.size();i++){
+            JSONObject selected=editableUsers.get(i);
+            editUserButtons.get(i).setOnClickListener(v->{
+                id.setText(String.valueOf(selected.optInt("id",0)));
+                name.setText(selected.optString("display_name",""));
+                username.setText(selected.optString("username",""));
+                phone.setText(selected.optString("phone",""));
+                role.setText(selected.optString("role","member"));
+                password.setText("");
+                age.setText(selected.optString("age",""));
+                height.setText(selected.optString("height_cm",""));
+                weight.setText(selected.optString("weight_kg",""));
+                bio.setText(selected.optString("bio",""));
+                toast("اطلاعات کاربر در فرم ویرایش قرار گرفت؛ رمز عبور قبلی نمایش داده نمی‌شود.");
+            });
+        }
 
         LinearLayout roleForm=card();
         roleForm.addView(text("نقش‌ها",16,true,TEXT));
