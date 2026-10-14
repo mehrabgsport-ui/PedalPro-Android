@@ -72,7 +72,7 @@ public final class PedalProApiClient {
                     writeTextPart(out,boundary,e.getKey(),e.getValue()==null?"":e.getValue());
                 }
                 if(fileUri!=null){
-                String safeName=(fileName==null||fileName.isBlank())?"chunk.part":fileName.replace(Character.toString((char)34),"");
+                    String safeName=(fileName==null||fileName.isBlank())?"image.jpg":fileName;
                     String type=(mimeType==null||mimeType.isBlank())?"image/jpeg":mimeType;
                     out.writeBytes("--"+boundary+"\r\n");
                     out.writeBytes("Content-Disposition: form-data; name=\""+fileField+"\"; filename=\""+safeName.replace("\"","")+"\"\r\n");
@@ -122,7 +122,7 @@ public final class PedalProApiClient {
                     writeTextPart(out,boundary,e.getKey(),e.getValue()==null?"":e.getValue());
                 }
 
-                String safeName=(fileName==null||fileName.isBlank())?"chunk.part":fileName.replace(""","");
+                String safeName=(fileName==null||fileName.isBlank())?"chunk.part":fileName.replace(Character.toString((char)34),"");
                 String type=(mimeType==null||mimeType.isBlank())?"application/octet-stream":mimeType;
                 out.writeBytes("--"+boundary+"\r\n");
                 out.writeBytes("Content-Disposition: form-data; name=\""+fileField+"\"; filename=\""+safeName+"\"\r\n");
