@@ -81,19 +81,19 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
         switch(tab){
             case "social": openSocial("social"); break;
             case "recommend": openSocial("recommend"); break;
-            case "globalheat": openScreen(NativeHeatmapActivity.class); break;
+            case "globalheat": openHeatmap("global"); break;
             case "flyover": renderRideData("Flyover 3D","pp_flyover"); break;
             case "discover": renderDiscover(); break;
-            case "safety": openScreen(NativeSafetyActivity.class); break;
+            case "safety": openSafety("safety"); break;
             case "training": renderTraining(); break;
-            case "privacy": openScreen(NativeSafetyActivity.class); break;
+            case "privacy": openSafety("privacy"); break;
             case "replay": renderRideData("Replay فعالیت","pp_activity_replay"); break;
             case "club": renderClub(); break;
             case "analysis": renderAnalysis(); break;
             case "segments": renderSegments(); break;
-            case "heatmap": openScreen(NativeHeatmapActivity.class); break;
+            case "heatmap": openHeatmap("personal"); break;
             case "group": openGroup(); break;
-            case "beacon": openScreen(NativeSafetyActivity.class); break;
+            case "beacon": openSafety("beacon"); break;
             case "offline": renderOffline(); break;
             case "maintenance": renderMaintenance(); break;
             case "sensors": openScreen(NativeSensorsActivity.class); break;
@@ -841,6 +841,8 @@ public final class NativeAdvancedActivity extends NativeScreenBase {
     }
 
     private void openGroup(){Intent i=new Intent(this,NativeLiveNavigationActivity.class);i.putExtra(NativeLiveNavigationActivity.EXTRA_MODE,"group");startActivity(i);}
+    private void openSafety(String section){Intent i=new Intent(this,NativeSafetyActivity.class);i.putExtra(NativeSafetyActivity.EXTRA_SECTION,section);startActivity(i);}
+    private void openHeatmap(String scope){Intent i=new Intent(this,NativeHeatmapActivity.class);i.putExtra(NativeHeatmapActivity.EXTRA_SCOPE,scope);startActivity(i);}
     private void openSocial(String section){Intent i=new Intent(this,NativeSocialActivity.class);i.putExtra(NativeSocialActivity.EXTRA_SECTION,section);startActivity(i);}
 
     private void openScreen(Class<?> cls){startActivity(new Intent(this,cls));}
