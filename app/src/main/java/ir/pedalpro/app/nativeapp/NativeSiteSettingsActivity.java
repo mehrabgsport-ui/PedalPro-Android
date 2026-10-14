@@ -201,7 +201,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         followRouting.setOnCheckedChangeListener((b,checked)->
                 prefs.edit().putBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,checked).apply());
         box.addView(followRouting);
-        box.addView(text("نقشه اصلی نشان تنها در APK ساخته‌شده با لایسنس Android نشان (Package + SHA1 امضا) فعال می‌شود. کلید MOBILE ذخیره‌شده در گوشی به‌تنهایی SDK را فعال نمی‌کند. سرویس مسیر خودرو، مسیریابی تأییدشده دوچرخه نیست.",11,false,ORANGE));
+        box.addView(text("طبق SDK جدید نشان (MapLibre)، فایل License قدیمی لازم نیست. کلید MOBILE باید در GitHub Actions Secret با نام NESHAN_MOBILE_API_KEY تنظیم شود تا در Manifest نسخه امضاشده ثبت گردد؛ ذخیره کلید فقط در گوشی Manifest را تغییر نمی‌دهد. سرویس مسیریابی خودرو، مسیر تأییدشده دوچرخه نیست.",11,false,ORANGE));
         Button delete=normal("پاک‌کردن کلیدهای نشان از این گوشی");
         delete.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
                 .setTitle("حذف کلیدهای نشان")
