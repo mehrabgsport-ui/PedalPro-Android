@@ -175,6 +175,13 @@ expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLib
 expect "$ROOT/app/src/main/AndroidManifest.xml" 'NativeSavedRouteFollowActivity' "Saved route follower registered"
 expect "$ROOT/app/src/main/java/ir/pedalpro/app/PedalProFirebaseMessagingService.java" 'NativeMainActivity.class' "Push links open native app not WebView"
 
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" '"شروع GPS و بازکردن نشان"' "Saved-route destination requires explicit GPS preflight"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'beginTrackingThen(this::launchNeshanDestination)' "Recorded ride launched before external navigator"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'api.post("start_ride"' "Reuses verified start-ride server action"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'service.setAction(TrackingService.ACTION_START)' "Reuses existing GPS TrackingService"
+expect "$NATIVE/NativeSavedRouteFollowActivity.java" 'if(active!=null&&active.optInt' "No second ride created for active rider"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.clearTarget();' "Drop stale group location rather than navigating to old leader point"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1

@@ -20,3 +20,9 @@ Branch `native/web-parity`; backup `backup/pre-18-items-20261014`. Version `2.0.
 
 ## Delivery
 Build via `Android Store Release Build` GitHub Actions using the already-connected `NESHAN_MOBILE_API_KEY` secret; verify both manifest metadata and APK v2/v3 signatures. Only use artifacts from SUCCESS on same RC11 HEAD. Never merge or upload automatically.
+
+## RC12 follow-up — GPS-before-Neshan preflight
+- The recorded-route handoff now offers a real authenticated GPS start before launching Neshan and starts the unchanged TrackingService. A user may explicitly navigate without recording; no misleading "always recording" claim.
+- If a server-side active ride already exists, it is reused; the client does not create another ride. If location is stale (>12s or accuracy >35m), no ride is started.
+- Group live navigation removes an expired location target and proposed directions when the server reports no group location. This never stops or modifies background GPS.
+- RC12 2.0.0-native-rc12 / versionCode 56; signed APK and device QA require separate verification.

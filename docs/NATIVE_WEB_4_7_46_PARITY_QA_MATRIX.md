@@ -142,3 +142,11 @@ VIDEO evidence: `1000152337.mp4` displayed an OSM raster map flickering into nav
 | 18 | Full Bale bot management/templates/connected users/mass send | Blocked: no authenticated web bot controller or HTTP request/response schema | Must get actual site's PHP/API source and server-side admin RBAC; no invented endpoints |
 
 No existing `TrackingService` GPS filter or persisted user data was modified in RC11. Neither main nor market listings were updated.
+
+## RC12 — GPS follow corrections (2026-10-14)
+| Scenario | Code-level protection | Device/backend verification |
+|---|---|---|
+| Open Neshan when no active tracking | Explicit Start GPS + launch or navigation-without-recording choice | Confirm service GPS uploads continue while Neshan foreground |
+| Start tracking before following saved ride | Authenticated start_ride + TrackingService; reuse server active ride | Verify no duplicate ride created, slow GPS lock, CSRF and foreground permission |
+| Group leader fix lost | Clear marker, directions and distance; do not stop own tracking | Live location loss/regain on moving phone |
+| Administrator Bale send/templates and medal binary upload | Unchanged, blocked by missing private server API schemas | Backend source and real authorization required |
