@@ -4236,8 +4236,10 @@ public final class NativeMainActivity extends Activity {
         e.setHint(hint);
         e.setHintTextColor(MUTED);
         e.setTextColor(TEXT);
+        e.setTextSize(13);
         e.setSingleLine(true);
-        e.setPadding(dp(12), dp(12), dp(12), dp(12));
+        e.setPadding(dp(12), dp(11), dp(12), dp(11));
+        e.setBackground(roundRect(Color.argb(122, 5, 25, 40), 15, Color.argb(46, 255, 255, 255)));
         return e;
     }
 
@@ -4919,7 +4921,10 @@ public final class NativeMainActivity extends Activity {
 
     private void updateHeaderAccess(JSONObject data) {
         JSONObject user = data == null ? null : data.optJSONObject("user");
-        if (headerAccount != null) headerAccount.setLabel(user == null ? "ورود" : "حساب کاربری");
+        if (headerAccount != null) {
+            headerAccount.setLabel(user == null ? "ورود" : "حساب کاربری");
+            headerAccount.iconView().setVisibility(user == null ? View.VISIBLE : View.GONE);
+        }
         boolean admin = data != null && (data.optBoolean("is_admin", false) || data.optInt("is_admin", 0) == 1);
         if (headerAdminSettings != null) headerAdminSettings.setVisibility(admin ? View.VISIBLE : View.GONE);
     }
