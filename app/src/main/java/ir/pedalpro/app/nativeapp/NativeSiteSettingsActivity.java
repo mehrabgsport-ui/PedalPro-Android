@@ -297,13 +297,33 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         form.addView(id);form.addView(name);form.addView(username);form.addView(phone);form.addView(role);form.addView(password);form.addView(age);form.addView(height);form.addView(weight);form.addView(bio);
         Button save=primary("ذخیره کاربر");
         save.setOnClickListener(v->{
+            int userId=intValue(id,0);
+            String displayName=name.getText().toString().trim();
+            String userName=username.getText().toString().trim();
+            String userRole=role.getText().toString().trim();
+            if(userId<=0&&(displayName.isEmpty()||userName.isEmpty())){
+                toast("نام نمایشی و نام کاربری برای ایجاد کاربر الزامی هستند.");
+                return;
+            }
+            if(!userRole.isEmpty() && !userRole.equals("member") && !userRole.equals("admin")){
+                toast("نقش باید member یا admin باشد.");
+                return;
+            }
             JSONObject p=new JSONObject();
             try{
-                p.put("id",intValue(id,0));p.put("display_name",name.getText().toString());p.put("username",username.getText().toString());
-                p.put("phone",phone.getText().toString());p.put("role",role.getText().toString().isBlank()?"member":role.getText().toString());
-                p.put("password",password.getText().toString());p.put("age",age.getText().toString());p.put("height_cm",height.getText().toString());
-                p.put("weight_kg",weight.getText().toString());p.put("profile_public",true);p.put("bio",bio.getText().toString());p.put("is_active",true);
+                if(userId>0)p.put("id",userId);
+                if(!displayName.isEmpty())p.put("display_name",displayName);
+                if(!userName.isEmpty())p.put("username",userName);
+                if(!phone.getText().toString().trim().isEmpty())p.put("phone",phone.getText().toString().trim());
+                if(!userRole.isEmpty())p.put("role",userRole);
+                else if(userId<=0)p.put("role","member");
+                if(!password.getText().toString().isEmpty())p.put("password",password.getText().toString());
+                if(!age.getText().toString().trim().isEmpty())p.put("age",age.getText().toString().trim());
+                if(!height.getText().toString().trim().isEmpty())p.put("height_cm",height.getText().toString().trim());
+                if(!weight.getText().toString().trim().isEmpty())p.put("weight_kg",weight.getText().toString().trim());
+                if(!bio.getText().toString().trim().isEmpty())p.put("bio",bio.getText().toString());
             }catch(Exception ignored){}
+            // Never force account status or privacy visibility when saving other fields.
             postAndReload("admin_user_save",p,save,"کاربر ذخیره شد");
         });
         form.addView(save);content.addView(form,cardLp());
