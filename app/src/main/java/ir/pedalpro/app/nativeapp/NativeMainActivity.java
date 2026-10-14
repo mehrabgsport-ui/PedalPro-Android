@@ -3766,9 +3766,49 @@ public final class NativeMainActivity extends Activity {
         if (!signedIn()) { showLogin(); return; }
         selectNav(null);
         content.removeAllViews();
-        addHero("وضعیت بدن", "وزن و شاخص‌های بدنی · تاریخ شمسی");
+        addHero("وضعیت جسمانی", "");
 
-        LinearLayout add = card();
+        java.util.ArrayList<JSONObject> ordered = new java.util.ArrayList<>();
+        JSONArray source = bootstrap == null ? null : bootstrap.optJSONArray("body_metrics");
+        if (source != null) {
+            for (int i = 0; i < source.length(); i++) {
+                JSONObject row = source.optJSONObject(i);
+                if (row != null) ordered.add(row);
+            }
+        }
+        java.util.Collections.sort(ordered, (a, b) ->
+                a.optString("measured_on", "").compareTo(b.optString("measured_on", "")));
+
+        JSONObject user = bootstrap == null ? null : bootstrap.optJSONObject("user");
+        JSONObject last = ordered.isEmpty() ? null : ordered.get(ordered.size() - 1);
+        double heightM = user == null ? 0 : user.optDouble("height_cm", 0) / 100d;
+        double lastWeight = last == null ? 0 : last.optDouble("weight_kg", 0);
+        double bmi = lastWeight > 0 && heightM > 0 ? lastWeight / (heightM * heightM) : 0;
+        double change = ordered.size() > 1 ? lastWeight - ordered.get(0).optDouble("weight_kg", 0) : 0;
+
+        LinearLayout summary = glassCard(24);
+        summary.addView(text("خلاصه وضعیت", 17, true, TEXT));
+        String[][] metrics = {
+                {"آخرین وزن", last == null ? "—" : String.format(Locale.US, "%.1f kg", lastWeight)},
+                {"BMI", bmi > 0 ? String.format(Locale.US, "%.1f", bmi) : "—"},
+                {"تغییر وزن", ordered.size() > 1 ? String.format(Locale.US, "%+.1f kg", change) : "—"},
+                {"تعداد ثبت", JalaliDate.fa(ordered.size())}
+        };
+        for (int i = 0; i < metrics.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            row.setGravity(Gravity.CENTER);
+            row.addView(memberStat(metrics[i][0], metrics[i][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            row.addView(memberStat(metrics[i + 1][0], metrics[i + 1][1]), new LinearLayout.LayoutParams(0, -2, 1f));
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+            rp.setMargins(0, dp(8), 0, 0);
+            summary.addView(row, rp);
+        }
+        content.addView(summary, cardLp());
+
+        LinearLayout add = glassCard(24);
+        add.addView(text("ثبت وضعیت جدید", 17, true, TEXT));
         EditText date = input("تاریخ شمسی YYYY/MM/DD");
         date.setText(JalaliDate.todayForInput());
         EditText weight = input("وزن (kg)");
@@ -3781,9 +3821,9 @@ public final class NativeMainActivity extends Activity {
         content.addView(add, cardLp());
 
         save.setOnClickListener(v -> {
-            if (weight.getText().toString().trim().isBlank()) { showInlineMessage("اطلاعات ناقص","وزن را وارد کنید.",RED); return; }
-            String gregorian=JalaliDate.toGregorianIso(date.getText().toString().trim());
-            if(gregorian.isBlank()){showInlineMessage("تاریخ نامعتبر","تاریخ را به شکل ۱۴۰۵/۰۷/۲۱ وارد کنید.",RED);return;}
+            if (weight.getText().toString().trim().isBlank()) { showInlineMessage("اطلاعات ناقص", "وزن را وارد کنید.", RED); return; }
+            String gregorian = JalaliDate.toGregorianIso(date.getText().toString().trim());
+            if (gregorian.isBlank()) { showInlineMessage("تاریخ نامعتبر", "تاریخ را به شکل ۱۴۰۵/۰۷/۲۱ وارد کنید.", RED); return; }
             save.setEnabled(false);
             io.execute(() -> {
                 try {
@@ -3796,24 +3836,79 @@ public final class NativeMainActivity extends Activity {
                     activeRide = bootstrap.optJSONObject("my_active_ride");
                     main.post(() -> { toast("وضعیت بدن ثبت شد."); showFitness(); });
                 } catch (Exception e) {
-                    main.post(() -> { save.setEnabled(true); showInlineMessage("ثبت انجام نشد",e.getMessage(),RED); });
+                    main.post(() -> { save.setEnabled(true); showInlineMessage("ثبت انجام نشد", e.getMessage(), RED); });
                 }
             });
         });
 
-        JSONArray metrics = bootstrap.optJSONArray("body_metrics");
-        if (metrics == null || metrics.length() == 0) { addEmpty("هنوز داده بدنی ثبت نشده است."); return; }
-        for (int i = metrics.length() - 1; i >= 0; i--) {
-            JSONObject m = metrics.optJSONObject(i);
-            if (m == null) continue;
-            LinearLayout box = card();
-            box.addView(text(JalaliDate.format(m.optString("measured_on", ""),false), 11, true, MUTED));
-            box.addView(text(JalaliDate.fa(m.optString("weight_kg", "—")) + " kg", 20, true, Color.rgb(31,231,242)));
-            if (!m.optString("body_fat_pct", "").isBlank()) box.addView(text("چربی بدن: " + JalaliDate.fa(m.optString("body_fat_pct")) + "%", 11, false, MUTED));
-            if (!m.optString("note", "").isBlank()) box.addView(text(m.optString("note"), 11, false, MUTED));
-            content.addView(box, cardLp());
+        LinearLayout chartCard = glassCard(24);
+        chartCard.addView(text("نمودار وزن", 17, true, TEXT));
+        NativeWeightChartView chart = new NativeWeightChartView(this);
+        JSONArray chartRows = new JSONArray();
+        for (JSONObject row : ordered) chartRows.put(row);
+        chart.setRows(chartRows);
+        LinearLayout.LayoutParams chartLp = new LinearLayout.LayoutParams(-1, dp(220));
+        chartLp.setMargins(0, dp(10), 0, 0);
+        chartCard.addView(chart, chartLp);
+        content.addView(chartCard, cardLp());
+
+        LinearLayout history = glassCard(24);
+        history.addView(text("تاریخچه", 17, true, TEXT));
+        if (ordered.isEmpty()) {
+            TextView empty = text("هنوز وزنی ثبت نشده است.", 12, false, MUTED);
+            empty.setPadding(0, dp(10), 0, 0);
+            history.addView(empty);
+        } else {
+            for (int i = ordered.size() - 1; i >= 0; i--) {
+                JSONObject m = ordered.get(i);
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setPadding(dp(12), dp(11), dp(12), dp(11));
+                row.setBackground(roundRect(Color.argb(10, 255, 255, 255), 15, Color.argb(31, 255, 255, 255)));
+
+                LinearLayout top = new LinearLayout(this);
+                top.setOrientation(LinearLayout.HORIZONTAL);
+                top.setGravity(Gravity.CENTER_VERTICAL);
+                top.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+                TextView when = text(JalaliDate.format(m.optString("measured_on", ""), false), 11, true, MUTED);
+                top.addView(when, new LinearLayout.LayoutParams(0, -2, 1f));
+                TextView w = text(String.format(Locale.US, "%.1f kg", m.optDouble("weight_kg", 0)), 17, true, Color.rgb(46, 230, 166));
+                top.addView(w);
+                row.addView(top);
+
+                StringBuilder meta = new StringBuilder();
+                if (!m.optString("body_fat_pct", "").isBlank()) meta.append("چربی بدن: ").append(JalaliDate.fa(m.optString("body_fat_pct"))).append("%");
+                if (!m.optString("note", "").isBlank()) {
+                    if (meta.length() > 0) meta.append("\n");
+                    meta.append(m.optString("note", ""));
+                }
+                if (meta.length() > 0) {
+                    TextView mt = text(meta.toString(), 11, false, MUTED);
+                    mt.setPadding(0, dp(5), 0, 0);
+                    row.addView(mt);
+                }
+
+                int metricId = m.optInt("id", 0);
+                Button delete = normalButton("حذف");
+                delete.setTextColor(RED);
+                delete.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                        .setMessage("این ثبت وزن حذف شود؟")
+                        .setPositiveButton("حذف", (dialog, which) -> deleteBodyMetricNative(metricId, delete))
+                        .setNegativeButton("انصراف", null)
+                        .show());
+                LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(-1, dp(44));
+                dp.setMargins(0, dp(8), 0, 0);
+                row.addView(delete, dp);
+
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+                rowLp.setMargins(0, dp(10), 0, 0);
+                history.addView(row, rowLp);
+            }
         }
-        VazirmatnLoader.apply(this,content);animatePageIn();
+        content.addView(history, cardLp());
+
+        VazirmatnLoader.apply(this, content);
+        animatePageIn();
     }
 
 
@@ -5576,6 +5671,27 @@ public final class NativeMainActivity extends Activity {
         } catch (Exception e) {
             openAppSettingsNative();
         }
+    }
+
+    private void deleteBodyMetricNative(int id, Button button) {
+        if (id <= 0) return;
+        button.setEnabled(false);
+        io.execute(() -> {
+            try {
+                api.post("body_metric_delete", new JSONObject().put("id", id));
+                bootstrap = api.bootstrap();
+                activeRide = bootstrap.optJSONObject("my_active_ride");
+                main.post(() -> {
+                    toast("ثبت وزن حذف شد.");
+                    showFitness();
+                });
+            } catch (Exception e) {
+                main.post(() -> {
+                    button.setEnabled(true);
+                    toast(e.getMessage());
+                });
+            }
+        });
     }
 
     private void showPhoneSettingsPage() {
