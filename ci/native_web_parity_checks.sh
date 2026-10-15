@@ -209,6 +209,24 @@ assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
 PY
 
+# RC22: all six user-reported ride and group features.
+expect "$NATIVE/NativeMainActivity.java" 'useAlternativeTiles(true)' "Manual Neshan base-map failure fallback in program detail"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'useAlternativeTiles(boolean enabled)' "Fallback map tiles within Native screen"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'map.removeMarker(rider)' "Old rider marker removed on style reset"
+expect "$NATIVE/RideSpeedDisplayFilter.java" 'class RideSpeedDisplayFilter' "Live speed uses confidence-aware display filtering"
+expect "$NATIVE/LowPowerRideActivity.java" 'speedFilter.update(' "OLED ride speed never blindly displays rejected GPS zero"
+expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"
+expect "$NATIVE/NativeSpeedChartView.java" 'positive.size()>=2' "Speed chart fixes isolated zero samples"
+expect "$NATIVE/NativeRideProfileView.java" 'enum Mode { ELEVATION, SPEED, TIME }' "Elevation speed and time modes"
+expect "$NATIVE/NativeRideDetailActivity.java" 'profileMap.focusOn(latitude,longitude)' "Profile scrub synchronizes map marker"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'setNearbyRiders(others)' "Group navigation shows permitted nearby riders"
+expect "$NATIVE/NativeMainActivity.java" 'api.get("pp_live_riders")' "Main ride map fetches live riders"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'updateNearbyRiderMarkers()' "Refresh other riders on Neshan vector map"
+tmp_speed_qa="$(mktemp -d)"
+javac -d "$tmp_speed_qa" "$NATIVE/RideSpeedDisplayFilter.java" "$ROOT/ci/RideSpeedDisplayFilterTest.java"
+java -cp "$tmp_speed_qa" ir.pedalpro.app.nativeapp.RideSpeedDisplayFilterTest
+rm -rf "$tmp_speed_qa"
+
 # RC21: no direct raw GPS start point may bypass the TrackingService filter.
 if grep -Fq 'api.post("track_point"' "$NATIVE/NativeMainActivity.java"; then
   echo "Raw UI GPS point bypasses the V6 recording filter" >&2
