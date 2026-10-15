@@ -394,3 +394,5 @@ expect "$NATIVE/NativeGroupChatActivity.java" 'pp_group_message_send' "Group cha
 
 expect "$NATIVE/NativeFollowListActivity.java" 'pp_follow_list' "Profile follower lists server-authorized"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'وضعیت ربات بله' "Admin member Bale status displayed"
+
+expect "$NATIVE/NativeGroupsActivity.java" 'catch(org.json.JSONException e)' "Group JSON serialization errors are handled"

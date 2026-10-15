@@ -31,7 +31,14 @@ public final class NativeGroupsActivity extends NativeScreenBase {
 
     @Override protected String screenTitle(){return "گروه‌ها";}
     @Override protected void onScreenReady(){load();}
-    private JSONObject o(int id){return new JSONObject().put("group_id",id);}
+    private static JSONObject obj(Object... pairs){
+        JSONObject output=new JSONObject();
+        try{
+            for(int i=0;i+1<pairs.length;i+=2)output.put((String)pairs[i],pairs[i+1]);
+        }catch(org.json.JSONException e){throw new IllegalArgumentException("Unable to serialize group request",e);}
+        return output;
+    }
+    private JSONObject o(int id){return obj("group_id",id);}
     private static String title(JSONObject o){return o.optString("name",o.optString("title","گروه"));}
     private void load(){
         final int request=++generation;
@@ -158,8 +165,8 @@ public final class NativeGroupsActivity extends NativeScreenBase {
                 .setPositiveButton("ثبت",(d,w)->{
                     String n=name.getText().toString().trim();
                     if(n.length()<3||n.length()>80){toast("نام گروه باید بین ۳ تا ۸۰ کاراکتر باشد.");return;}
-                    JSONObject data=new JSONObject().put("name",n).put("description",
-                        description.getText().toString().trim()).put("visibility",
+                    JSONObject data=obj("name",n,"description",
+                        description.getText().toString().trim(),"visibility",
                         privateGroup.isChecked()?"private":"public");
                     post("pp_group_create",data,null,this::load);
                 }).show();
@@ -249,7 +256,7 @@ public final class NativeGroupsActivity extends NativeScreenBase {
             .setPositiveButton("ارسال دعوت",(d,w)->{
                 String value=username.getText().toString().trim();
                 if(value.isBlank())return;
-                JSONObject p=o(id).put("username",value);
+                JSONObject p=obj("group_id",id,"username",value);
                 post("pp_group_invite",p,null,()->openGroup(id));
             }).show();
     }
@@ -274,7 +281,7 @@ public final class NativeGroupsActivity extends NativeScreenBase {
         });
     }
     private void answerInvite(int invitationId,boolean accept,Button trigger){
-        JSONObject p=new JSONObject().put("invitation_id",invitationId).put("accept",accept);
+        JSONObject p=obj("invitation_id",invitationId,"accept",accept);
         post("pp_group_invite_answer",p,trigger,this::load);
     }
     private void schedule(int id){
@@ -293,10 +300,10 @@ public final class NativeGroupsActivity extends NativeScreenBase {
               if(title.getText().toString().trim().isBlank()||datetime[0].isBlank()){
                   toast("عنوان و تاریخ برنامه الزامی‌اند.");return;
               }
-              JSONObject p=o(id).put("title",title.getText().toString().trim())
-                      .put("event_date",datetime[0])
-                      .put("meeting_location",place.getText().toString().trim())
-                      .put("request_id",UUID.randomUUID().toString());
+              JSONObject p=obj("group_id",id,"title",title.getText().toString().trim(),
+                      "event_date",datetime[0],
+                      "meeting_location",place.getText().toString().trim(),
+                      "request_id",UUID.randomUUID().toString());
               post("pp_group_event_save",p,null,()->openGroup(id));
           }).show();
     }

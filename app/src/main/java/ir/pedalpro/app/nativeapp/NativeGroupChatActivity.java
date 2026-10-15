@@ -83,8 +83,14 @@ public final class NativeGroupChatActivity extends NativeScreenBase {
         String value=composer.getText().toString().trim();
         if(value.isEmpty()||value.length()>4000){toast("پیام باید بین ۱ تا ۴۰۰۰ نویسه باشد.");return;}
         button.setEnabled(false);
-        JSONObject data=new JSONObject().put("group_id",groupId).put("body",value)
-            .put("client_nonce",UUID.randomUUID().toString());
+        JSONObject data=new JSONObject();
+        try{
+            data.put("group_id",groupId);
+            data.put("body",value);
+            data.put("client_nonce",UUID.randomUUID().toString());
+        }catch(org.json.JSONException invalid){
+            button.setEnabled(true);toast("متن پیام معتبر نیست.");return;
+        }
         io.execute(()->{
             try{
                 api.post("pp_group_message_send",data);
