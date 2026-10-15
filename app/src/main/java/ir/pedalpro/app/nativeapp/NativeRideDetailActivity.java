@@ -35,6 +35,12 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
     private boolean destroyed;
     private LinearLayout commentsHost;
     private NativeRidePhotoController photos;
+    private PedalNeshanMapSurface profileMap;
+    private NativeRideProfileView profile;
+    private TextView profileDetails;
+    private int selectedProfileIndex=-1;
+    private NativeRideProfileView.Mode profileMode=NativeRideProfileView.Mode.ELEVATION;
+    private long lastScrubAt;
 
     private final Runnable livePoll=new Runnable(){
         @Override public void run(){
@@ -94,6 +100,7 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
                     }
                     ride=r;
                     boot=b;
+                    if(fromPoll && android.os.SystemClock.elapsedRealtime()-lastScrubAt<6000L)return;
                     renderRide();
                 });
             }catch(Exception e){
@@ -142,8 +149,13 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         setSubtitle(active?"مسیر زنده":"رکاب‌زنی ثبت‌شده",active?GREEN:MUTED);
 
-        LinearLayout map=deferredMap();
-        content.addView(map,new LinearLayout.LayoutParams(-1,dp(280)));
+        profileMap=new PedalNeshanMapSurface(this);
+        profileMap.setPoints(ride.optJSONArray("points"));
+        double markerLat=ride.optDouble("last_lat",Double.NaN);
+        double markerLng=ride.optDouble("last_lng",Double.NaN);
+        if(Double.isFinite(markerLat)&&Double.isFinite(markerLng))
+            profileMap.setTarget(markerLat,markerLng);
+        content.addView(profileMap,new LinearLayout.LayoutParams(-1,dp(310)));
 
         double lat=ride.optDouble("last_lat",Double.NaN);
         double lng=ride.optDouble("last_lng",Double.NaN);
@@ -181,10 +193,53 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         renderPrivacyAndLiveActions();
 
-        sectionTitle("نمودار سرعت GPS");
-        NativeSpeedChartView speed=new NativeSpeedChartView(this);
-        speed.setPoints(ride.optJSONArray("points"));
-        content.addView(speed,new LinearLayout.LayoutParams(-1,dp(190)));
+        sectionTitle("پیمایش تعاملی مسیر");
+        LinearLayout modes=new LinearLayout(this);
+        modes.setOrientation(LinearLayout.HORIZONTAL);
+        modes.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button elevation=normal("ارتفاع");
+        Button velocity=normal("سرعت");
+        Button timeMode=normal("زمان");
+        modes.addView(elevation,new LinearLayout.LayoutParams(0,dp(44),1));
+        modes.addView(velocity,new LinearLayout.LayoutParams(0,dp(44),1));
+        modes.addView(timeMode,new LinearLayout.LayoutParams(0,dp(44),1));
+        content.addView(modes,cardLp());
+        profile=new NativeRideProfileView(this);
+        profile.setPoints(ride.optJSONArray("points"));
+        profile.setMode(profileMode);
+        profile.setListener((index,point)->{
+            selectedProfileIndex=index;
+            lastScrubAt=android.os.SystemClock.elapsedRealtime();
+            double latitude=point.optDouble("lat",Double.NaN);
+            double longitude=point.optDouble("lng",Double.NaN);
+            if(profileMap!=null&&Double.isFinite(latitude)&&Double.isFinite(longitude)){
+                profileMap.setTarget(latitude,longitude);
+                profileMap.focusOn(latitude,longitude);
+            }
+            if(profileDetails!=null)
+                profileDetails.setText(NativeRideProfileView.describe(point,index,ride.optJSONArray("points")));
+        });
+        elevation.setOnClickListener(v->{profileMode=NativeRideProfileView.Mode.ELEVATION;profile.setMode(profileMode);});
+        velocity.setOnClickListener(v->{profileMode=NativeRideProfileView.Mode.SPEED;profile.setMode(profileMode);});
+        timeMode.setOnClickListener(v->{profileMode=NativeRideProfileView.Mode.TIME;profile.setMode(profileMode);});
+        content.addView(profile,new LinearLayout.LayoutParams(-1,dp(202)));
+        profileDetails=text("انگشت را روی نمودار بکشید تا محل همان نقطه روی نقشه نمایش داده شود.",12,false,MUTED);
+        content.addView(profileDetails,cardLp());
+        Button backToLive=normal(active?"بازگشت به موقعیت زنده":"نمایش انتهای مسیر");
+        backToLive.setOnClickListener(v->{
+            selectedProfileIndex=-1;
+            if(profileMap!=null){
+                double latitude=ride.optDouble("last_lat",Double.NaN);
+                double longitude=ride.optDouble("last_lng",Double.NaN);
+                if(Double.isFinite(latitude)&&Double.isFinite(longitude)){
+                    profileMap.setTarget(latitude,longitude);
+                    profileMap.focusOn(latitude,longitude);
+                }
+            }
+            if(profile!=null)profile.clearSelection();
+            profileDetails.setText("موقعیت انتهای مسیر نمایش داده شد.");
+        });
+        content.addView(backToLive,cardLp());
 
         sectionTitle("توضیحات فعالیت");
         renderNotes();

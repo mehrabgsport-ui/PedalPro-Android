@@ -218,6 +218,11 @@ public final class NativeRouteView extends View {
         invalidate();
     }
 
+    public void focusOn(double lat,double lng){
+        if(!Double.isFinite(lat)||!Double.isFinite(lng))return;
+        cameraLat=lat;cameraLng=lng;userCamera=false;invalidate();
+    }
+
     public void setTarget(double lat, double lng) {
         targetPoint = new P(lat, lng);
         showTargetLine = true;

@@ -293,6 +293,12 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         lastLineMs=SystemClock.elapsedRealtime();
     }
 
+    @Override public void focusOn(double latitude,double longitude){
+        if(!ready||map==null||!Double.isFinite(latitude)||!Double.isFinite(longitude))return;
+        map.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude,longitude),
+                Math.max(13,Math.min(zoom,17))),250);
+    }
+
     @Override public void setTarget(double latitude,double longitude){
         goalLat=latitude;goalLng=longitude;updateTargetMarker();
         if(ready&&firstCamera&&!navigation&&Double.isFinite(latitude)&&Double.isFinite(longitude)){

@@ -14,6 +14,7 @@ public interface NeshanMapBridge {
     void setRecordedTrack(JSONArray track);
     void setSuggestedRoute(JSONArray route);
     void setTarget(double lat, double lng);
+    void focusOn(double lat, double lng);
     void clearTarget();
     void zoomBy(int delta);
     void recenter();
