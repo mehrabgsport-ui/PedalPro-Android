@@ -225,6 +225,8 @@ expect "$NATIVE/NativeSiteSettingsActivity.java" 'metricCodes.get(' "Medal crite
 expect "$NATIVE/NativeScreenBase.java" 'useStickyHeader()' "Settings tabs can be pinned above content scrolling"
 expect "$NATIVE/NativeMainActivity.java" 'routeView.setTag(Integer.valueOf(rideId))' "Stale route responses are discarded"
 expect "$NATIVE/NativeRouteView.java" 'setOnMapTapListener(' "Program start can be selected on native map"
+expect "$NATIVE/PedalNeshanMapSurface.java" 'setAmoledBatterySaver(amoled)' "Native battery saver is wired"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'applyAmoledStyle(style)' "Neshan AMOLED style transformation exists"
 expect "$NATIVE/NativeMainActivity.java" 'showEventPointPicker(' "Program map selection is hooked up"
 expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"
 expect "$NATIVE/NativeSpeedChartView.java" 'positive.size()>=2' "Speed chart fixes isolated zero samples"

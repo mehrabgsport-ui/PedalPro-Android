@@ -30,6 +30,12 @@ import org.maplibre.android.gestures.MoveGestureDetector;
 import org.maplibre.android.maps.MapLibreMap;
 import org.maplibre.android.maps.MapView;
 import org.maplibre.android.maps.Style;
+import org.maplibre.android.style.layers.Layer;
+import org.maplibre.android.style.layers.BackgroundLayer;
+import org.maplibre.android.style.layers.FillLayer;
+import org.maplibre.android.style.layers.LineLayer;
+import org.maplibre.android.style.layers.SymbolLayer;
+import org.maplibre.android.style.layers.PropertyFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +54,8 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private MapLibreMap map;
     private boolean ready, destroyed, night, navigation, headingUp=true, validHeading;
     private boolean manualPan;
+    private boolean amoled;
+    private Style currentStyle;
     private boolean firstCamera=true;
     private float heading;
     private double lat=Double.NaN,lng=Double.NaN,goalLat=Double.NaN,goalLng=Double.NaN;
@@ -119,6 +127,8 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
             STYLES+(night?"dark.json":"light.json")),style->{
                 if(destroyed)return;
                 ready=true;
+                currentStyle=style;
+                if(amoled)applyAmoledStyle(style);
                 // Rebuild annotations because changing a vector style may clear layers.
                 // Old annotations may persist across a style reload in MapLibre.
                 // Remove the previous rider before recreating the layer to prevent ghosts.
@@ -138,6 +148,39 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 updateNearbyRiderMarkers();
                 updateCamera(true);
             });
+    }
+
+    @Override public void setAmoled(boolean enabled){
+        if(amoled==enabled)return;
+        amoled=enabled;
+        if(!ready||destroyed)return;
+        if(enabled)applyAmoledStyle(currentStyle);
+        else { ready=false;setNight(night); }
+    }
+    private void applyAmoledStyle(Style style){
+        if(style==null)return;
+        // Recolor vector layers: black land/water, bright roads, muted labels.
+        // Does not modify Neshan SDK's underlying raster/vector data or GPS.
+        for(Layer layer:style.getLayers()){
+            String id=layer.getId().toLowerCase(java.util.Locale.ROOT);
+            try{
+                if(layer instanceof BackgroundLayer){
+                    layer.setProperties(PropertyFactory.backgroundColor(Color.BLACK));
+                }else if(layer instanceof FillLayer){
+                    layer.setProperties(PropertyFactory.fillColor(Color.BLACK));
+                }else if(layer instanceof LineLayer){
+                    boolean road=id.contains("road")||id.contains("street")
+                            ||id.contains("highway")||id.contains("motorway");
+                    layer.setProperties(PropertyFactory.lineColor(
+                            road?Color.rgb(222,241,247):Color.rgb(24,39,45)));
+                }else if(layer instanceof SymbolLayer){
+                    layer.setProperties(PropertyFactory.textColor(Color.rgb(138,157,165)),
+                            PropertyFactory.textHaloColor(Color.BLACK));
+                }
+            }catch(RuntimeException ignored){
+                // Some provider layers have immutable/unsupported paint expressions.
+            }
+        }
     }
 
     @Override public void setTraffic(boolean enabled){

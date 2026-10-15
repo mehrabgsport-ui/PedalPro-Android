@@ -20,5 +20,6 @@ public interface NeshanMapBridge {
     void zoomBy(int delta);
     void recenter();
     void setNight(boolean enabled);
+    void setAmoled(boolean enabled);
     void setTraffic(boolean enabled);
 }

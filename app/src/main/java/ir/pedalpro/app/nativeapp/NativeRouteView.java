@@ -39,6 +39,7 @@ public final class NativeRouteView extends View {
     private CameraListener cameraListener;
     private MapTapListener mapTapListener;
     private boolean externalBasemap;
+    private boolean amoledBatterySaver;
     private final List<P> points = new ArrayList<>();
     private final List<P> navigationPoints = new ArrayList<>();
     private P currentPoint;
@@ -297,6 +298,12 @@ public final class NativeRouteView extends View {
         return out;
     }
 
+    public void setAmoledBatterySaver(boolean enabled){
+        amoledBatterySaver=enabled;
+        setBackgroundColor(enabled?Color.BLACK:Color.rgb(6,19,31));
+        invalidate();
+    }
+
     public void setExternalBasemap(boolean useNativeProvider) {
         externalBasemap = useNativeProvider;
         setBackgroundColor(useNativeProvider ? Color.TRANSPARENT : Color.rgb(6, 19, 31));
@@ -423,7 +430,8 @@ public final class NativeRouteView extends View {
         if (externalBasemap) {
             if (cameraListener != null) cameraListener.onCameraChanged(cameraLat,cameraLng,cameraZoom);
         } else {
-            PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,
+            if(amoledBatterySaver)canvas.drawColor(Color.BLACK);
+            else PedalMapTiles.draw(this, canvas, cameraLat, cameraLng, cameraZoom,
                     pitched ? 1.50f : 1.0f, headingUp ? navigationBearing : 0f,
                     pitched ? inverseViewTransform : null);
         }
@@ -488,7 +496,7 @@ public final class NativeRouteView extends View {
         }
 
         canvas.restoreToCount(mapSave);
-        if(!externalBasemap)PedalMapTiles.drawAttribution(this,canvas);
+        if(!externalBasemap&&!amoledBatterySaver)PedalMapTiles.drawAttribution(this,canvas);
         if(navigationMode && !userCamera && currentPoint!=null && !externalBasemap) {
             // The marker stays upright in Heading-Up and reflects travel direction
             // in North-Up. No fake heading is shown before a valid bearing arrives.

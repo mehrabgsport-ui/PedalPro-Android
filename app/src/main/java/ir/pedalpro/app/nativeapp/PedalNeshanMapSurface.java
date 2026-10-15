@@ -29,6 +29,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private boolean night=true;
     private boolean traffic;
     private boolean alternateTiles;
+    private boolean amoled;
 
     public PedalNeshanMapSurface(Context context) {
         super(context);
@@ -52,6 +53,10 @@ public final class PedalNeshanMapSurface extends FrameLayout {
             }
         }
         overlay=new NativeRouteView(context);
+        amoled=context.getSharedPreferences("pedalpro_map_display",Context.MODE_PRIVATE)
+                .getBoolean("amoled_enabled",false);
+        overlay.setAmoledBatterySaver(amoled);
+        if(sdkBridge!=null)sdkBridge.setAmoled(amoled);
         // A projected Canvas track cannot overlay a tilted MapLibre camera.
         // The native bridge owns both vector polylines in the genuine SDK.
         if(sdkBridge!=null){
@@ -84,6 +89,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         controls.addView(control("◎","بازگشت به موقعیت رکاب‌زن",this::recenter));
         navigationControl=(TextView)control("↑","تغییر جهت نقشه",this::toggleOrientation);
         controls.addView(navigationControl);
+        controls.addView(control("▣","فعال یا غیرفعال کردن ذخیره باتری AMOLED",this::toggleBatterySaver));
         if(sdkBridge!=null){
             controls.addView(control("☾","تغییر نقشه روز و شب نشان",()->{
                 night=!night;
@@ -126,6 +132,17 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         else lp.setMargins(0,dp(10),dp(10),0);
         mapControls.setLayoutParams(lp);
         mapControls.setElevation(dp(9));
+    }
+
+    private void toggleBatterySaver(){
+        amoled=!amoled;
+        getContext().getSharedPreferences("pedalpro_map_display",Context.MODE_PRIVATE)
+                .edit().putBoolean("amoled_enabled",amoled).apply();
+        overlay.setAmoledBatterySaver(amoled);
+        if(sdkBridge!=null)sdkBridge.setAmoled(amoled);
+        android.widget.Toast.makeText(getContext(),
+                amoled?"حالت ذخیره باتری نقشه فعال شد":"حالت ذخیره باتری نقشه خاموش شد",
+                android.widget.Toast.LENGTH_SHORT).show();
     }
 
     private void toggleOrientation(){
