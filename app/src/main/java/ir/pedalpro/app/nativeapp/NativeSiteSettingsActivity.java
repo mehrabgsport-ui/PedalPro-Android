@@ -846,6 +846,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
 
         final ArrayList<Button> editUserButtons = new ArrayList<>();
         final ArrayList<JSONObject> editableUsers = new ArrayList<>();
+        final java.util.LinkedHashMap<Integer,TextView> baleStatuses=new java.util.LinkedHashMap<>();
         JSONArray members = data.optJSONArray("members");
         if (members != null) {
             for (int i=0;i<members.length();i++) {
@@ -854,29 +855,9 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 row.addView(text(u.optString("display_name",u.optString("username","کاربر")), 14, true, TEXT));
                 row.addView(text("@"+u.optString("username","")+" · "+u.optString("role","member")+" · "+(u.optInt("is_active",1)==1?"فعال":"غیرفعال"), 10, false, MUTED));
                 row.addView(text("شماره تماس: "+UiSafeText.display(u.optString("phone","")),11,false,MUTED));
-                TextView baleStatus=text("وضعیت ربات بله: در حال بررسی…",10,false,MUTED);
+                TextView baleStatus=text("ربات بله: در حال بررسی…",10,false,MUTED);
                 row.addView(baleStatus);
-                int baleUserId=u.optInt("id",0);
-                if(baleUserId>0){
-                    io.execute(()->{
-                        try{
-                            JSONObject linked=api.post("bale_connected_users",new JSONObject()
-                                .put("search",u.optString("username","")).put("page",1).put("per_page",50));
-                            JSONArray connections=linked.optJSONArray("users");
-                            boolean connected=false;
-                            if(connections!=null)for(int bi=0;bi<connections.length();bi++){
-                                JSONObject p=connections.optJSONObject(bi);
-                                if(p!=null&&p.optInt("user_id",0)==baleUserId){
-                                    connected=true;break;
-                                }
-                            }
-                            final boolean yes=connected;
-                            main.post(()->baleStatus.setText("وضعیت ربات بله: "+
-                                (yes?"متصل":"اتصال در فهرست فعلی تأیید نشد")));
-                        }catch(Exception ignored){main.post(()->baleStatus.setText(
-                            "وضعیت ربات بله: نامشخص — خطای دریافت وضعیت")); }
-                    });
-                }
+                if(u.optInt("id",0)>0)baleStatuses.put(u.optInt("id",0),baleStatus);
                 Button editUser=normal("ویرایش مشخصات");
                 row.addView(editUser);
                 editUserButtons.add(editUser);
@@ -884,6 +865,37 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 content.addView(row, cardLp());
             }
         }
+
+        // Paginated bulk lookup: never generate one network request per member.
+        if(!baleStatuses.isEmpty())io.execute(()->{
+            java.util.HashSet<Integer> linkedIds=new java.util.HashSet<>();
+            boolean complete=false;
+            try{
+                int page=1;
+                while(page<=20){
+                    JSONObject listing=api.post("bale_connected_users",
+                            new JSONObject().put("search","").put("page",page));
+                    JSONArray people=listing.optJSONArray("users");
+                    if(people!=null)for(int i=0;i<people.length();i++){
+                        JSONObject item=people.optJSONObject(i);
+                        if(item!=null&&item.optInt("user_id",0)>0)
+                            linkedIds.add(item.optInt("user_id",0));
+                    }
+                    int pages=Math.max(1,listing.optInt("pages",1));
+                    if(page>=pages){complete=true;break;}
+                    page++;
+                }
+            }catch(Exception ignored){}
+            final boolean allPages=complete;
+            main.post(()->{
+                if(!"users".equals(activeTab))return;
+                for(java.util.Map.Entry<Integer,TextView> e:baleStatuses.entrySet()){
+                    boolean found=linkedIds.contains(e.getKey());
+                    e.getValue().setText(found?"ربات بله: متصل":
+                            (allPages?"ربات بله: متصل نیست":"ربات بله: وضعیت نامشخص"));
+                }
+            });
+        });
 
         LinearLayout form = card();
         form.addView(text("ساخت / ویرایش کاربر", 16, true, TEXT));
