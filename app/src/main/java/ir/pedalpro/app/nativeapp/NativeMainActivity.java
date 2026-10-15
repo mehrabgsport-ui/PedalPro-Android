@@ -7768,12 +7768,18 @@ public final class NativeMainActivity extends Activity {
             LinearLayout mapActions=new LinearLayout(this);
             mapActions.setOrientation(LinearLayout.HORIZONTAL);
             mapActions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-            Button fallback=normal("نقشه جایگزین");
+            Button fallback=new Button(this);
+            fallback.setText("نقشه جایگزین");
+            fallback.setTextColor(TEXT);
+            fallback.setBackground(roundRect(Color.rgb(17,46,63),12,Color.rgb(44,81,99)));
             fallback.setOnClickListener(v->{
                 map.useAlternativeTiles(true);
                 fallback.setText("نقشه جایگزین فعال شد");
             });
-            Button external=normal("بازکردن در نشان");
+            Button external=new Button(this);
+            external.setText("بازکردن در نشان");
+            external.setTextColor(TEXT);
+            external.setBackground(roundRect(Color.rgb(17,46,63),12,Color.rgb(44,81,99)));
             external.setOnClickListener(v->{
                 try{
                     android.net.Uri uri=android.net.Uri.parse(
