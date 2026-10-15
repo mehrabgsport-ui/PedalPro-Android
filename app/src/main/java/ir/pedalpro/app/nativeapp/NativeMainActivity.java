@@ -1648,6 +1648,27 @@ public final class NativeMainActivity extends Activity {
         }
         if(rc==0)box.addView(text("رکاب‌زنی عمومی ثبت‌شده‌ای ندارد.",11,false,MUTED));
 
+        box.addView(text("همراهی با گروه",16,true,TEXT),fullWrapLp(12));
+        JSONArray groupRegs=bootstrap==null?null:bootstrap.optJSONArray("registrations");
+        JSONArray groupEvents=bootstrap==null?null:bootstrap.optJSONArray("events");
+        int attendedEvents=0;
+        if(groupRegs!=null&&groupEvents!=null)
+            for(int i=0;i<groupRegs.length()&&attendedEvents<8;i++){
+                JSONObject registration=groupRegs.optJSONObject(i);
+                if(registration==null||registration.optInt("user_id",0)!=member.optInt("id",0)||
+                        !(registration.optBoolean("attended",false)||registration.optInt("attended",0)==1))continue;
+                int eventId=registration.optInt("event_id",0);
+                for(int e=0;e<groupEvents.length();e++){
+                    JSONObject groupEvent=groupEvents.optJSONObject(e);
+                    if(groupEvent==null||groupEvent.optInt("id",0)!=eventId)continue;
+                    String eventTitle=UiSafeText.display(groupEvent.optString("title",""));
+                    String when=JalaliDate.format(groupEvent.optString("event_date",""),false);
+                    box.addView(text("همراهی با گروه · "+eventTitle+" · "+when,12,false,MUTED),fullWrapLp(4));
+                    attendedEvents++;break;
+                }
+            }
+        if(attendedEvents==0)box.addView(text("همراهی گروهی تأییدشده‌ای برای نمایش وجود ندارد.",11,false,MUTED));
+
         addMemberMedals(box,member);
         addMemberSocialLinks(box,member);
 
@@ -2545,7 +2566,7 @@ public final class NativeMainActivity extends Activity {
                 @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
             });
             selector.setSelection(0);
-            loadRouteSelection(rows.get(0).optInt("id", 0), routeView, chart, statsHost, actions, state);
+            // Spinner onItemSelected performs the first fetch; do not issue a duplicate request.
         } else {
             renderRouteStats(statsHost, null);
             routeView.setPoints(new JSONArray());
@@ -6588,6 +6609,7 @@ public final class NativeMainActivity extends Activity {
     private void loadRouteSelection(int rideId, PedalNeshanMapSurface routeView, NativeSpeedChartView chart,
                                     LinearLayout statsHost, LinearLayout actionsHost, TextView state) {
         if (rideId <= 0) return;
+        routeView.setTag(Integer.valueOf(rideId));
         state.setText("در حال دریافت مسیر…");
         io.execute(() -> {
             try {
@@ -6599,6 +6621,7 @@ public final class NativeMainActivity extends Activity {
                 if (ride == null) throw new IllegalStateException("مسیر در دسترس نیست.");
                 JSONArray points = ride.optJSONArray("points");
                 main.post(() -> {
+                    if(!Integer.valueOf(rideId).equals(routeView.getTag()))return;
                     routeView.setPoints(points == null ? new JSONArray() : points);
                     chart.setPoints(points == null ? new JSONArray() : points);
                     renderRouteStats(statsHost, ride);
@@ -6623,6 +6646,7 @@ public final class NativeMainActivity extends Activity {
                 });
             } catch (Exception e) {
                 main.post(() -> {
+                    if(!Integer.valueOf(rideId).equals(routeView.getTag()))return;
                     routeView.setPoints(new JSONArray());
                     chart.setPoints(new JSONArray());
                     renderRouteStats(statsHost, null);

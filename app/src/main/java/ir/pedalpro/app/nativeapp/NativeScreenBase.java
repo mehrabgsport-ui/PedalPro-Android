@@ -49,6 +49,7 @@ abstract class NativeScreenBase extends Activity {
     protected final ExecutorService io=Executors.newSingleThreadExecutor();
     protected final Handler main=new Handler(Looper.getMainLooper());
     protected LinearLayout content;
+    protected LinearLayout stickyHeader;
     protected PedalProApiClient api;
     protected SessionStore session;
 
@@ -62,6 +63,8 @@ abstract class NativeScreenBase extends Activity {
 
     /** Chat can own a fixed-height pane instead of nesting another page scroll. */
     protected boolean useFixedContentViewport(){return false;}
+    /** Only selected secondary screens need a fixed horizontal navigation rail. */
+    protected boolean useStickyHeader(){return false;}
 
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);
@@ -105,6 +108,12 @@ abstract class NativeScreenBase extends Activity {
         });
 
         root.addView(buildWebHeader(),new LinearLayout.LayoutParams(-1,-2));
+        if(useStickyHeader()){
+            stickyHeader=new LinearLayout(this);
+            stickyHeader.setOrientation(LinearLayout.VERTICAL);
+            stickyHeader.setBackgroundColor(Color.rgb(9,34,51));
+            root.addView(stickyHeader,new LinearLayout.LayoutParams(-1,dp(58)));
+        }
 
         LinearLayout scroller=new LinearLayout(this);
         scroller.setOrientation(LinearLayout.VERTICAL);

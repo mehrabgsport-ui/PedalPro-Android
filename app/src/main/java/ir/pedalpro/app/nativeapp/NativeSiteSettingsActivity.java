@@ -31,6 +31,8 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
     private int pendingMedalImageId;
     private final ArrayList<Button> tabButtons = new ArrayList<>();
     private String activeTab = "general";
+    private int tabScrollX;
+    @Override protected boolean useStickyHeader(){return true;}
     private NativeAppReleaseAdminController appReleaseAdmin;
     private NativeFcmAdminController fcmAdmin;
 
@@ -122,7 +124,12 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         addTab(row, "other", "سایر تنظیمات سایت");
 
         hsv.addView(row);
-        content.addView(hsv, new LinearLayout.LayoutParams(-1, dp(58)));
+        hsv.setOnScrollChangeListener((View.OnScrollChangeListener)(v,x,y,oldX,oldY)->tabScrollX=x);
+        if(stickyHeader!=null){
+            stickyHeader.removeAllViews();
+            stickyHeader.addView(hsv,new LinearLayout.LayoutParams(-1,dp(58)));
+        }else content.addView(hsv,new LinearLayout.LayoutParams(-1,dp(58)));
+        hsv.post(()->hsv.scrollTo(tabScrollX,0));
     }
 
     private void addTab(LinearLayout row, String key, String label) {

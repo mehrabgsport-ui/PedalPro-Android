@@ -222,6 +222,8 @@ expect "$NATIVE/SessionStore.java" 'AES/GCM/NoPadding' "Native session protected
 expect "$NATIVE/PedalProApiClient.java" 'RideImageCompressor.prepare(context,fileUri)' "Photo optimization before upload"
 expect "$NATIVE/NativeRideDetailActivity.java" 'Keep the map directly above' "Ride profile positioned next to map"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'metricCodes.get(' "Medal criteria must be a controlled selector"
+expect "$NATIVE/NativeScreenBase.java" 'useStickyHeader()' "Settings tabs can be pinned above content scrolling"
+expect "$NATIVE/NativeMainActivity.java" 'routeView.setTag(Integer.valueOf(rideId))' "Stale route responses are discarded"
 expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"
 expect "$NATIVE/NativeSpeedChartView.java" 'positive.size()>=2' "Speed chart fixes isolated zero samples"
 expect "$NATIVE/NativeRideProfileView.java" 'enum Mode { ELEVATION, SPEED, TIME }' "Elevation speed and time modes"
