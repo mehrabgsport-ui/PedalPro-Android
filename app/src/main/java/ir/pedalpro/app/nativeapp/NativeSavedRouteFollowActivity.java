@@ -445,10 +445,14 @@ public final class NativeSavedRouteFollowActivity extends NativeScreenBase {
         status.setText(message+(recording()?" · ثبت GPS فعال":" · ثبت GPS غیرفعال"));
     }
     @Override protected void onResume(){
-        super.onResume();visible=true;
+        super.onResume();
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        visible=true;
         main.removeCallbacks(tick);main.post(tick);
     }
     @Override protected void onPause(){
-        visible=false;main.removeCallbacks(tick);super.onPause();
+        visible=false;main.removeCallbacks(tick);
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        super.onPause();
     }
 }

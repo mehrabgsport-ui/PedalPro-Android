@@ -769,13 +769,48 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         EditText id = input("ID برای ویرایش؛ خالی = جدید");
         EditText title = input("عنوان مدال");
         EditText desc = input("توضیح"); desc.setSingleLine(false); desc.setMinLines(2);
-        EditText metric = input("معیار: distance_km / calories_kcal / ascent_m / ride_count / ...");
+        // Only expose criteria implemented by the existing server, plus any
+        // historical criterion already returned in medal_definitions.
+        final ArrayList<String> metricCodes=new ArrayList<>();
+        final ArrayList<String> metricLabels=new ArrayList<>();
+        String[] builtins={"ride_count","distance_km","calories_kcal","ascent_m"};
+        String[] descriptions={"تعداد رکاب‌زنی (مرتبه)","مسافت رکاب‌زنی (کیلومتر)",
+                "کالری مصرف‌شده (kcal)","ارتفاع صعود (متر)"};
+        for(int i=0;i<builtins.length;i++){
+            metricCodes.add(builtins[i]);metricLabels.add(descriptions[i]);
+        }
+        if(rows!=null)for(int i=0;i<rows.length();i++){
+            JSONObject saved=rows.optJSONObject(i);
+            if(saved==null)continue;
+            String type=saved.optString("metric_type","").trim();
+            if(!type.isBlank()&&!metricCodes.contains(type)){
+                metricCodes.add(type);
+                metricLabels.add("معیار ثبت‌شده: "+type);
+            }
+        }
+        android.widget.Spinner metric=new android.widget.Spinner(this);
+        android.widget.ArrayAdapter<String> metricAdapter=new android.widget.ArrayAdapter<>(
+                this,android.R.layout.simple_spinner_item,metricLabels);
+        metricAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        metric.setAdapter(metricAdapter);
+        form.addView(text("انتخاب معیار مدال",12,true,TEXT));
         EditText target = input("مقدار هدف");
         EditText window = input("بازه زمانی (روز)؛ ۰ = بدون محدودیت");
         EditText sort = input("ترتیب نمایش"); sort.setText("100");
         EditText match = input("فیلتر عنوان (اختیاری)");
          EditText active = input("وضعیت: 1 فعال / 0 غیرفعال"); active.setText("1");
         form.addView(id);form.addView(title);form.addView(desc);form.addView(metric);form.addView(target);form.addView(window);form.addView(sort);form.addView(match);form.addView(active);
+        id.setOnFocusChangeListener((view,focused)->{
+            if(focused||rows==null)return;
+            int selectedId=intValue(id,0);
+            for(int i=0;i<rows.length();i++){
+                JSONObject saved=rows.optJSONObject(i);
+                if(saved==null||saved.optInt("id",0)!=selectedId)continue;
+                int index=metricCodes.indexOf(saved.optString("metric_type",""));
+                if(index>=0)metric.setSelection(index);
+                return;
+            }
+        });
         Button save = primary("ذخیره مدال");
         save.setOnClickListener(v -> {
             JSONObject p = new JSONObject();
@@ -783,7 +818,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 p.put("id", intValue(id,0));
                 p.put("title", title.getText().toString());
                 p.put("description", desc.getText().toString());
-                p.put("metric_type", metric.getText().toString().trim());
+                p.put("metric_type", metricCodes.get(Math.max(0,metric.getSelectedItemPosition())));
                 p.put("target_value", decimalValue(target,0));
                 p.put("window_days", intValue(window,0));
                 p.put("sort_order", intValue(sort,100));
@@ -811,6 +846,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 LinearLayout row = card();
                 row.addView(text(u.optString("display_name",u.optString("username","کاربر")), 14, true, TEXT));
                 row.addView(text("@"+u.optString("username","")+" · "+u.optString("role","member")+" · "+(u.optInt("is_active",1)==1?"فعال":"غیرفعال"), 10, false, MUTED));
+                row.addView(text("شماره تماس: "+UiSafeText.display(u.optString("phone","")),11,false,MUTED));
                 Button editUser=normal("ویرایش مشخصات");
                 row.addView(editUser);
                 editUserButtons.add(editUser);

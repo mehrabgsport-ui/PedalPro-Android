@@ -2,7 +2,7 @@ package ir.pedalpro.app;
 
 import android.content.Context;
 import android.provider.Settings;
-import android.webkit.CookieManager;
+import ir.pedalpro.app.nativeapp.SessionStore;
 
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.firebase.FirebaseApp;
@@ -46,11 +46,7 @@ public final class FirebaseConfigManager {
                 String appId = cfg.optString("app_id","");
                 String apiKey = cfg.optString("api_key","");
                 String senderId = cfg.optString("sender_id","");
-                String neshanServiceKey = cfg.optString("neshan_service_key", "");
-                if (NeshanRoadMatcher.validKey(neshanServiceKey)) {
-                    context.getSharedPreferences(TrackingService.PREFS, Context.MODE_PRIVATE)
-                            .edit().putString("neshan_service_key", neshanServiceKey.trim()).apply();
-                }
+                // The public Firebase config is not a secure source of routing secrets.
                 if (projectId.isEmpty() || appId.isEmpty() || apiKey.isEmpty() || senderId.isEmpty()) return;
 
                 FirebaseApp firebase;
@@ -91,8 +87,11 @@ public final class FirebaseConfigManager {
                 c.setRequestMethod("POST"); c.setDoOutput(true);
                 c.setRequestProperty("Content-Type","application/json; charset=utf-8");
                 c.setRequestProperty("Accept","application/json");
-                String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-                if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+                SessionStore session=new SessionStore(context);
+                String cookie=session.cookie();
+                if(!cookie.isBlank())c.setRequestProperty("Cookie",cookie);
+                String csrf=session.csrf();
+                if(!csrf.isBlank())c.setRequestProperty("X-CSRF-Token",csrf);
                 byte[] data = p.toString().getBytes(StandardCharsets.UTF_8);
                 c.setFixedLengthStreamingMode(data.length);
                 try (OutputStream os = c.getOutputStream()) { os.write(data); }

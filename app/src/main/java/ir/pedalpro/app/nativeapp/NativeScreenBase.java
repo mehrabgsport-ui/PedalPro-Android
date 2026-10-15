@@ -362,7 +362,7 @@ abstract class NativeScreenBase extends Activity {
 
     protected TextView text(String s,int sp,boolean bold,int color){
         TextView t=new TextView(this);
-        t.setText(s);
+        t.setText(UiSafeText.display(s));
         t.setTextSize(sp);
         t.setTextColor(color);
         t.setGravity(Gravity.END);

@@ -148,6 +148,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
 
     @Override protected void onResume(){
         super.onResume();
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         screenVisible=true;
         boolean preference=getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE)
                 .getBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,false);
@@ -167,6 +168,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     @Override protected void onPause(){
         screenVisible=false;
         main.removeCallbacks(tick);
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         super.onPause();
     }
 

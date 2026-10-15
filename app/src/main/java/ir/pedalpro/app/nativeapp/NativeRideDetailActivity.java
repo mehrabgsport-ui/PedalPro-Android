@@ -156,15 +156,6 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         double markerLng=ride.optDouble("last_lng",Double.NaN);
         if(Double.isFinite(markerLat)&&Double.isFinite(markerLng))
             profileMap.setTarget(markerLat,markerLng);
-        content.addView(profileMap,new LinearLayout.LayoutParams(-1,dp(310)));
-
-        double lat=ride.optDouble("last_lat",Double.NaN);
-        double lng=ride.optDouble("last_lng",Double.NaN);
-        if(Double.isFinite(lat)&&Double.isFinite(lng)){
-            Button directions=normal("مسیریابی تا موقعیت فعلی");
-            directions.setOnClickListener(v->openRouteFollower());
-            content.addView(directions,cardLp());
-        }
 
         LinearLayout notice=noticeCard();
         notice.addView(text(ride.optString("title","رکاب‌زنی"),15,true,TEXT));
@@ -194,6 +185,8 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         renderPrivacyAndLiveActions();
 
+        // Keep the map directly above the interactive scrubber on all ride details.
+        content.addView(profileMap,new LinearLayout.LayoutParams(-1,dp(310)));
         sectionTitle("پیمایش تعاملی مسیر");
         LinearLayout modes=new LinearLayout(this);
         modes.setOrientation(LinearLayout.HORIZONTAL);
@@ -247,6 +240,13 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
             profileDetails.setText("موقعیت انتهای مسیر نمایش داده شد.");
         });
         content.addView(backToLive,cardLp());
+        double navLat=ride.optDouble("last_lat",Double.NaN);
+        double navLng=ride.optDouble("last_lng",Double.NaN);
+        if(Double.isFinite(navLat)&&Double.isFinite(navLng)){
+            Button directions=normal("مسیریابی تا موقعیت فعلی");
+            directions.setOnClickListener(v->openRouteFollower());
+            content.addView(directions,cardLp());
+        }
 
         sectionTitle("توضیحات فعالیت");
         renderNotes();

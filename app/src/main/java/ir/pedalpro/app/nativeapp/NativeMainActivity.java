@@ -145,6 +145,9 @@ public final class NativeMainActivity extends Activity {
                     mainScroll==null?0:mainScroll.getScrollY()));
         }
         currentPage=next;
+        if("ride".equals(next))
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
     private void restorePage(String page){
         switch(page){
@@ -5819,7 +5822,7 @@ public final class NativeMainActivity extends Activity {
 
     private TextView text(String value, int sp, boolean bold, int color) {
         TextView v = new TextView(this);
-        v.setText(value); v.setTextSize(sp); v.setTextColor(color); v.setGravity(Gravity.END);
+        v.setText(UiSafeText.display(value)); v.setTextSize(sp); v.setTextColor(color); v.setGravity(Gravity.END);
         v.setLineSpacing(dp(2),1f);
         if (bold) v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return v;
@@ -6204,10 +6207,15 @@ public final class NativeMainActivity extends Activity {
             PedalIconView wi=new PedalIconView(this,WeatherClient.icon(d.code),d.code<=1?Color.rgb(255,217,74):Color.rgb(190,224,255));
             TextView max=text(JalaliDate.fa(d.maxC)+"°",18,true,TEXT);max.setGravity(Gravity.CENTER);
             TextView min=text(JalaliDate.fa(d.minC)+"°",10,false,MUTED);min.setGravity(Gravity.CENTER);
-            TextView wind=text("باد "+JalaliDate.fa(d.windKmh)+" · تندباد "+JalaliDate.fa(d.gustKmh),8,false,MUTED);wind.setGravity(Gravity.CENTER);wind.setMaxLines(2);
-            TextView rain=text("بارش "+JalaliDate.fa(d.rainPct)+"٪",8,false,MUTED);rain.setGravity(Gravity.CENTER);
-            tile.addView(date);tile.addView(wi,new LinearLayout.LayoutParams(dp(36),dp(36)));tile.addView(max);tile.addView(min);tile.addView(wind);tile.addView(rain);
-            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(112),dp(150));p.setMargins(dp(4),0,dp(4),0);weatherDaysHost.addView(tile,p);
+            String[] compass={"شمال ↑","شمال‌شرقی ↗","شرق →","جنوب‌شرقی ↘",
+                    "جنوب ↓","جنوب‌غربی ↙","غرب ←","شمال‌غربی ↖"};
+            int directionIndex=((d.direction%360+360+22)/45)%8;
+            TextView wind=text(compass[directionIndex]+" · "+JalaliDate.fa(d.windKmh)+" km/h",9,false,MUTED);
+            wind.setGravity(Gravity.CENTER);wind.setMaxLines(2);
+            TextView rain=text("💧 "+JalaliDate.fa(d.rainPct)+"٪ احتمال بارش",9,true,Color.rgb(115,203,252));
+            rain.setGravity(Gravity.CENTER);
+            tile.addView(date);tile.addView(wi,new LinearLayout.LayoutParams(dp(34),dp(34)));tile.addView(max);tile.addView(min);tile.addView(wind);tile.addView(rain);
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(128),dp(150));p.setMargins(dp(4),0,dp(4),0);weatherDaysHost.addView(tile,p);
         }
         VazirmatnLoader.apply(this,weatherDaysHost);
     }
