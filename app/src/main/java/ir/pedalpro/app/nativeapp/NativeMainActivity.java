@@ -3139,6 +3139,11 @@ public final class NativeMainActivity extends Activity {
         start.setText(ch == null || ch.optString("starts_at", "").isBlank() ? "" : jalaliDateForInput(ch.optString("starts_at")));
         EditText end = input("پایان · تاریخ شمسی");
         end.setText(ch == null || ch.optString("ends_at", "").isBlank() ? "" : jalaliDateForInput(ch.optString("ends_at")));
+        start.setFocusable(false);end.setFocusable(false);
+        start.setOnClickListener(v->NativeJalaliDateTimePicker.show(this,
+                start.getText().toString(),false,(iso,jalali)->start.setText(jalali)));
+        end.setOnClickListener(v->NativeJalaliDateTimePicker.show(this,
+                end.getText().toString(),false,(iso,jalali)->end.setText(jalali)));
         android.widget.Spinner status = challengeSpinner(new String[]{"برنامه‌ریزی", "در حال اجرا", "تمام‌شده"}, ch == null ? 0 : "active".equals(ch.optString("status")) ? 1 : "completed".equals(ch.optString("status")) ? 2 : 0);
         android.widget.Spinner visibility = challengeSpinner(new String[]{"عمومی", "خصوصی"}, ch != null && "private".equals(ch.optString("visibility")) ? 1 : 0);
         android.widget.Spinner allowJoin = challengeSpinner(new String[]{"بله", "خیر"}, ch != null && ch.optInt("allow_join", 1) == 0 ? 1 : 0);
@@ -7895,16 +7900,22 @@ public final class NativeMainActivity extends Activity {
 
 
     private void promptRetrospectiveAttendance(int registrationId, CheckBox control) {
-        EditText joined=input("زمان واقعی ورود: YYYY-MM-DD HH:mm:ss");
+        EditText joined=input("انتخاب تاریخ شمسی و ساعت ورود عضو");
         joined.setSingleLine(true);
+        joined.setFocusable(false);
+        final String[] joinedIso={""};
+        joined.setOnClickListener(v->NativeJalaliDateTimePicker.show(this,
+                joinedIso[0],true,(iso,jalali)->{
+                    joinedIso[0]=iso;joined.setText(jalali);
+                }));
         new android.app.AlertDialog.Builder(this)
             .setTitle("حضور پس از پایان برنامه")
-            .setMessage("برای اعتباردهی دقیق مسافت، زمان واقعی پیوستن عضو را به میلادی وارد کنید.")
+            .setMessage("برای محاسبه مسافت، تاریخ شمسی و ساعت واقعی ورود عضو را انتخاب کنید.")
             .setView(joined)
             .setNegativeButton("انصراف",(d,w)->restoreAttendanceToggle(control,false,registrationId))
             .setOnCancelListener(d->restoreAttendanceToggle(control,false,registrationId))
             .setPositiveButton("ثبت",(d,w)->{
-                String entered=joined.getText().toString().trim();
+                String entered=joinedIso[0];
                 if(!entered.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}")){
                     restoreAttendanceToggle(control,false,registrationId);
                     toast("زمان باید قالب YYYY-MM-DD HH:mm:ss داشته باشد.");return;
@@ -8007,7 +8018,13 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout form=glassCard(24);
         EditText title=input("عنوان");
-        EditText date=input("تاریخ/زمان: YYYY-MM-DD HH:mm:ss");
+        EditText date=input("تاریخ شمسی و ساعت ایران");
+        final String[] chosenProgramDate={event==null?"":event.optString("event_date","")};
+        date.setFocusable(false);
+        date.setOnClickListener(v->NativeJalaliDateTimePicker.show(this,
+                chosenProgramDate[0],true,(iso,jalali)->{
+                    chosenProgramDate[0]=iso;date.setText(jalali);
+                }));
         EditText distance=input("مسافت برنامه (km)");
         EditText meeting=input("محل شروع");
         EditText meetingLat=input("عرض جغرافیایی شروع");
@@ -8019,12 +8036,11 @@ public final class NativeMainActivity extends Activity {
         EditText desc=input("توضیحات");desc.setSingleLine(false);desc.setMinLines(3);
 
         if(editing){
-            title.setText(event.optString("title",""));date.setText(event.optString("event_date",""));distance.setText(event.optString("planned_distance",""));
+            title.setText(event.optString("title",""));date.setText(JalaliDate.format(chosenProgramDate[0],true));distance.setText(event.optString("planned_distance",""));
             meeting.setText(event.optString("meeting_location",""));meetingLat.setText(event.optString("meeting_lat",""));meetingLng.setText(event.optString("meeting_lng",""));
             route.setText(event.optString("route_name",""));finish.setText(event.optString("finish_location",""));finishLat.setText(event.optString("finish_lat",""));finishLng.setText(event.optString("finish_lng",""));desc.setText(event.optString("description",""));
         }
-        TextView jalali=text("نمایش: "+(date.getText().length()>0?JalaliDate.format(date.getText().toString(),true):"—"),11,false,MUTED);
-        date.setOnFocusChangeListener((v,has)->{if(!has)jalali.setText("نمایش: "+JalaliDate.format(date.getText().toString(),true));});
+        TextView jalali=text("با لمس تاریخ، تقویم شمسی و ساعت ایران باز می‌شود.",11,false,MUTED);
         form.addView(title);form.addView(date);form.addView(jalali);form.addView(distance);form.addView(meeting);form.addView(meetingLat);form.addView(meetingLng);form.addView(route);form.addView(finish);form.addView(finishLat);form.addView(finishLng);form.addView(desc);
 
         PedalActionView cover=action(PedalIconView.Icon.PLUS,"انتخاب تصویر کاور",PedalActionView.Style.OUTLINE);
@@ -8035,14 +8051,14 @@ public final class NativeMainActivity extends Activity {
         form.addView(save,fullActionLp(56));content.addView(form,cardLp());
 
         save.setOnClickListener(v->{
-            if(title.getText().toString().trim().isBlank()||date.getText().toString().trim().isBlank()){showInlineMessage("اطلاعات ناقص","عنوان و تاریخ برنامه الزامی است.",RED);return;}
+            if(title.getText().toString().trim().isBlank()||chosenProgramDate[0].isBlank()){showInlineMessage("اطلاعات ناقص","عنوان و تاریخ برنامه الزامی است.",RED);return;}
             save.setEnabled(false);
             io.execute(()->{
                 try{
                     JSONObject payload=new JSONObject()
                             .put("id",editing?event.optInt("id",0):0)
                             .put("title",title.getText().toString().trim())
-                            .put("event_date",date.getText().toString().trim())
+                            .put("event_date",chosenProgramDate[0])
                             .put("planned_distance",distance.getText().toString().trim())
                             .put("meeting_location",meeting.getText().toString().trim())
                             .put("meeting_lat",meetingLat.getText().toString().trim())
