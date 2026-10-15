@@ -40,6 +40,7 @@ public final class NativeRouteView extends View {
     private final List<P> navigationPoints = new ArrayList<>();
     private P currentPoint;
     private P targetPoint;
+    private JSONArray nearbyRiders=new JSONArray();
     private boolean showTargetLine = false;
     private boolean navigationMode;
     private boolean headingUpEnabled = true;
@@ -180,6 +181,11 @@ public final class NativeRouteView extends View {
     @Override public boolean performClick() {
         super.performClick();
         return true;
+    }
+
+    public void setNearbyRiders(JSONArray riders){
+        nearbyRiders=riders==null?new JSONArray():riders;
+        invalidate();
     }
 
     public void setPoints(JSONArray rows) {

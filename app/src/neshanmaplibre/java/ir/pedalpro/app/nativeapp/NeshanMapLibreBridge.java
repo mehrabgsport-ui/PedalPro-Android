@@ -55,6 +55,8 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private long lastCameraMs,lastMarkerMs,lastLineMs;
     private double lastCameraLat=Double.NaN,lastCameraLng=Double.NaN;
     private Marker rider,goal;
+    private JSONArray nearbyRiders=new JSONArray();
+    private final java.util.HashMap<Integer,Marker> otherRiderMarkers=new java.util.HashMap<>();
     private final android.util.SparseArray<org.maplibre.android.annotations.Icon> riderIcons = new android.util.SparseArray<>();
     private int currentRiderDirectionBucket = Integer.MIN_VALUE;
     private Polyline recorded,suggested;
@@ -124,11 +126,16 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 if(goal!=null){try{map.removeMarker(goal);}catch(Exception ignored){}}
                 if(recorded!=null){try{map.removePolyline(recorded);}catch(Exception ignored){}}
                 if(suggested!=null){try{map.removePolyline(suggested);}catch(Exception ignored){}}
+                for(Marker marker:otherRiderMarkers.values()){
+                    try{map.removeMarker(marker);}catch(Exception ignored){}
+                }
+                otherRiderMarkers.clear();
                 rider=null;goal=null;recorded=null;suggested=null;
                 currentRiderDirectionBucket=Integer.MIN_VALUE;
                 applyGeometry();
                 updateRiderMarker(true);
                 updateTargetMarker();
+                updateNearbyRiderMarkers();
                 updateCamera(true);
             });
     }
@@ -206,6 +213,42 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         lastMarkerMs=now;
     }
 
+    @Override public void setNearbyRiders(JSONArray riders){
+        nearbyRiders=riders==null?new JSONArray():riders;
+        updateNearbyRiderMarkers();
+    }
+    private void updateNearbyRiderMarkers(){
+        if(!ready||map==null)return;
+        java.util.HashSet<Integer> found=new java.util.HashSet<>();
+        for(int i=0;i<nearbyRiders.length();i++){
+            JSONObject p=nearbyRiders.optJSONObject(i);if(p==null)continue;
+            int id=p.optInt("ride_id",0);
+            double a=p.optDouble("lat",Double.NaN),b=p.optDouble("lng",Double.NaN);
+            if(id<=0||!Double.isFinite(a)||!Double.isFinite(b)||Math.abs(a)>85||Math.abs(b)>180
+                    ||p.optInt("age_seconds",99)>45)continue;
+            found.add(id);
+            String title=p.optString("display_name","رکاب‌زن")+" · "+
+                    String.format(java.util.Locale.US,"%.1f km/h · %d ثانیه قبل",
+                            p.optDouble("speed_kmh",0d),p.optInt("age_seconds",0));
+            Marker marker=otherRiderMarkers.get(id);
+            if(marker==null){
+                marker=map.addMarker(new MarkerOptions().position(new LatLng(a,b))
+                        .title(title).icon(bikeMapIcon(0)));
+                otherRiderMarkers.put(id,marker);
+            }else {
+                marker.setPosition(new LatLng(a,b));
+                marker.setTitle(title);
+                map.updateMarker(marker);
+            }
+        }
+        java.util.Iterator<java.util.Map.Entry<Integer,Marker>> it=otherRiderMarkers.entrySet().iterator();
+        while(it.hasNext()){
+            java.util.Map.Entry<Integer,Marker> e=it.next();
+            if(found.contains(e.getKey()))continue;
+            try{map.removeMarker(e.getValue());}catch(Exception ignored){}
+            it.remove();
+        }
+    }
     @Override public void setRecordedTrack(JSONArray data){
         recordedPoints=data;
         scheduleGeometry();

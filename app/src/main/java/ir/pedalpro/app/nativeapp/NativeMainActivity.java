@@ -175,6 +175,27 @@ public final class NativeMainActivity extends Activity {
     private String launchPage = "";
     private int launchEventId = 0;
     private PedalNeshanMapSurface activeRideRouteView;
+    private final Runnable nearbyRidersTick=new Runnable(){
+        @Override public void run(){
+            if(!"ride".equals(currentPage)||activeRideRouteView==null||activeRide==null)return;
+            final PedalNeshanMapSurface screen=activeRideRouteView;
+            io.execute(()->{
+                try{
+                    JSONObject result=api.get("pp_live_riders");
+                    JSONArray riders=result.optJSONArray("riders");
+                    main.post(()->{
+                        if(activeRideRouteView==screen&&"ride".equals(currentPage))
+                            screen.setNearbyRiders(riders);
+                    });
+                }catch(Exception e){
+                    main.post(()->{
+                        if(activeRideRouteView==screen)screen.setNearbyRiders(null);
+                    });
+                }
+            });
+            main.postDelayed(this,10000L);
+        }
+    };
     private int activeRideMapRideId;
     private long lastLiveTrackPointTime;
     private int lastLiveTrackRideId;
@@ -2152,6 +2173,8 @@ public final class NativeMainActivity extends Activity {
             seedDisplayMapFromLastLocation(activeRideRouteView);
         }
         content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
+        main.removeCallbacks(nearbyRidersTick);
+        main.post(nearbyRidersTick);
         loadActiveRideRoute();
 
         LinearLayout gps = glassCard(20);

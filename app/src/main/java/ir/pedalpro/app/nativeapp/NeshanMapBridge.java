@@ -15,6 +15,7 @@ public interface NeshanMapBridge {
     void setSuggestedRoute(JSONArray route);
     void setTarget(double lat, double lng);
     void focusOn(double lat, double lng);
+    void setNearbyRiders(JSONArray riders);
     void clearTarget();
     void zoomBy(int delta);
     void recenter();

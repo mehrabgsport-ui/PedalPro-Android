@@ -185,6 +185,10 @@ public final class PedalNeshanMapSurface extends FrameLayout {
         overlay.setTarget(lat,lng);
         if(sdkBridge!=null)sdkBridge.setTarget(lat,lng);
     }
+    public void setNearbyRiders(JSONArray riders){
+        if(sdkBridge!=null)sdkBridge.setNearbyRiders(riders);
+        else overlay.setNearbyRiders(riders);
+    }
     public void focusOn(double lat,double lng){
         if(sdkBridge!=null)sdkBridge.focusOn(lat,lng);
         else overlay.focusOn(lat,lng);
