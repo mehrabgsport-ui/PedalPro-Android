@@ -29,12 +29,15 @@ public final class NativeRouteView extends View {
     private final Paint route = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint live = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint roadRoute = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint roadRouteBorder = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint target = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint current = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public interface CameraListener { void onCameraChanged(double lat, double lng, int zoom); }
+    public interface MapTapListener { void onMapTap(double latitude,double longitude); }
     private CameraListener cameraListener;
+    private MapTapListener mapTapListener;
     private boolean externalBasemap;
     private final List<P> points = new ArrayList<>();
     private final List<P> navigationPoints = new ArrayList<>();
@@ -72,8 +75,13 @@ public final class NativeRouteView extends View {
         route.setStyle(Paint.Style.STROKE);
         route.setStrokeCap(Paint.Cap.ROUND);
         route.setStrokeJoin(Paint.Join.ROUND);
-        roadRoute.setColor(Color.rgb(255, 195, 62));
-        roadRoute.setStrokeWidth(dp(5));
+        roadRouteBorder.setColor(Color.rgb(229,254,255));
+        roadRouteBorder.setStrokeWidth(dp(11));
+        roadRouteBorder.setStyle(Paint.Style.STROKE);
+        roadRouteBorder.setStrokeCap(Paint.Cap.ROUND);
+        roadRouteBorder.setStrokeJoin(Paint.Join.ROUND);
+        roadRoute.setColor(Color.rgb(13,201,219));
+        roadRoute.setStrokeWidth(dp(7));
         roadRoute.setStyle(Paint.Style.STROKE);
         roadRoute.setStrokeCap(Paint.Cap.ROUND);
         roadRoute.setStrokeJoin(Paint.Join.ROUND);
@@ -90,6 +98,21 @@ public final class NativeRouteView extends View {
         setContentDescription("نقشه مسیر؛ حرکت با کشیدن انگشت، بزرگ‌نمایی با دو انگشت، بازگشت به مسیر با لمس طولانی");
         tapDetector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener() {
             @Override public boolean onDown(MotionEvent e) { return true; }
+            @Override public boolean onSingleTapConfirmed(MotionEvent e) {
+                if(mapTapListener!=null&&Double.isFinite(cameraLat)&&Double.isFinite(cameraLng)){
+                    // Map selection is done on the north-up raster canvas.
+                    double world=PedalMapTiles.TILE*(double)(1<<cameraZoom);
+                    double px=PedalMapTiles.worldX(cameraLng,cameraZoom)+e.getX()-getWidth()*.5;
+                    double py=PedalMapTiles.worldY(cameraLat,cameraZoom)+e.getY()-getHeight()*.5;
+                    double longitude=px/world*360d-180d;
+                    double mercator=Math.PI*(1d-2d*Math.max(0d,Math.min(world,py))/world);
+                    double latitude=Math.toDegrees(Math.atan(Math.sinh(mercator)));
+                    if(Math.abs(latitude)<=85.05112878&&Math.abs(longitude)<=180)
+                        mapTapListener.onMapTap(latitude,longitude);
+                    return true;
+                }
+                return false;
+            }
             @Override public boolean onDoubleTap(MotionEvent e) {
                 zoomBy(1);
                 return true;
@@ -281,6 +304,7 @@ public final class NativeRouteView extends View {
     }
 
     public void setCameraListener(CameraListener listener) { cameraListener = listener; }
+    public void setOnMapTapListener(MapTapListener listener){ mapTapListener=listener; }
 
     public void zoomBy(int amount) {
         if(navigationMode && !userCamera) {
@@ -421,6 +445,7 @@ public final class NativeRouteView extends View {
                 if (firstRoad) { road.moveTo(x,y); firstRoad = false; }
                 else road.lineTo(x,y);
             }
+            canvas.drawPath(road, roadRouteBorder);
             canvas.drawPath(road, roadRoute);
         }
 

@@ -8034,6 +8034,80 @@ public final class NativeMainActivity extends Activity {
         });
     }
 
+
+    /** Native touch-to-select program start, independent of GPS recording. */
+    private void showEventPointPicker(EditText latitudeField,EditText longitudeField){
+        Dialog dialog=new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout host=glassCard(20);
+        host.setOrientation(LinearLayout.VERTICAL);
+        host.setPadding(dp(12),dp(12),dp(12),dp(12));
+        host.addView(text("انتخاب موقعیت شروع برنامه",17,true,TEXT));
+        host.addView(text("روی نقشه لمس کنید یا موقعیت فعلی GPS را انتخاب کنید.",11,false,MUTED));
+        NativeRouteView map=new NativeRouteView(this);
+        map.setNavigationMode(false);
+        final double[] choice={Double.NaN,Double.NaN};
+        TextView coordinates=text("موقعیتی انتخاب نشده است.",12,true,MUTED);
+        double oldLat=Double.NaN,oldLng=Double.NaN;
+        try{
+            oldLat=Double.parseDouble(JalaliDate.en(latitudeField.getText().toString()));
+            oldLng=Double.parseDouble(JalaliDate.en(longitudeField.getText().toString()));
+        }catch(Exception ignored){}
+        if(Double.isFinite(oldLat)&&Double.isFinite(oldLng)&&Math.abs(oldLat)<=85&&Math.abs(oldLng)<=180){
+            choice[0]=oldLat;choice[1]=oldLng;
+            coordinates.setText(String.format(Locale.US,"%.6f, %.6f",oldLat,oldLng));
+            map.setTarget(oldLat,oldLng);
+        }else map.setTarget(36.2605,59.6168);
+        map.setOnMapTapListener((lat,lng)->{
+            choice[0]=lat;choice[1]=lng;
+            map.setTarget(lat,lng);
+            coordinates.setText(String.format(Locale.US,"%.6f, %.6f",lat,lng));
+        });
+        host.addView(map,new LinearLayout.LayoutParams(-1,dp(340)));
+        host.addView(coordinates);
+        Button gps=normalButton("موقعیت فعلی GPS");
+        gps.setOnClickListener(v->{
+            if(ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)
+                    !=PackageManager.PERMISSION_GRANTED&&
+                    ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_COARSE_LOCATION)
+                    !=PackageManager.PERMISSION_GRANTED){
+                toast("مجوز موقعیت مکانی برای این گزینه لازم است.");return;
+            }
+            LocationServices.getFusedLocationProviderClient(this).getLastLocation()
+                    .addOnSuccessListener(location->{
+                        if(location==null){toast("موقعیت فعلی در دسترس نیست.");return;}
+                        double lat=location.getLatitude(),lng=location.getLongitude();
+                        if(!Double.isFinite(lat)||!Double.isFinite(lng))return;
+                        choice[0]=lat;choice[1]=lng;map.setTarget(lat,lng);
+                        coordinates.setText(String.format(Locale.US,"%.6f, %.6f",lat,lng));
+                    }).addOnFailureListener(e->toast("دریافت GPS انجام نشد."));
+        });
+        host.addView(gps);
+        Button confirm=primaryButton("تأیید موقعیت شروع");
+        confirm.setOnClickListener(v->{
+            if(!Double.isFinite(choice[0])||!Double.isFinite(choice[1])){
+                toast("ابتدا موقعیت را روی نقشه انتخاب کنید.");return;
+            }
+            latitudeField.setText(String.format(Locale.US,"%.7f",choice[0]));
+            longitudeField.setText(String.format(Locale.US,"%.7f",choice[1]));
+            dialog.dismiss();
+            toast("موقعیت شروع برنامه انتخاب شد.");
+        });
+        host.addView(confirm);
+        dialog.setContentView(host);
+        dialog.show();
+        Window window=dialog.getWindow();
+        if(window!=null){
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams lp=new WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            lp.width=Math.min(dp(680),getResources().getDisplayMetrics().widthPixels-dp(20));
+            lp.height=WindowManager.LayoutParams.WRAP_CONTENT;
+            lp.gravity=Gravity.CENTER;
+            window.setAttributes(lp);
+        }
+    }
+
     private void showEventEditor(JSONObject event) {
         boolean editing=event!=null;
         pendingEditorCoverUri=null;
@@ -8053,6 +8127,10 @@ public final class NativeMainActivity extends Activity {
         EditText meeting=input("محل شروع");
         EditText meetingLat=input("عرض جغرافیایی شروع");
         EditText meetingLng=input("طول جغرافیایی شروع");
+        meetingLat.setVisibility(View.GONE);
+        meetingLng.setVisibility(View.GONE);
+        Button selectStartOnMap=normalButton("انتخاب محل شروع از روی نقشه");
+        selectStartOnMap.setOnClickListener(v->showEventPointPicker(meetingLat,meetingLng));
         EditText route=input("نام مسیر");
         EditText finish=input("محل پایان");
         EditText finishLat=input("عرض جغرافیایی پایان");
@@ -8065,7 +8143,10 @@ public final class NativeMainActivity extends Activity {
             route.setText(event.optString("route_name",""));finish.setText(event.optString("finish_location",""));finishLat.setText(event.optString("finish_lat",""));finishLng.setText(event.optString("finish_lng",""));desc.setText(event.optString("description",""));
         }
         TextView jalali=text("با لمس تاریخ، تقویم شمسی و ساعت ایران باز می‌شود.",11,false,MUTED);
-        form.addView(title);form.addView(date);form.addView(jalali);form.addView(distance);form.addView(meeting);form.addView(meetingLat);form.addView(meetingLng);form.addView(route);form.addView(finish);form.addView(finishLat);form.addView(finishLng);form.addView(desc);
+        form.addView(title);form.addView(date);form.addView(jalali);form.addView(distance);
+        form.addView(meeting);form.addView(selectStartOnMap);
+        form.addView(meetingLat);form.addView(meetingLng);
+        form.addView(route);form.addView(finish);form.addView(finishLat);form.addView(finishLng);form.addView(desc);
 
         PedalActionView cover=action(PedalIconView.Icon.PLUS,"انتخاب تصویر کاور",PedalActionView.Style.OUTLINE);
         cover.setOnClickListener(v->pickImage(REQ_EVENT_COVER));

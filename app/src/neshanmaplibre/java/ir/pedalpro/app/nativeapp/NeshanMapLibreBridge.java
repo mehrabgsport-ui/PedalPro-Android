@@ -332,7 +332,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
             }
         }
         if(route.size()>1)suggested=map.addPolyline(new PolylineOptions()
-                .addAll(route).color(Color.rgb(255,194,43)).width(8f));
+                .addAll(route).color(Color.rgb(13,201,219)).width(9f));
         lastLineMs=SystemClock.elapsedRealtime();
     }
 
