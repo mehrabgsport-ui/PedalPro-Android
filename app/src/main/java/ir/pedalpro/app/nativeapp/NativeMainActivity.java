@@ -247,6 +247,9 @@ public final class NativeMainActivity extends Activity {
             if (rideTimer != null && activeRide != null) {
                 rideTimer.setText(formatDuration(displayedRideSeconds()));
             }
+            if(rideSpeed!=null&&activeRide!=null)
+                rideSpeed.setText(String.format(Locale.US,"%.1f",
+                        speedFilter.current(SystemClock.elapsedRealtime(),manualPaused)));
             main.postDelayed(this, 1000L);
         }
     };

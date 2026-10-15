@@ -22,7 +22,7 @@ public final class RideSpeedDisplayFilter {
         }
         if(firstInvalidMs==0L)firstInvalidMs=monotonicMs;
         long elapsed=monotonicMs-Math.max(lastReliableMs,firstInvalidMs);
-        if(lastReliableMs==0 || elapsed>7000L){speedKmh=0;initialized=false;return 0;}
+        if(lastReliableMs==0 || elapsed>=7000L){speedKmh=0;initialized=false;return 0;}
         if(elapsed>4500L)speedKmh=Math.max(0,speedKmh*.65);
         return speedKmh;
     }

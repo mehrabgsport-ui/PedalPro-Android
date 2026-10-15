@@ -58,6 +58,8 @@ public final class LowPowerRideActivity extends Activity {
         @Override public void run(){
             long sec=displaySeconds();
             if(time!=null)time.setText(format(sec));
+            if(speed!=null)speed.setText(String.format(Locale.US,"%.1f",
+                    speedFilter.current(SystemClock.elapsedRealtime(),paused)));
             main.postDelayed(this,1000L);
         }
     };
