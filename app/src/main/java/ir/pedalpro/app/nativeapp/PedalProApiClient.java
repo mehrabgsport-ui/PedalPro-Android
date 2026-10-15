@@ -65,7 +65,15 @@ public final class PedalProApiClient {
                                     boolean retried419) throws Exception {
         String boundary="----PedalPro"+System.currentTimeMillis();
         HttpURLConnection c=null;
+        java.io.File optimizedPhoto=null;
+        Uri actualPhoto=fileUri;
+        String actualMime=mimeType;
         try{
+            if(fileUri!=null&&"photo".equals(fileField)&&!"medal_image_upload".equals(action)){
+                optimizedPhoto=RideImageCompressor.prepare(context,fileUri);
+                actualPhoto=Uri.fromFile(optimizedPhoto);
+                actualMime="image/jpeg";
+            }
             URL url=new URL(BASE_URL+"?action="+java.net.URLEncoder.encode(action,StandardCharsets.UTF_8.name()));
             c=(HttpURLConnection)url.openConnection();
             c.setConnectTimeout(12000);c.setReadTimeout(30000);c.setRequestMethod("POST");c.setDoOutput(true);
@@ -78,12 +86,13 @@ public final class PedalProApiClient {
                     writeTextPart(out,boundary,e.getKey(),e.getValue()==null?"":e.getValue());
                 }
                 if(fileUri!=null){
-                    String safeName=(fileName==null||fileName.isBlank())?"image.jpg":fileName;
-                    String type=(mimeType==null||mimeType.isBlank())?"image/jpeg":mimeType;
+                    String safeName=optimizedPhoto!=null?"pedalpro-photo.jpg":
+                            (fileName==null||fileName.isBlank()?"image.jpg":fileName);
+                    String type=actualMime==null||actualMime.isBlank()?"image/jpeg":actualMime;
                     out.writeBytes("--"+boundary+"\r\n");
                     out.writeBytes("Content-Disposition: form-data; name=\""+fileField+"\"; filename=\""+safeName.replace("\"","")+"\"\r\n");
                     out.writeBytes("Content-Type: "+type+"\r\n\r\n");
-                    try(InputStream in=context.getContentResolver().openInputStream(fileUri)){
+                    try(InputStream in=context.getContentResolver().openInputStream(actualPhoto)){
                         if(in==null)throw new IllegalStateException("فایل انتخاب‌شده قابل خواندن نیست.");
                         byte[] buf=new byte[16384];int n;while((n=in.read(buf))>0)out.write(buf,0,n);
                     }
@@ -103,7 +112,10 @@ public final class PedalProApiClient {
             }
             if(status<200||status>=300||!json.optBoolean("ok",true))throw new IllegalStateException(json.optString("error","HTTP "+status));
             return json;
-        }finally{if(c!=null)c.disconnect();}
+        }finally{
+            if(c!=null)c.disconnect();
+            if(optimizedPhoto!=null)optimizedPhoto.delete();
+        }
     }
 
     public JSONObject postMultipartChunk(

@@ -232,7 +232,6 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     .putBoolean("finish_prepared", false)
                     .remove("finish_ride_id")
                     .putInt("ride_id", rideId)
-                    .putString("csrf", intent.getStringExtra("csrf"))
                     .putFloat("max_accuracy", Math.max(18f, Math.min(30f, requestedAccuracy)))
                     .putFloat("max_speed_kmh", Math.max(40f, Math.min(75f, requestedMaxSpeed)))
                     .putLong("interval_ms", 1000L)
@@ -1217,7 +1216,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             c.setRequestProperty("Accept", "application/json");
-            c.setRequestProperty("X-CSRF-Token", prefs.getString("csrf", ""));
+            c.setRequestProperty("X-CSRF-Token",
+                    new ir.pedalpro.app.nativeapp.SessionStore(this).csrf());
             String cookie = effectiveSessionCookie();
             if (!cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
 
@@ -1268,7 +1268,6 @@ public class TrackingService extends Service implements LocationListener, Sensor
                 neshanServiceKey = serviceKey.trim();
                 editor.putString("neshan_service_key", neshanServiceKey);
             }
-            if (!newToken.isEmpty()) editor.putString("csrf", newToken);
             editor.apply();
             return !newToken.isEmpty();
         } catch (Exception e) {
@@ -1294,13 +1293,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private String nativeSessionCookie() {
-        try {
-            String cookie = getSharedPreferences("pedalpro_native_session", MODE_PRIVATE)
-                    .getString("cookie", "");
-            return cookie == null ? "" : cookie;
-        } catch (Throwable ignored) {
-            return "";
-        }
+        return new ir.pedalpro.app.nativeapp.SessionStore(this).cookie();
     }
 
     private String effectiveSessionCookie() {

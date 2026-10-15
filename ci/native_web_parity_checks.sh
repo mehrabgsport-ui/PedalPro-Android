@@ -218,6 +218,8 @@ expect "$NATIVE/LowPowerRideActivity.java" 'speedFilter.update(' "OLED ride spee
 expect "$NATIVE/NativeMainActivity.java" 'FLAG_KEEP_SCREEN_ON' "Native active ride keeps the display on"
 expect "$NATIVE/NativeLiveNavigationActivity.java" 'FLAG_KEEP_SCREEN_ON' "Native live navigation keeps display on"
 expect "$NATIVE/RemoteImageLoader.java" 'setInstanceFollowRedirects(false)' "Private cookies cannot follow remote image redirects"
+expect "$NATIVE/SessionStore.java" 'AES/GCM/NoPadding' "Native session protected in Android Keystore"
+expect "$NATIVE/PedalProApiClient.java" 'RideImageCompressor.prepare(context,fileUri)' "Photo optimization before upload"
 expect "$NATIVE/NativeRideDetailActivity.java" 'Keep the map directly above' "Ride profile positioned next to map"
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'metricCodes.get(' "Medal criteria must be a controlled selector"
 expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"
