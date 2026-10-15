@@ -28,6 +28,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private TextView navigationControl;
     private boolean night=true;
     private boolean traffic;
+    private boolean alternateTiles;
 
     public PedalNeshanMapSurface(Context context) {
         super(context);
@@ -184,6 +185,13 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     public void setTarget(double lat,double lng){
         overlay.setTarget(lat,lng);
         if(sdkBridge!=null)sdkBridge.setTarget(lat,lng);
+    }
+    /** Explicit fallback when Neshan vector tiles are unavailable on a device. */
+    public void useAlternativeTiles(boolean enabled){
+        alternateTiles=enabled;
+        if(sdkMap!=null)sdkMap.setVisibility(enabled?View.GONE:View.VISIBLE);
+        overlay.setVisibility(enabled||sdkBridge==null?View.VISIBLE:View.GONE);
+        overlay.setExternalBasemap(!enabled&&sdkBridge!=null);
     }
     public void setNearbyRiders(JSONArray riders){
         if(sdkBridge!=null)sdkBridge.setNearbyRiders(riders);

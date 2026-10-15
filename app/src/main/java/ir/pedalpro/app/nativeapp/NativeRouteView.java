@@ -226,7 +226,8 @@ public final class NativeRouteView extends View {
 
     public void focusOn(double lat,double lng){
         if(!Double.isFinite(lat)||!Double.isFinite(lng))return;
-        cameraLat=lat;cameraLng=lng;userCamera=false;invalidate();
+        userCamera=true;userLat=lat;userLng=lng;userZoom=Math.max(13,cameraZoom);
+        invalidate();
     }
 
     public void setTarget(double lat, double lng) {
@@ -435,6 +436,21 @@ public final class NativeRouteView extends View {
         if (currentPoint != null && (!navigationMode || userCamera)) {
             canvas.drawCircle(projectX(currentPoint.lng, b, w, pad),
                     projectY(currentPoint.lat, b, h, pad), dp(7), current);
+        }
+        // Fallback renderer also shows the authorized nearby active riders.
+        for(int i=0;i<nearbyRiders.length()&&i<80;i++){
+            JSONObject other=nearbyRiders.optJSONObject(i);
+            if(other==null||other.optInt("age_seconds",99)>45)continue;
+            double latitude=other.optDouble("lat",Double.NaN);
+            double longitude=other.optDouble("lng",Double.NaN);
+            if(!Double.isFinite(latitude)||!Double.isFinite(longitude))continue;
+            float ox=projectX(longitude,b,w,pad),oy=projectY(latitude,b,h,pad);
+            Paint otherPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+            otherPaint.setColor(Color.rgb(255,157,52));
+            canvas.drawCircle(ox,oy,dp(7),otherPaint);
+            otherPaint.setColor(Color.WHITE);otherPaint.setTextSize(dp(10));
+            String name=other.optString("display_name","دوچرخه‌سوار");
+            canvas.drawText(name,ox+dp(10),oy-dp(8),otherPaint);
         }
         if (targetPoint != null) {
             canvas.drawCircle(projectX(targetPoint.lng, b, w, pad),

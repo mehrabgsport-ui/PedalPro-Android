@@ -7762,6 +7762,25 @@ public final class NativeMainActivity extends Activity {
             LinearLayout.LayoutParams mapLp = new LinearLayout.LayoutParams(-1, dp(250));
             mapLp.setMargins(0, dp(12), 0, 0);
             box.addView(map, mapLp);
+            LinearLayout mapActions=new LinearLayout(this);
+            mapActions.setOrientation(LinearLayout.HORIZONTAL);
+            mapActions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            Button fallback=normal("نقشه جایگزین");
+            fallback.setOnClickListener(v->{
+                map.useAlternativeTiles(true);
+                fallback.setText("نقشه جایگزین فعال شد");
+            });
+            Button external=normal("بازکردن در نشان");
+            external.setOnClickListener(v->{
+                try{
+                    android.net.Uri uri=android.net.Uri.parse(
+                            "geo:"+lat+","+lng+"?q="+lat+","+lng);
+                    startActivity(new Intent(Intent.ACTION_VIEW,uri));
+                }catch(Exception e){toast("نقشه خارجی روی گوشی در دسترس نیست.");}
+            });
+            mapActions.addView(fallback,new LinearLayout.LayoutParams(0,dp(48),1f));
+            mapActions.addView(external,new LinearLayout.LayoutParams(0,dp(48),1f));
+            box.addView(mapActions);
         }
 
         JSONObject eventRide = null;
