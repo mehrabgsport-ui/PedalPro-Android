@@ -116,6 +116,7 @@ public final class NativeMainActivity extends Activity {
     private TextView rideTimer;
     private TextView rideGps;
     private TextView rideSpeed;
+    private final RideSpeedDisplayFilter speedFilter = new RideSpeedDisplayFilter();
     private TextView rideDistance;
     private View navHome;
     private View navActivities;
@@ -249,7 +250,9 @@ public final class NativeMainActivity extends Activity {
                     if (incomingRideId <= 0 || incomingRideId != currentRideId) return;
                     double mps = j.optDouble("speed_mps", 0);
                     double acc = j.optDouble("accuracy", -1);
-                    if (rideSpeed != null) rideSpeed.setText(String.format(Locale.US, "%.1f", Math.max(0, mps * 3.6)));
+                    double filteredKmh = speedFilter.update(mps * 3.6, j.optBoolean("recorded", false),
+                            SystemClock.elapsedRealtime(), manualPaused);
+                    if (rideSpeed != null) rideSpeed.setText(String.format(Locale.US, "%.1f", filteredKmh));
                     if (activeRideRouteView != null) {
                         double lat = j.optDouble("lat", Double.NaN), lng = j.optDouble("lng", Double.NaN);
                         if (Double.isFinite(lat) && Double.isFinite(lng)
@@ -5231,7 +5234,7 @@ public final class NativeMainActivity extends Activity {
             long elapsed=rideTimerAnchorElapsed>0?Math.max(0,(SystemClock.elapsedRealtime()-rideTimerAnchorElapsed)/1000L):0;
             rideBaseSeconds+=elapsed;rideTimerAnchorElapsed=0;manualPaused=true;
             Intent stop=new Intent(this,TrackingService.class);stop.setAction(TrackingService.ACTION_STOP);startService(stop);
-            if(rideSpeed!=null)rideSpeed.setText("0.0");if(rideGps!=null){rideGps.setText("توقف دستی · GPS موقتاً متوقف");rideGps.setTextColor(ORANGE);}
+            speedFilter.reset();if(rideSpeed!=null)rideSpeed.setText("0.0");if(rideGps!=null){rideGps.setText("توقف دستی · GPS موقتاً متوقف");rideGps.setTextColor(ORANGE);}
             button.setLabel("ادامه ثبت");
         }else{
             manualPaused=false;rideTimerAnchorElapsed=SystemClock.elapsedRealtime();startTrackingService(rideId);

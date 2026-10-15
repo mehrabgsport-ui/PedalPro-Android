@@ -118,7 +118,14 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 if(destroyed)return;
                 ready=true;
                 // Rebuild annotations because changing a vector style may clear layers.
+                // Old annotations may persist across a style reload in MapLibre.
+                // Remove the previous rider before recreating the layer to prevent ghosts.
+                if(rider!=null){try{map.removeMarker(rider);}catch(Exception ignored){}}
+                if(goal!=null){try{map.removeMarker(goal);}catch(Exception ignored){}}
+                if(recorded!=null){try{map.removePolyline(recorded);}catch(Exception ignored){}}
+                if(suggested!=null){try{map.removePolyline(suggested);}catch(Exception ignored){}}
                 rider=null;goal=null;recorded=null;suggested=null;
+                currentRiderDirectionBucket=Integer.MIN_VALUE;
                 applyGeometry();
                 updateRiderMarker(true);
                 updateTargetMarker();

@@ -48,6 +48,7 @@ public final class LowPowerRideActivity extends Activity {
     private boolean paused;
     private TextView time;
     private TextView speed;
+    private final RideSpeedDisplayFilter speedFilter = new RideSpeedDisplayFilter();
     private TextView distance;
     private PedalIconView pauseIcon;
     private FrameLayout pauseControl;
@@ -69,7 +70,10 @@ public final class LowPowerRideActivity extends Activity {
             try{
                 JSONObject j=new JSONObject(payload);
                 if(!paused&&speed!=null){
-                    speed.setText(String.format(Locale.US,"%.1f",Math.max(0,j.optDouble("speed_mps",0)*3.6)));
+                    double shown=speedFilter.update(j.optDouble("speed_mps",0)*3.6,
+                            j.optBoolean("recorded",false),
+                            SystemClock.elapsedRealtime(),paused);
+                    speed.setText(String.format(Locale.US,"%.1f",shown));
                 }
                 String response=j.optString("response","");
                 if(!response.isBlank()){
@@ -201,6 +205,7 @@ public final class LowPowerRideActivity extends Activity {
             baseSeconds+=elapsed;
             anchor=0;
             paused=true;
+            speedFilter.reset();
             speed.setText("0.0");
             pauseIcon.setIcon(PedalIconView.Icon.PLAY);
             pauseIcon.setContentDescription("ادامه ثبت");
