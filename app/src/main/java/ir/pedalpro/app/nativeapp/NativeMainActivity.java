@@ -2591,6 +2591,11 @@ public final class NativeMainActivity extends Activity {
         LinearLayout controls=glassCard(22);
         EditText search=input("جست‌وجوی نام گروه یا برنامه");
         controls.addView(search);
+        PedalActionView manageGroups=action(PedalIconView.Icon.GROUP,
+                "ایجاد گروه، مدیریت دعوت‌ها و چت",PedalActionView.Style.PRIMARY);
+        manageGroups.setOnClickListener(v->startActivity(
+                new Intent(this,NativeGroupsActivity.class)));
+        controls.addView(manageGroups,fullActionLp(50));
         content.addView(controls,cardLp());
         LinearLayout results=new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);

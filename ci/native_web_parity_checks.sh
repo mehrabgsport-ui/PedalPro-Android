@@ -387,3 +387,7 @@ if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
 printf 'Native parity structural guards passed. Build/device and source-reference QA remain separate gates.\n'
+
+expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_create' "Groups creation uses authenticated server endpoint"
+expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_answer' "Group invite responses submitted to server"
+expect "$NATIVE/NativeGroupChatActivity.java" 'pp_group_message_send' "Group chat submit is authenticated"
