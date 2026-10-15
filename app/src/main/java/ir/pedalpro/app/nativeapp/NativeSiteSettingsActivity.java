@@ -854,6 +854,29 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 row.addView(text(u.optString("display_name",u.optString("username","کاربر")), 14, true, TEXT));
                 row.addView(text("@"+u.optString("username","")+" · "+u.optString("role","member")+" · "+(u.optInt("is_active",1)==1?"فعال":"غیرفعال"), 10, false, MUTED));
                 row.addView(text("شماره تماس: "+UiSafeText.display(u.optString("phone","")),11,false,MUTED));
+                TextView baleStatus=text("وضعیت ربات بله: در حال بررسی…",10,false,MUTED);
+                row.addView(baleStatus);
+                int baleUserId=u.optInt("id",0);
+                if(baleUserId>0){
+                    io.execute(()->{
+                        try{
+                            JSONObject linked=api.post("bale_connected_users",new JSONObject()
+                                .put("search",u.optString("username","")).put("page",1).put("per_page",50));
+                            JSONArray connections=linked.optJSONArray("users");
+                            boolean connected=false;
+                            if(connections!=null)for(int bi=0;bi<connections.length();bi++){
+                                JSONObject p=connections.optJSONObject(bi);
+                                if(p!=null&&p.optInt("user_id",0)==baleUserId){
+                                    connected=true;break;
+                                }
+                            }
+                            final boolean yes=connected;
+                            main.post(()->baleStatus.setText("وضعیت ربات بله: "+
+                                (yes?"متصل":"اتصال در فهرست فعلی تأیید نشد")));
+                        }catch(Exception ignored){main.post(()->baleStatus.setText(
+                            "وضعیت ربات بله: نامشخص — خطای دریافت وضعیت")); }
+                    });
+                }
                 Button editUser=normal("ویرایش مشخصات");
                 row.addView(editUser);
                 editUserButtons.add(editUser);

@@ -67,6 +67,7 @@
         <activity android:name=".nativeapp.NativePerformanceActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeChatActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeGroupsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeFollowListActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeGroupChatActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeAiActivity" android:exported="false" />
         <activity android:name=".nativeapp.NativeSensorsActivity" android:exported="false" />

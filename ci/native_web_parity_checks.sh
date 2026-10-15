@@ -391,3 +391,6 @@ printf 'Native parity structural guards passed. Build/device and source-referenc
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_create' "Groups creation uses authenticated server endpoint"
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_answer' "Group invite responses submitted to server"
 expect "$NATIVE/NativeGroupChatActivity.java" 'pp_group_message_send' "Group chat submit is authenticated"
+
+expect "$NATIVE/NativeFollowListActivity.java" 'pp_follow_list' "Profile follower lists server-authorized"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'وضعیت ربات بله' "Admin member Bale status displayed"

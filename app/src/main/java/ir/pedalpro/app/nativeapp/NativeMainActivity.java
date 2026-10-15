@@ -178,6 +178,7 @@ public final class NativeMainActivity extends Activity {
     private boolean serverOnline = false;
     private String launchPage = "";
     private int launchEventId = 0;
+    private int launchMemberId = 0;
     private PedalNeshanMapSurface activeRideRouteView;
     private final Runnable nearbyRidersTick=new Runnable(){
         @Override public void run(){
@@ -415,6 +416,7 @@ public final class NativeMainActivity extends Activity {
         launchPage = intent.getStringExtra("page");
         if (launchPage == null) launchPage = "";
         launchEventId = intent.getIntExtra("event_id", 0);
+        launchMemberId = intent.getIntExtra("member_id",0);
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -426,6 +428,19 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void handleLaunchPage() {
+        if(launchMemberId>0&&bootstrap!=null){
+            int wanted=launchMemberId;launchMemberId=0;launchPage="";
+            showClub();
+            JSONArray people=bootstrap.optJSONArray("members");
+            if(people!=null)for(int i=0;i<people.length();i++){
+                JSONObject person=people.optJSONObject(i);
+                if(person!=null&&person.optInt("id",0)==wanted){
+                    showMemberDialog(person);return;
+                }
+            }
+            toast("پروفایل این عضو در فهرست مجاز فعلی موجود نیست.");
+            return;
+        }
         if (launchEventId > 0) {
             JSONObject requested = findEvent(launchEventId);
             if (requested != null) showEventDetail(requested);
@@ -1574,6 +1589,14 @@ public final class NativeMainActivity extends Activity {
         return null;
     }
 
+    private void openFollowList(int memberId,String kind){
+        if(memberId<=0)return;
+        Intent i=new Intent(this,NativeFollowListActivity.class);
+        i.putExtra(NativeFollowListActivity.EXTRA_USER_ID,memberId);
+        i.putExtra(NativeFollowListActivity.EXTRA_KIND,kind);
+        startActivity(i);
+    }
+
     private void showMemberDialog(JSONObject member){
         if(member==null)return;
         Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -1601,6 +1624,18 @@ public final class NativeMainActivity extends Activity {
         stats.addView(memberStat("رکاب‌زنی",JalaliDate.fa(member.optInt("rides_count",0))),new LinearLayout.LayoutParams(0,-2,1f));
         stats.addView(memberStat("چالش",JalaliDate.fa(member.optInt("challenges_count",0))),new LinearLayout.LayoutParams(0,-2,1f));
         LinearLayout.LayoutParams statLp=new LinearLayout.LayoutParams(-1,-2);statLp.setMargins(0,dp(14),0,0);box.addView(stats,statLp);
+        int selectedMemberId=member.optInt("id",0);
+        LinearLayout followRow=new LinearLayout(this);followRow.setOrientation(LinearLayout.HORIZONTAL);
+        followRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        Button followers=normalButton("دنبال‌کنندگان "+(member.has("followers_count")?
+                JalaliDate.fa(member.optInt("followers_count")):""));
+        Button following=normalButton("دنبال‌شوندگان "+(member.has("following_count")?
+                JalaliDate.fa(member.optInt("following_count")):""));
+        followers.setOnClickListener(v->openFollowList(selectedMemberId,"followers"));
+        following.setOnClickListener(v->openFollowList(selectedMemberId,"following"));
+        followRow.addView(followers,new LinearLayout.LayoutParams(0,dp(48),1f));
+        followRow.addView(following,new LinearLayout.LayoutParams(0,dp(48),1f));
+        box.addView(followRow,fullWrapLp(10));
 
         java.util.ArrayList<JSONObject> bikes=memberBikes(member);
         box.addView(text("دوچرخه‌ها",16,true,TEXT),fullWrapLp(12));
@@ -4919,6 +4954,18 @@ public final class NativeMainActivity extends Activity {
             profile.addView(stats);
         }
         content.addView(profile,cardLp());
+        if(user!=null&&user.optInt("id",0)>0){
+            int followUserId=user.optInt("id",0);
+            LinearLayout followRow=new LinearLayout(this);
+            followRow.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            Button followers=normalButton("دنبال‌کنندگان");
+            Button following=normalButton("دنبال‌شوندگان");
+            followers.setOnClickListener(v->openFollowList(followUserId,"followers"));
+            following.setOnClickListener(v->openFollowList(followUserId,"following"));
+            followRow.addView(followers,new LinearLayout.LayoutParams(0,dp(50),1f));
+            followRow.addView(following,new LinearLayout.LayoutParams(0,dp(50),1f));
+            content.addView(followRow,cardLp());
+        }
 
         PedalActionView edit=action(PedalIconView.Icon.EDIT,"ویرایش پروفایل و شماره تماس",PedalActionView.Style.PRIMARY);edit.setOnClickListener(v->showProfileEditor());content.addView(edit,fullActionLp(54));
         LinearLayout baleInfo=glassCard(20);
