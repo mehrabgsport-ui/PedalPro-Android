@@ -225,6 +225,8 @@ expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLib
 tmp_speed_qa="$(mktemp -d)"
 javac -d "$tmp_speed_qa" "$NATIVE/RideSpeedDisplayFilter.java" "$ROOT/ci/RideSpeedDisplayFilterTest.java"
 java -cp "$tmp_speed_qa" ir.pedalpro.app.nativeapp.RideSpeedDisplayFilterTest
+javac -d "$tmp_speed_qa" "$NATIVE/RideProfileTime.java" "$ROOT/ci/RideProfileTimeTest.java"
+java -cp "$tmp_speed_qa" ir.pedalpro.app.nativeapp.RideProfileTimeTest
 rm -rf "$tmp_speed_qa"
 
 # RC21: no direct raw GPS start point may bypass the TrackingService filter.

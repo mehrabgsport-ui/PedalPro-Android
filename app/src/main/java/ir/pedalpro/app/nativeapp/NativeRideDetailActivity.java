@@ -41,6 +41,7 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
     private int selectedProfileIndex=-1;
     private NativeRideProfileView.Mode profileMode=NativeRideProfileView.Mode.ELEVATION;
     private long lastScrubAt;
+    private long lastProfileMapFocusAt;
 
     private final Runnable livePoll=new Runnable(){
         @Override public void run(){
@@ -212,7 +213,12 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
             lastScrubAt=android.os.SystemClock.elapsedRealtime();
             double latitude=point.optDouble("lat",Double.NaN);
             double longitude=point.optDouble("lng",Double.NaN);
-            if(profileMap!=null&&Double.isFinite(latitude)&&Double.isFinite(longitude)){
+            long scrubNow=android.os.SystemClock.elapsedRealtime();
+            // Do not enqueue hundreds of camera animations per second on long rides.
+            // ACTION_UP always applies the final selected GPS position.
+            if(profileMap!=null&&Double.isFinite(latitude)&&Double.isFinite(longitude)
+                    &&(profile.isTouchFinished()||scrubNow-lastProfileMapFocusAt>=110L)){
+                lastProfileMapFocusAt=scrubNow;
                 profileMap.setTarget(latitude,longitude);
                 profileMap.focusOn(latitude,longitude);
             }

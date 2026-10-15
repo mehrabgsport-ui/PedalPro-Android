@@ -23,6 +23,8 @@ public final class NativeRideProfileView extends View {
     private Listener listener;
     private int selected=-1;
     private double[] cumulativeKm=new double[0];
+    private double[] elevationData=new double[0],speedData=new double[0],timeSeconds=new double[0];
+    private boolean lastTouchFinished;
     public NativeRideProfileView(Context context){super(context);setBackgroundColor(Color.rgb(9,29,45));}
     public void setPoints(JSONArray data){
         points=data;valid.clear();
@@ -41,6 +43,23 @@ public final class NativeRideProfileView extends View {
                     b.optDouble("lat"),b.optDouble("lng"),meters);
             cumulativeKm[i]=cumulativeKm[i-1]+Math.max(0,meters[0])/1000.0;
         }
+        elevationData=new double[valid.size()];
+        speedData=new double[valid.size()];
+        timeSeconds=new double[valid.size()];
+        double firstTime=Double.NaN,elapsed=0d;
+        for(int i=0;i<valid.size();i++){
+            JSONObject p=valid.get(i);
+            elevationData[i]=p.optDouble("altitude",p.optDouble("alt",Double.NaN));
+            speedData[i]=p.optDouble("speed_kmh",p.optDouble("speed",Double.NaN)*3.6d);
+            double absolute=RideProfileTime.resolve(p.optLong("timestamp",0L),
+                    p.optString("recorded_at",p.optString("created_at","")));
+            if(Double.isFinite(absolute)){
+                if(!Double.isFinite(firstTime))firstTime=absolute;
+                elapsed=Math.max(elapsed,Math.max(0d,absolute-firstTime));
+            }else if(i>0)elapsed+=1d; // display fallback only; no stored GPS timestamps changed
+            timeSeconds[i]=elapsed;
+        }
+        if(selected>=valid.size())selected=-1;
         invalidate();
     }
     public double distanceAt(int i){
@@ -50,21 +69,12 @@ public final class NativeRideProfileView extends View {
     public void setListener(Listener callback){listener=callback;}
     public void clearSelection(){selected=-1;invalidate();}
     private double value(JSONObject p,int i){
-        if(mode==Mode.ELEVATION)return p.optDouble("altitude",p.optDouble("alt",Double.NaN));
-        if(mode==Mode.SPEED)return p.optDouble("speed_kmh",p.optDouble("speed",Double.NaN)*3.6);
-        long ts=p.optLong("timestamp",0);
-        if(ts>0)return ts/1000.0;
-        String recorded=p.optString("recorded_at",p.optString("created_at",""));
-        try{
-            if(recorded.length()>=19){
-                java.text.SimpleDateFormat fmt=new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.US);
-                fmt.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Tehran"));
-                java.util.Date parsed=fmt.parse(recorded.substring(0,19));
-                if(parsed!=null)return parsed.getTime()/1000.0;
-            }
-        }catch(Exception ignored){}
-        return i;
+        if(i<0||i>=valid.size())return Double.NaN;
+        if(mode==Mode.ELEVATION)return elevationData[i];
+        if(mode==Mode.SPEED)return speedData[i];
+        return timeSeconds[i];
     }
+    public boolean isTouchFinished(){return lastTouchFinished;}
     private int dp(float x){return Math.round(x*getResources().getDisplayMetrics().density);}
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);
@@ -85,11 +95,25 @@ public final class NativeRideProfileView extends View {
         canvas.drawLine(left,bottom,right,bottom,pen);
         canvas.drawLine(left,(top+bottom)/2,right,(top+bottom)/2,pen);
         Path curve=new Path();boolean first=true;
-        for(int i=0;i<valid.size();i++){
+        // Render at most two profile vertices per screen pixel while retaining
+        // every full-resolution GPS sample for accurate finger selection.
+        int lastDrawn=-1;
+        int stride=Math.max(1,(int)Math.ceil((valid.size()-1)/
+                Math.max(1d,(right-left)*2d)));
+        for(int i=0;i<valid.size();i+=stride){
             double v=value(valid.get(i),i);if(!Double.isFinite(v))continue;
             float x=left+(right-left)*i/(valid.size()-1f);
             float y=bottom-(float)((v-lo)/(hi-lo))*(bottom-top);
             if(first){curve.moveTo(x,y);first=false;}else curve.lineTo(x,y);
+            lastDrawn=i;
+        }
+        if(lastDrawn!=valid.size()-1){
+            int i=valid.size()-1;
+            double v=value(valid.get(i),i);
+            if(Double.isFinite(v)){
+                float x=right,y=bottom-(float)((v-lo)/(hi-lo))*(bottom-top);
+                if(first)curve.moveTo(x,y);else curve.lineTo(x,y);
+            }
         }
         pen.setColor(Color.rgb(45,204,239));pen.setStyle(Paint.Style.STROKE);
         pen.setStrokeWidth(dp(2.6f));canvas.drawPath(curve,pen);pen.setStyle(Paint.Style.FILL);
@@ -104,8 +128,11 @@ public final class NativeRideProfileView extends View {
             }
         }
         pen.setColor(Color.rgb(175,197,208));pen.setTextSize(dp(11));
-        String unit=mode==Mode.ELEVATION?"m":mode==Mode.SPEED?"km/h":"زمان";
-        canvas.drawText(String.format(Locale.US,"%s %.1f – %.1f",unit,lo,hi),left,dp(16),pen);
+        String caption=mode==Mode.TIME
+                ?"زمان "+RideProfileTime.formatElapsed(lo)+" – "+RideProfileTime.formatElapsed(hi)
+                :String.format(Locale.US,"%s %.1f – %.1f",
+                    mode==Mode.ELEVATION?"m":"km/h",lo,hi);
+        canvas.drawText(caption,left,dp(16),pen);
     }
     @Override public boolean onTouchEvent(MotionEvent event){
         if(event.getActionMasked()!=MotionEvent.ACTION_DOWN &&
@@ -115,10 +142,14 @@ public final class NativeRideProfileView extends View {
         if(getParent()!=null)getParent().requestDisallowInterceptTouchEvent(true);
         float left=dp(14),span=Math.max(1f,getWidth()-dp(28));
         int index=Math.max(0,Math.min(valid.size()-1,Math.round((event.getX()-left)/span*(valid.size()-1))));
+        lastTouchFinished=event.getActionMasked()==MotionEvent.ACTION_UP;
+        boolean changed=selected!=index;
         selected=index;
-        invalidate();
-        if(listener!=null)listener.onSample(index,valid.get(index));
-        if(event.getActionMasked()==MotionEvent.ACTION_UP)performClick();
+        if(changed||lastTouchFinished){
+            invalidate();
+            if(listener!=null)listener.onSample(index,valid.get(index));
+        }
+        if(lastTouchFinished)performClick();
         return true;
     }
     @Override public boolean performClick(){super.performClick();return true;}
@@ -127,8 +158,12 @@ public final class NativeRideProfileView extends View {
         double speed=p.optDouble("speed_kmh",p.optDouble("speed",Double.NaN)*3.6);
         String timestamp=p.optString("recorded_at",p.optString("created_at",""));
         if(timestamp.isBlank()&&p.has("timestamp")){
-            timestamp=java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM)
-                    .format(new java.util.Date(p.optLong("timestamp")));
+            long raw=p.optLong("timestamp",0L);
+            if(raw>=1_000_000_000L){
+                timestamp=java.text.DateFormat.getDateTimeInstance(
+                        java.text.DateFormat.SHORT,java.text.DateFormat.MEDIUM)
+                        .format(new java.util.Date((long)(RideProfileTime.resolve(raw,"")*1000d)));
+            }
         }
         return String.format(Locale.US,"نقطه %d · ارتفاع %s متر · سرعت %s km/h · زمان %s",
                 index+1,Double.isFinite(altitude)?String.format(Locale.US,"%.1f",altitude):"—",
