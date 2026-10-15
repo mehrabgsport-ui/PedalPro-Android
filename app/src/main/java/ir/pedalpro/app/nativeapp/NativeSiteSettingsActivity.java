@@ -724,7 +724,7 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 if(!medalPhoto.isBlank()){
                     android.widget.ImageView photo=new android.widget.ImageView(this);
                     photo.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
-                    RemoteImageLoader.load(this,photo,medalPhoto,ir.pedalpro.app.R.drawable.pedalpro_app_icon);
+                    RemoteImageLoader.load(this,photo,medalPhoto,ir.pedalpro.app.R.drawable.pedalpro_logo_transparent);
                     card.addView(photo,new LinearLayout.LayoutParams(-1,dp(82)));
                 }
                 card.addView(text(m.optString("title","مدال"), 15, true, TEXT));

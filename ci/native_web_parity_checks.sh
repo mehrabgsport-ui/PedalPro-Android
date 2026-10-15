@@ -226,6 +226,8 @@ expect "$NATIVE/NativeScreenBase.java" 'useStickyHeader()' "Settings tabs can be
 expect "$NATIVE/NativeMainActivity.java" 'routeView.setTag(Integer.valueOf(rideId))' "Stale route responses are discarded"
 expect "$NATIVE/NativeRouteView.java" 'setOnMapTapListener(' "Program start can be selected on native map"
 expect "$NATIVE/PedalNeshanMapSurface.java" 'setAmoledBatterySaver(amoled)' "Native battery saver is wired"
+test -f "$ROOT/app/src/main/res/drawable-nodpi/pedalpro_logo_transparent.png"
+expect "$NATIVE/NativeMainActivity.java" 'R.drawable.pedalpro_logo_transparent' "User-facing logos use transparent PNG"
 expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'applyAmoledStyle(style)' "Neshan AMOLED style transformation exists"
 expect "$NATIVE/NativeMainActivity.java" 'showEventPointPicker(' "Program map selection is hooked up"
 expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"

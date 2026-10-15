@@ -345,7 +345,7 @@ public final class NativeChatActivity extends NativeScreenBase {
 
         String avatar=m.optString("sender_avatar","");
         if(!avatar.isBlank()){
-            ImageView av=new ImageView(this);av.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,av,avatar,ir.pedalpro.app.R.drawable.pedalpro_app_icon);
+            ImageView av=new ImageView(this);av.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,av,avatar,ir.pedalpro.app.R.drawable.pedalpro_logo_transparent);
             bubble.addView(av,new LinearLayout.LayoutParams(dp(34),dp(34)));
         }
         if(m.optLong("reply_to_id",0)>0){

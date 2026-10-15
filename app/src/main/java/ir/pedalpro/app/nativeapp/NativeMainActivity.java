@@ -478,7 +478,7 @@ public final class NativeMainActivity extends Activity {
         contentSplash.setPadding(dp(24),dp(20),dp(24),dp(20));
         ImageView logo=new ImageView(this);
         // Use the project's existing official artwork asset; never recreate the brand.
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setImageResource(R.drawable.pedalpro_logo_transparent);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         contentSplash.addView(logo,new LinearLayout.LayoutParams(dp(200),dp(200)));
         TextView motto=text("مسیرت را ثبت کن، پیشرفتت را ببین، قوی‌تر رکاب بزن",13,false,
@@ -1613,7 +1613,7 @@ public final class NativeMainActivity extends Activity {
                     ImageView im=new ImageView(this);
                     im.setScaleType(ImageView.ScaleType.CENTER_CROP);
                     im.setClipToOutline(true);
-                    RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);
+                    RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo_transparent);
                     bikeCard.addView(im,new LinearLayout.LayoutParams(-1,dp(150)));
                 }else{
                     TextView ph=text("🚲",42,false,MUTED);ph.setGravity(Gravity.CENTER);
@@ -1728,7 +1728,7 @@ public final class NativeMainActivity extends Activity {
         String path=member==null?"":member.optString("avatar_path","");
         if(!path.isBlank()){
             ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            RemoteImageLoader.load(this,im,path,R.drawable.pedalpro_app_icon);
+            RemoteImageLoader.load(this,im,path,R.drawable.pedalpro_logo_transparent);
             avatar.addView(im,new FrameLayout.LayoutParams(-1,-1));
         }else{
             TextView letter=text(name==null||name.trim().isEmpty()?"؟":name.trim().substring(0,1),17,true,GREEN);
@@ -1745,7 +1745,7 @@ public final class NativeMainActivity extends Activity {
         if(photo.isBlank()&&bike!=null)photo=bike.optString("photo_data","");
         if(!photo.isBlank()){
             ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);
+            RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo_transparent);
             thumb.addView(im,new FrameLayout.LayoutParams(-1,-1));
         }else{
             TextView ph=text("🚲",22,false,MUTED);ph.setGravity(Gravity.CENTER);
@@ -1780,7 +1780,7 @@ public final class NativeMainActivity extends Activity {
             cell.setOrientation(LinearLayout.VERTICAL);cell.setGravity(Gravity.CENTER);
             ImageView image=new ImageView(this);image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             RemoteImageLoader.load(this,image,medal.optString("image_path",""),
-                    R.drawable.pedalpro_app_icon);
+                    R.drawable.pedalpro_logo_transparent);
             if(!earned){
                 android.graphics.ColorMatrix grey=new android.graphics.ColorMatrix();
                 grey.setSaturation(0f);
@@ -3825,7 +3825,7 @@ public final class NativeMainActivity extends Activity {
         summaryAvatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         summaryAvatar.setClipToOutline(true);
         summaryAvatar.setBackground(roundRect(Color.rgb(10, 29, 45), 22, Color.rgb(42, 73, 99)));
-        RemoteImageLoader.load(this, summaryAvatar, user.optString("avatar_path", ""), R.drawable.pedalpro_app_icon);
+        RemoteImageLoader.load(this, summaryAvatar, user.optString("avatar_path", ""), R.drawable.pedalpro_logo_transparent);
         summaryTop.addView(summaryAvatar, new LinearLayout.LayoutParams(dp(72), dp(72)));
 
         LinearLayout summaryWho = new LinearLayout(this);
@@ -3883,7 +3883,7 @@ public final class NativeMainActivity extends Activity {
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         avatar.setClipToOutline(true);
         avatar.setBackground(roundRect(Color.TRANSPARENT, 44, Color.argb(100, 245, 249, 252)));
-        RemoteImageLoader.load(this, avatar, user.optString("avatar_path", ""), R.drawable.pedalpro_app_icon);
+        RemoteImageLoader.load(this, avatar, user.optString("avatar_path", ""), R.drawable.pedalpro_logo_transparent);
         profileHead.addView(avatar, new LinearLayout.LayoutParams(dp(88), dp(88)));
 
         LinearLayout who = new LinearLayout(this);
@@ -4211,7 +4211,7 @@ public final class NativeMainActivity extends Activity {
             image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
             String imagePath = def.optString("image_path", "");
             if (imagePath.isBlank()) imagePath = "assets/medals/30km.png";
-            RemoteImageLoader.load(this, image, imagePath, R.drawable.pedalpro_app_icon);
+            RemoteImageLoader.load(this, image, imagePath, R.drawable.pedalpro_logo_transparent);
             medal.addView(image, new LinearLayout.LayoutParams(dp(64), dp(64)));
 
             TextView title = text(def.optString("title", "مدال"), 10, true, TEXT);
@@ -4254,7 +4254,7 @@ public final class NativeMainActivity extends Activity {
         image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         String path = medal.optString("image_path", "");
         if (path.isBlank()) path = "assets/medals/30km.png";
-        RemoteImageLoader.load(this, image, path, R.drawable.pedalpro_app_icon);
+        RemoteImageLoader.load(this, image, path, R.drawable.pedalpro_logo_transparent);
         image.setAlpha(award != null ? 1f : .38f);
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-1, dp(160));
         ilp.setMargins(0, dp(10), 0, dp(10));
@@ -4427,7 +4427,7 @@ public final class NativeMainActivity extends Activity {
                 ImageView im = new ImageView(this);
                 im.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 im.setClipToOutline(true);
-                RemoteImageLoader.load(this, im, photo, R.drawable.pedalpro_app_icon);
+                RemoteImageLoader.load(this, im, photo, R.drawable.pedalpro_logo_transparent);
                 LinearLayout.LayoutParams imLp = new LinearLayout.LayoutParams(-1, dp(170));
                 imLp.setMargins(0, 0, 0, dp(12));
                 box.addView(im, imLp);
@@ -4517,7 +4517,7 @@ public final class NativeMainActivity extends Activity {
             brand.setText(bike.optString("brand_model", ""));frame.setText(bike.optString("frame_size", ""));wheel.setText(bike.optString("wheel_size", ""));color.setText(bike.optString("color", ""));weight.setText(bike.optString("weight_kg", ""));primary.setChecked(bike.optInt("is_primary", 0) == 1);
             String photo=bike.optString("photo_path","");
             if(photo.isBlank())photo=bike.optString("photo_data","");
-            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_app_icon);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
+            if(!photo.isBlank()){ImageView im=new ImageView(this);im.setScaleType(ImageView.ScaleType.CENTER_CROP);RemoteImageLoader.load(this,im,photo,R.drawable.pedalpro_logo_transparent);box.addView(im,new LinearLayout.LayoutParams(-1,dp(170)));}
         }
         box.addView(brand);box.addView(type);box.addView(frame);box.addView(wheel);box.addView(color);box.addView(weight);box.addView(primary);
         if (editing) {
@@ -4784,7 +4784,7 @@ public final class NativeMainActivity extends Activity {
 
         LinearLayout profile=glassCard(28);
         ImageView avatar=new ImageView(this);avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);avatar.setClipToOutline(true);avatar.setBackground(roundRect(Color.TRANSPARENT,50,Color.argb(105,245,249,252)));
-        RemoteImageLoader.load(this,avatar,user==null?"":user.optString("avatar_path",""),R.drawable.pedalpro_app_icon);
+        RemoteImageLoader.load(this,avatar,user==null?"":user.optString("avatar_path",""),R.drawable.pedalpro_logo_transparent);
         LinearLayout avw=new LinearLayout(this);avw.setGravity(Gravity.CENTER);avw.addView(avatar,new LinearLayout.LayoutParams(dp(96),dp(96)));profile.addView(avw);
         TextView name=text(user==null?"حساب من":user.optString("display_name","حساب من"),22,true,TEXT);name.setGravity(Gravity.CENTER);profile.addView(name);
         if(user!=null&&!user.optString("username","").isBlank()){TextView username=text("@"+user.optString("username"),11,false,MUTED);username.setGravity(Gravity.CENTER);profile.addView(username);}
@@ -5916,7 +5916,7 @@ public final class NativeMainActivity extends Activity {
         webHeader.setBackground(headerGradient());
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setImageResource(R.drawable.pedalpro_logo_transparent);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         webHeader.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(54)));
@@ -6265,7 +6265,7 @@ public final class NativeMainActivity extends Activity {
         panel.setElevation(dp(20));
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setImageResource(R.drawable.pedalpro_logo_transparent);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(-1, dp(92));
@@ -6793,7 +6793,7 @@ public final class NativeMainActivity extends Activity {
         about.setBackground(roundRect(Color.argb(10, 255, 255, 255), 24, Color.argb(36, 255, 255, 255)));
 
         ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.pedalpro_app_icon);
+        logo.setImageResource(R.drawable.pedalpro_logo_transparent);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         about.addView(logo, new LinearLayout.LayoutParams(dp(210), dp(150)));
