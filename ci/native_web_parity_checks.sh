@@ -228,6 +228,8 @@ expect "$NATIVE/NativeRouteView.java" 'setOnMapTapListener(' "Program start can 
 expect "$NATIVE/PedalNeshanMapSurface.java" 'setAmoledBatterySaver(amoled)' "Native battery saver is wired"
 test -f "$ROOT/app/src/main/res/drawable-nodpi/pedalpro_logo_transparent.png"
 expect "$NATIVE/NativeMainActivity.java" 'R.drawable.pedalpro_logo_transparent' "User-facing logos use transparent PNG"
+expect "$NATIVE/NativeMainActivity.java" 'this::showGroups' "Home groups tile opens native discovery"
+expect "$NATIVE/NativeMainActivity.java" 'private void showGroups()' "Group and event discovery Native UI exists"
 expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'applyAmoledStyle(style)' "Neshan AMOLED style transformation exists"
 expect "$NATIVE/NativeMainActivity.java" 'showEventPointPicker(' "Program map selection is hooked up"
 expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed never blindly displays rejected GPS zero"

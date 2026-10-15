@@ -166,6 +166,7 @@ public final class NativeMainActivity extends Activity {
             case "me":showMe();break;
             case "about":showAboutGroupPage();break;
             case "gallery":showGalleryPage();break;
+            case "groups":showGroups();break;
             case "phone-settings":showPhoneSettingsPage();break;
             case "app":showAppVersionPage();break;
             case "guide":showGuidePage();break;
@@ -444,6 +445,7 @@ public final class NativeMainActivity extends Activity {
             case "club": showClub(); break;
             case "challenges": showChallenges(); break;
             case "gallery": showGalleryPage(); break;
+            case "groups": showGroups(); break;
             case "chat": showGroupChat(); break;
             case "ai": showAiAdvisor(); break;
             case "performance": showPerformance(); break;
@@ -978,7 +980,7 @@ public final class NativeMainActivity extends Activity {
                 homeQuickCard(PedalIconView.Icon.CALENDAR, "برنامه‌ها", "رویدادهای هیجان‌انگیز", this::showActivities),
                 homeQuickCard(PedalIconView.Icon.ROUTE, "مسیرها", "نقشه و جزئیات", this::showRoutes),
                 homeQuickCard(PedalIconView.Icon.HOME_MEMBERS, "اعضا", "آشنایی با ما", this::showClub),
-                homeQuickCard(PedalIconView.Icon.GALLERY, "گالری", "عکس‌ها و ویدیوها", this::showGalleryPage)
+                homeQuickCard(PedalIconView.Icon.HOME_MEMBERS, "گروه‌ها", "گروه‌ها و برنامه‌ها", this::showGroups)
         };
         for (int i = 0; i < cards.length; i++) {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(150), 1f);
@@ -2577,6 +2579,110 @@ public final class NativeMainActivity extends Activity {
         animatePageIn();
     }
 
+
+
+    /** Discovers only the groups/events already returned to this signed-in user.
+     * Creation, invitations and private group chat require authoritative PHP APIs. */
+    private void showGroups(){
+        enterPage("groups");
+        selectNav(null);
+        content.removeAllViews();
+        addHero("گروه‌های دوچرخه‌سواری","گروه‌های موجود و برنامه‌های رکاب‌زنی");
+        LinearLayout controls=glassCard(22);
+        EditText search=input("جست‌وجوی نام گروه یا برنامه");
+        controls.addView(search);
+        content.addView(controls,cardLp());
+        LinearLayout results=new LinearLayout(this);
+        results.setOrientation(LinearLayout.VERTICAL);
+        content.addView(results,cardLp());
+
+        final JSONArray authorizedGroups=bootstrap==null?null:bootstrap.optJSONArray("groups");
+        final JSONArray publicEvents=bootstrap==null?null:bootstrap.optJSONArray("events");
+        final JSONObject currentUser=bootstrap==null?null:bootstrap.optJSONObject("user");
+        final int uid=currentUser==null?0:currentUser.optInt("id",0);
+        final Runnable update=()->{
+            results.removeAllViews();
+            String term=search.getText().toString().trim().toLowerCase(Locale.ROOT);
+            TextView heading=text("گروه‌ها",17,true,TEXT);
+            heading.setPadding(0,dp(10),0,dp(10));
+            results.addView(heading);
+            int groupsShown=0;
+            if(authorizedGroups!=null){
+                for(int i=0;i<authorizedGroups.length()&&groupsShown<100;i++){
+                    JSONObject g=authorizedGroups.optJSONObject(i);
+                    if(g==null)continue;
+                    boolean privateGroup="private".equalsIgnoreCase(g.optString("visibility","public"));
+                    if(privateGroup&&!g.optBoolean("viewer_member",false)&&
+                            g.optInt("creator_user_id",0)!=uid)continue;
+                    String name=g.optString("name",g.optString("title","گروه"));
+                    if(name.isBlank())name="گروه";
+                    String subtitle=g.optString("description","");
+                    if(!term.isEmpty()&&!name.toLowerCase(Locale.ROOT).contains(term)&&
+                            !subtitle.toLowerCase(Locale.ROOT).contains(term))continue;
+                    LinearLayout card=glassCard(18);
+                    card.addView(text(UiSafeText.display(name),15,true,TEXT));
+                    if(!subtitle.isBlank())card.addView(text(UiSafeText.display(subtitle),11,false,MUTED));
+                    if(g.has("member_count"))
+                        card.addView(text("اعضا: "+JalaliDate.fa(g.optInt("member_count",0)),11,false,MUTED));
+                    results.addView(card,cardLp());
+                    groupsShown++;
+                }
+            }
+            if(groupsShown==0){
+                JSONObject site=bootstrap==null?null:bootstrap.optJSONObject("site");
+                String club=site==null?"پدال پرو":site.optString("club_name","پدال پرو");
+                if(club.isBlank())club="پدال پرو";
+                if(term.isBlank()||club.toLowerCase(Locale.ROOT).contains(term)){
+                    LinearLayout official=glassCard(18);
+                    official.addView(text("گروه پدال پرو",15,true,TEXT));
+                    official.addView(text("باشگاه اصلی · "+UiSafeText.display(club),11,false,MUTED));
+                    PedalActionView members=action(PedalIconView.Icon.HOME_MEMBERS,
+                            "مشاهده اعضا",PedalActionView.Style.OUTLINE);
+                    members.setOnClickListener(v->showClub());
+                    official.addView(members,fullActionLp(48));
+                    PedalActionView chat=action(PedalIconView.Icon.CHAT,
+                            "گفت‌وگوی باشگاه",PedalActionView.Style.OUTLINE);
+                    chat.setOnClickListener(v->showGroupChat());
+                    official.addView(chat,fullActionLp(48));
+                    results.addView(official,cardLp());
+                }
+            }
+            TextView eventsTitle=text("برنامه‌های گروه‌ها",17,true,TEXT);
+            eventsTitle.setPadding(0,dp(15),0,dp(9));
+            results.addView(eventsTitle);
+            int eventsShown=0;
+            if(publicEvents!=null){
+                for(int i=0;i<publicEvents.length()&&eventsShown<70;i++){
+                    JSONObject event=publicEvents.optJSONObject(i);
+                    if(event==null||event.optInt("id",0)<=0)continue;
+                    String title=event.optString("title","برنامه");
+                    String club=event.optString("group_name","پدال پرو");
+                    String when=JalaliDate.format(event.optString("event_date",""),true);
+                    if(!term.isEmpty()&&!title.toLowerCase(Locale.ROOT).contains(term)&&
+                            !club.toLowerCase(Locale.ROOT).contains(term))continue;
+                    LinearLayout card=glassCard(14);
+                    card.addView(text(UiSafeText.display(title),14,true,TEXT));
+                    card.addView(text("گروه: "+UiSafeText.display(club)+" · "+when,11,false,MUTED));
+                    PedalActionView details=action(PedalIconView.Icon.CALENDAR,
+                            "جزئیات برنامه",PedalActionView.Style.OUTLINE);
+                    details.setOnClickListener(v->showEventDetail(event));
+                    card.addView(details,fullActionLp(44));
+                    results.addView(card,cardLp());
+                    eventsShown++;
+                }
+            }
+            if(eventsShown==0)results.addView(text("برنامه‌ای با این مشخصات پیدا نشد.",12,false,MUTED));
+            VazirmatnLoader.apply(this,results);
+        };
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence t,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence t,int start,int before,int count){update.run();}
+            @Override public void afterTextChanged(android.text.Editable e){}
+        });
+        update.run();
+        VazirmatnLoader.apply(this,content);
+        animatePageIn();
+    }
 
     private void showClub() {
         enterPage("club");
