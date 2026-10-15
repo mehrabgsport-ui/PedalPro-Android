@@ -30,7 +30,19 @@ public final class NativeGroupsActivity extends NativeScreenBase {
     private LinearLayout results;
 
     @Override protected String screenTitle(){return "گروه‌ها";}
-    @Override protected void onScreenReady(){load();}
+    @Override protected void onScreenReady(){
+        load();
+        String token=getIntent().getStringExtra("invite_token");
+        if(token!=null&&token.matches("(?i)^[0-9a-f]{48}$")){
+            main.postDelayed(()->new AlertDialog.Builder(this)
+                .setTitle("دعوت به گروه")
+                .setMessage("عضویت در گروه با این لینک تأیید شود؟")
+                .setNegativeButton("رد",null)
+                .setPositiveButton("پذیرش",(d,w)->post("pp_group_invite_redeem",
+                        obj("token",token),null,this::load))
+                .show(),180L);
+        }
+    }
     private static JSONObject obj(Object... pairs){
         JSONObject output=new JSONObject();
         try{
@@ -289,20 +301,32 @@ public final class NativeGroupsActivity extends NativeScreenBase {
         form.setPadding(dp(18),dp(8),dp(18),dp(8));
         EditText title=input("عنوان برنامه");EditText start=input("تاریخ و ساعت شمسی");
         EditText place=input("محل شروع");
+        final double[] point={Double.NaN,Double.NaN};
         final String[] datetime={""};
         start.setFocusable(false);
         start.setOnClickListener(v->NativeJalaliDateTimePicker.show(this,datetime[0],true,
                 (iso,jalali)->{datetime[0]=iso;start.setText(jalali);}));
         form.addView(title);form.addView(start);form.addView(place);
+        TextView coordinates=text("موقعیت شروع هنوز از نقشه انتخاب نشده است.",11,false,MUTED);
+        Button mapButton=normal("انتخاب نقطه شروع از نقشه");
+        mapButton.setOnClickListener(v->NativeGroupPointPicker.show(this,(lat,lng)->{
+            point[0]=lat;point[1]=lng;
+            coordinates.setText(String.format(Locale.US,"%.6f, %.6f",lat,lng));
+        }));
+        form.addView(mapButton);form.addView(coordinates);
         new AlertDialog.Builder(this).setTitle("برنامه گروهی").setView(form)
           .setNegativeButton("انصراف",null)
           .setPositiveButton("ذخیره برنامه",(d,w)->{
               if(title.getText().toString().trim().isBlank()||datetime[0].isBlank()){
                   toast("عنوان و تاریخ برنامه الزامی‌اند.");return;
               }
+              if(!Double.isFinite(point[0])||!Double.isFinite(point[1])){
+                  toast("ابتدا محل شروع را از نقشه انتخاب کنید.");return;
+              }
               JSONObject p=obj("group_id",id,"title",title.getText().toString().trim(),
                       "event_date",datetime[0],
                       "meeting_location",place.getText().toString().trim(),
+                      "meeting_lat",point[0],"meeting_lng",point[1],
                       "request_id",UUID.randomUUID().toString());
               post("pp_group_event_save",p,null,()->openGroup(id));
           }).show();

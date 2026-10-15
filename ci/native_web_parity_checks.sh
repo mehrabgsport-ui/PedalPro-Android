@@ -396,3 +396,6 @@ expect "$NATIVE/NativeFollowListActivity.java" 'pp_follow_list' "Profile followe
 expect "$NATIVE/NativeSiteSettingsActivity.java" 'وضعیت ربات بله' "Admin member Bale status displayed"
 
 expect "$NATIVE/NativeGroupsActivity.java" 'catch(org.json.JSONException e)' "Group JSON serialization errors are handled"
+
+expect "$NATIVE/NativeGroupPointPicker.java" 'setOnMapTapListener' "Program selection on map"
+expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_redeem' "Invitation link requires explicit user acceptance"

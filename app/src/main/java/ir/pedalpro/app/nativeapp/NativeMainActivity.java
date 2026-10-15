@@ -179,6 +179,7 @@ public final class NativeMainActivity extends Activity {
     private String launchPage = "";
     private int launchEventId = 0;
     private int launchMemberId = 0;
+    private String launchGroupInviteToken = "";
     private PedalNeshanMapSurface activeRideRouteView;
     private final Runnable nearbyRidersTick=new Runnable(){
         @Override public void run(){
@@ -417,6 +418,16 @@ public final class NativeMainActivity extends Activity {
         if (launchPage == null) launchPage = "";
         launchEventId = intent.getIntExtra("event_id", 0);
         launchMemberId = intent.getIntExtra("member_id",0);
+        launchGroupInviteToken="";
+        Uri deepLink=intent.getData();
+        if(deepLink!=null&&"https".equalsIgnoreCase(deepLink.getScheme())){
+            String host=deepLink.getHost();
+            if("pedalpro.ir".equalsIgnoreCase(host)||"www.pedalpro.ir".equalsIgnoreCase(host)){
+                String token=deepLink.getQueryParameter("group_invite");
+                if(token!=null&&token.matches("(?i)^[0-9a-f]{48}$"))
+                    launchGroupInviteToken=token;
+            }
+        }
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -428,6 +439,14 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void handleLaunchPage() {
+        if(!launchGroupInviteToken.isBlank()){
+            String token=launchGroupInviteToken;
+            launchGroupInviteToken="";launchPage="";
+            Intent link=new Intent(this,NativeGroupsActivity.class);
+            link.putExtra("invite_token",token);
+            startActivity(link);
+            return;
+        }
         if(launchMemberId>0&&bootstrap!=null){
             int wanted=launchMemberId;launchMemberId=0;launchPage="";
             showClub();
