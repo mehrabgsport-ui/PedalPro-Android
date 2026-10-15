@@ -217,7 +217,8 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
                 profileMap.focusOn(latitude,longitude);
             }
             if(profileDetails!=null)
-                profileDetails.setText(NativeRideProfileView.describe(point,index,ride.optJSONArray("points")));
+                profileDetails.setText(NativeRideProfileView.describe(point,index,ride.optJSONArray("points"))+
+                        String.format(Locale.US," · مسافت %.2f km",profile.distanceAt(index)));
         });
         elevation.setOnClickListener(v->{profileMode=NativeRideProfileView.Mode.ELEVATION;profile.setMode(profileMode);});
         velocity.setOnClickListener(v->{profileMode=NativeRideProfileView.Mode.SPEED;profile.setMode(profileMode);});

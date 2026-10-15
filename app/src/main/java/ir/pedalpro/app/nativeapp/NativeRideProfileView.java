@@ -22,6 +22,7 @@ public final class NativeRideProfileView extends View {
     private Mode mode=Mode.ELEVATION;
     private Listener listener;
     private int selected=-1;
+    private double[] cumulativeKm=new double[0];
     public NativeRideProfileView(Context context){super(context);setBackgroundColor(Color.rgb(9,29,45));}
     public void setPoints(JSONArray data){
         points=data;valid.clear();
@@ -31,7 +32,19 @@ public final class NativeRideProfileView extends View {
             if(Double.isFinite(p.optDouble("lat",Double.NaN))&&Double.isFinite(p.optDouble("lng",Double.NaN)))
                 valid.add(p);
         }
+        cumulativeKm=new double[valid.size()];
+        float[] meters=new float[1];
+        for(int i=1;i<valid.size();i++){
+            JSONObject a=valid.get(i-1),b=valid.get(i);
+            android.location.Location.distanceBetween(
+                    a.optDouble("lat"),a.optDouble("lng"),
+                    b.optDouble("lat"),b.optDouble("lng"),meters);
+            cumulativeKm[i]=cumulativeKm[i-1]+Math.max(0,meters[0])/1000.0;
+        }
         invalidate();
+    }
+    public double distanceAt(int i){
+        return i>=0&&i<cumulativeKm.length?cumulativeKm[i]:0.0;
     }
     public void setMode(Mode next){mode=next;invalidate();}
     public void setListener(Listener callback){listener=callback;}

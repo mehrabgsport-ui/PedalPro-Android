@@ -55,6 +55,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private boolean autoGroupTrackingAttempted;
     private Button groupTrackingButton;
     private boolean screenVisible;
+    private long lastNearbyRefresh;
     private TextView roadStatus;
     private Button roadToggle;
     private boolean roadEnabled;
@@ -68,6 +69,10 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         @Override public void run(){
             if(isFinishing()||!screenVisible)return;
             refresh();
+            if(SystemClock.elapsedRealtime()-lastNearbyRefresh>=10000L){
+                lastNearbyRefresh=SystemClock.elapsedRealtime();
+                refreshNearbyRiders();
+            }
             main.postDelayed(this,"group".equals(mode)?10000L:3000L);
         }
     };
@@ -163,6 +168,21 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         screenVisible=false;
         main.removeCallbacks(tick);
         super.onPause();
+    }
+
+    private void refreshNearbyRiders(){
+        io.execute(()->{
+            try{
+                JSONArray others=api.get("pp_live_riders").optJSONArray("riders");
+                main.post(()->{
+                    if(screenVisible&&routeView!=null)routeView.setNearbyRiders(others);
+                });
+            }catch(Exception e){
+                main.post(()->{
+                    if(screenVisible&&routeView!=null)routeView.setNearbyRiders(null);
+                });
+            }
+        });
     }
 
     private void invalidateDirectionCache(){

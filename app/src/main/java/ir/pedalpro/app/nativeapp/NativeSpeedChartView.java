@@ -94,8 +94,8 @@ final class NativeSpeedChartView extends View {
             }
 
             double v=raw.get(i);
-            if(v<=1.5&&positive.size()>=4&&!sustainedStop)stage[i]=med;
-            else if(v>1.5&&positive.size()>=4&&med>0&&v>med*1.55+6)stage[i]=med;
+            if(v<=1.5&&positive.size()>=2&&!sustainedStop)stage[i]=med;
+            else if(v>1.5&&positive.size()>=3&&med>0&&v>med*1.65+6)stage[i]=med;
             else stage[i]=v;
         }
 
