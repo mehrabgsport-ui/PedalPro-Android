@@ -24,7 +24,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.webkit.CookieManager;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
@@ -62,6 +61,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     public static final String PREFS = "pedalpro_native_tracking";
     public static final String ACTION_START = "ir.pedalpro.app.START_TRACKING";
     public static final String ACTION_STOP = "ir.pedalpro.app.STOP_TRACKING";
+    public static final String ACTION_PREPARE_FINISH = "ir.pedalpro.app.PREPARE_FINISH_TRACKING";
     public static final String ACTION_DISCARD = "ir.pedalpro.app.DISCARD_TRACKING";
     public static final String ACTION_UPDATE = "ir.pedalpro.app.TRACK_UPDATE";
     public static final String ACTION_STATUS = "ir.pedalpro.app.TRACK_STATUS";
@@ -71,7 +71,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private static final String CHANNEL_ID = "pedalpro_ride_tracking";
     private static final int NOTIFICATION_ID = 4107;
     private static final float FIRST_LOCK_ACCURACY_M = 18f;
-    private static final long MAX_FIX_AGE_MS = 8000L;
+    private static final long MAX_FIX_AGE_MS = 5000L;
     private static final long MIN_DISTINCT_FIX_MS = 450L;
     private static final long IMU_STILL_ENTER_MS = 2500L;
     private static final long IMU_STARTUP_GUARD_MS = 3500L;
@@ -126,10 +126,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private long lastRawFixAt = 0L;
     private long trackingStartedAt = 0L;
     private long lastGapFallbackAt = 0L;
+    private long lastPendingRetryAt = 0L;
     private Location lastAcceptedLocation;
     // One-fix quarantine: a point is persisted only after the following fix confirms
     // that it was not an isolated GNSS teleport. This intentionally adds ~1s latency.
     private Location pendingCandidate;
+    private Location initialLockFix;
     private long pendingCandidateReceivedAt = 0L;
     private int stationaryFixes = 0;
     private int movementConfirmFixes = 0;
@@ -146,6 +148,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
                 long reference = lastRawFixAt > 0L ? lastRawFixAt : trackingStartedAt;
                 long gap = reference > 0L ? now - reference : 0L;
 
+                // Retry unsent points even if no more position fixes are produced.
+                if (now - lastPendingRetryAt >= 15000L) {
+                    lastPendingRetryAt = now;
+                    String queued = prefs.getString("pending", "[]");
+                    if (queued != null && queued.length() > 2) flushPending();
+                }
                 if (usingFused && gap >= 6000L && !legacyFallbackStarted &&
                         now - lastGapFallbackAt >= 10000L) {
                     lastGapFallbackAt = now;
@@ -178,6 +186,28 @@ public class TrackingService extends Service implements LocationListener, Sensor
             return START_NOT_STICKY;
         }
 
+        if (intent != null && ACTION_PREPARE_FINISH.equals(intent.getAction())) {
+            int rideId = intent.getIntExtra("ride_id", 0);
+            if (!prefs.getBoolean("active", false) || rideId <= 0 ||
+                    rideId != prefs.getInt("ride_id", 0)) {
+                broadcastStatus("فعالیت GPS برای همگام‌سازی نهایی پیدا نشد", true);
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            // Pause acquisition before flushing the last buffered accepted fixes.
+            // Keep active=true until the caller sees an empty acknowledged queue.
+            startForeground(NOTIFICATION_ID, buildNotification("همگام‌سازی نهایی مسیر GPS"));
+            prefs.edit().putBoolean("finish_prepared", false)
+                    .putInt("finish_ride_id", rideId).apply();
+            gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
+            stopAllLocationUpdates();
+            flushRoadMatchBufferRaw();
+            flushPending();
+            prefs.edit().putBoolean("finish_prepared", true).apply();
+            broadcastStatus("در حال ارسال آخرین نقاط ثبت‌شده GPS…", false);
+            return START_STICKY;
+        }
+
         if (intent != null && ACTION_START.equals(intent.getAction())) {
             int rideId = intent.getIntExtra("ride_id", 0);
             int previousRideId = prefs.getInt("ride_id", 0);
@@ -190,7 +220,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             // values that are too strict (e.g. 10m / 2000ms / 50kmh) must not
             // degrade tracking quality or delete legitimate downhill fixes.
             float requestedAccuracy = (float) intent.getDoubleExtra("max_accuracy", 25);
-            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 80);
+            float requestedMaxSpeed = (float) intent.getDoubleExtra("max_speed_kmh", 65);
             String suppliedNeshanKey = intent.getStringExtra("neshan_service_key");
             if (NeshanRoadMatcher.validKey(suppliedNeshanKey)) {
                 neshanServiceKey = suppliedNeshanKey.trim();
@@ -199,10 +229,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
             prefs.edit()
                     .putBoolean("active", true)
+                    .putBoolean("finish_prepared", false)
+                    .remove("finish_ride_id")
                     .putInt("ride_id", rideId)
-                    .putString("csrf", intent.getStringExtra("csrf"))
-                    .putFloat("max_accuracy", Math.max(25f, requestedAccuracy))
-                    .putFloat("max_speed_kmh", Math.max(80f, requestedMaxSpeed))
+                    .putFloat("max_accuracy", Math.max(18f, Math.min(30f, requestedAccuracy)))
+                    .putFloat("max_speed_kmh", Math.max(40f, Math.min(75f, requestedMaxSpeed)))
                     .putLong("interval_ms", 1000L)
                     .putString("neshan_service_key", neshanServiceKey == null ? "" : neshanServiceKey)
                     .apply();
@@ -226,6 +257,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         roadMatchRunning.set(false);
         lastRoadMatchAttemptAt = 0L;
         lastAcceptedLocation = null;
+        initialLockFix = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;
@@ -437,6 +469,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private boolean startFusedLocationUpdates() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای ثبت مسیر فعال نیست.", false);
+            return false;
+        }
         try {
             int availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(this);
             if (availability != ConnectionResult.SUCCESS) {
@@ -445,6 +482,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
             }
 
             fusedClient = LocationServices.getFusedLocationProviderClient(this);
+            // Receive even stationary fixes to confirm the 2-fix GNSS lock;
+            // meter-based gating is applied after acquisition by GpsTrackQuality.
             LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setGranularity(Granularity.GRANULARITY_FINE)
                     .setMinUpdateIntervalMillis(900L)
@@ -482,6 +521,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
     private synchronized void startLegacyLocationFallback() {
         if (legacyFallbackStarted || !prefs.getBoolean("active", false)) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            broadcastStatus("مجوز Location برای GPS مستقیم فعال نیست.", false);
+            return;
+        }
         legacyFallbackStarted = true;
         if (locationManager == null) locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         long interval = Math.max(1000L, prefs.getLong("interval_ms", 1000L));
@@ -492,12 +536,8 @@ public class TrackingService extends Service implements LocationListener, Sensor
                         LocationManager.GPS_PROVIDER, 1000L, 0f, this, Looper.getMainLooper());
             }
         } catch (Exception ignored) { }
-        try {
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                        LocationManager.NETWORK_PROVIDER, Math.max(2000L, interval), 0f, this, Looper.getMainLooper());
-            }
-        } catch (Exception ignored) { }
+        // NETWORK_PROVIDER is not suitable for recording bicycle distance.
+        // Wi-Fi/cell-tower hops are kept out of the GPS track.
         broadcastStatus("GPS مستقیم اندروید فعال — حالت سازگار", false);
     }
 
@@ -510,6 +550,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         // Preserve the untouched sensor fix for diagnostics before filtering.
         appendRawPoint(loc, source);
+        if ("network".equalsIgnoreCase(loc.getProvider()) ||
+                "passive".equalsIgnoreCase(loc.getProvider())) {
+            noteRejected("موقعیت شبکه‌ای برای ثبت مسیر رد شد");
+            return;
+        }
 
         long now = System.currentTimeMillis();
         lastRawFixAt = now;
@@ -526,12 +571,29 @@ public class TrackingService extends Service implements LocationListener, Sensor
             int quality = gnssQualityScore(now);
             if (!loc.hasAccuracy() || loc.getAccuracy() > FIRST_LOCK_ACCURACY_M ||
                     (quality >= 0 && quality < 28 && loc.getAccuracy() > 12f)) {
+                initialLockFix = null;
                 noteRejected("در انتظار قفل دقیق GPS");
+                return;
+            }
+            if (initialLockFix == null) {
+                initialLockFix = new Location(loc);
+                broadcastStatus("اولین موقعیت دقیق؛ منتظر تأیید GPS", false);
+                return;
+            }
+            long dt = loc.getTime() - initialLockFix.getTime();
+            if (!GpsTrackQuality.stableFirstPair(initialLockFix.getLatitude(),
+                    initialLockFix.getLongitude(), loc.getLatitude(), loc.getLongitude(),
+                    initialLockFix.getAccuracy(), loc.getAccuracy(), dt,
+                    hasReliableSpeed(loc) ? loc.getSpeed() : 0.0)) {
+                initialLockFix = new Location(loc);
+                noteRejected("قفل اولیه GPS تأیید نشد");
                 return;
             }
             Location first = new Location(loc);
             first.setSpeed(0f);
+            initialLockFix = null;
             acceptCandidate(first, now, false);
+            broadcastStatus("قفل GPS با دو نمونه دقیق تأیید شد", false);
             return;
         }
 
@@ -597,14 +659,17 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         boolean forwardSupport = lookAhead == null ||
                 (forwardMeters >= 1.2 && netMeters >= Math.max(3.0, noiseRadius * 0.85));
-        boolean dopplerMovement = reliableSpeed && osMps >= 0.65 &&
-                (meters >= 1.4 || netMeters >= 2.5);
+        boolean dopplerMovement = reliableSpeed && osMps >= 1.15 &&
+                forwardSupport && netMeters >= Math.max(5.5, noiseRadius * 1.10) &&
+                meters >= Math.max(3.0, noiseRadius * 0.80);
         boolean geometricMovement = meters >= Math.max(4.0, noiseRadius * 1.10) &&
                 derivedMps >= 0.50 && forwardSupport &&
                 netMeters >= Math.max(5.0, noiseRadius * 1.30);
         boolean accumulatedSlowMovement = totalDtMs >= 2500L &&
                 netMeters >= Math.max(6.0, noiseRadius * 1.55);
         boolean moving = dopplerMovement || geometricMovement || accumulatedSlowMovement;
+        if (GpsTrackQuality.stationaryJitter(meters, netMeters, prevAcc, curAcc,
+                reliableSpeed ? osMps : 0.0, forwardSupport)) moving = false;
 
         long now = Math.max(receivedAt, System.currentTimeMillis());
         boolean imuStill = isImuStationaryStrong(now) || isImuStartupGuard(now);
@@ -663,7 +728,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         stationaryFixes = 0;
         movementConfirmFixes = 0;
-        double maxMps = prefs.getFloat("max_speed_kmh", 100f) / 3.6;
+        double maxMps = prefs.getFloat("max_speed_kmh", 65f) / 3.6;
+        if (derivedMps > maxMps * 1.15) {
+            noteRejected("پرش سرعت GPS رد شد");
+            return;
+        }
         double chosenMps = derivedMps;
         if (reliableSpeed && Math.abs(osMps - derivedMps) <= Math.max(1.8, derivedMps * 0.55)) {
             chosenMps = derivedMps * 0.64 + osMps * 0.36;
@@ -677,7 +746,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         Location frozen = new Location(lastAcceptedLocation);
         frozen.setTime(candidate.getTime());
         frozen.setSpeed(0f);
-        try { broadcastPoint(locationJson(frozen), null); } catch (Exception ignored) { }
+        try { broadcastPoint(locationJson(frozen), null, false); } catch (Exception ignored) { }
         if (receivedAt - lastFilterStatusAt >= 3500L) {
             lastFilterStatusAt = receivedAt;
             broadcastStatus(status, false);
@@ -747,30 +816,16 @@ public class TrackingService extends Service implements LocationListener, Sensor
             lastFilterStatusAt = now;
             String quality = candidate.hasAccuracy()
                     ? " ±" + Math.round(candidate.getAccuracy()) + "m" : "";
-            String road = NeshanRoadMatcher.validKey(neshanServiceKey) ? " + Map Matching نشان" : "";
+            String road = " · GNSS پالایش‌شده";
             broadcastStatus((moving ? "GPS V5" : "GPS V5 قفل دقیق") + road + quality, false);
         }
     }
 
     private void queueRoadAwareOutput(Location candidate) {
         if (candidate == null) return;
-        Location copy = new Location(candidate);
-        boolean emitNow = false;
-        synchronized (roadMatchOutputBuffer) {
-            roadMatchHistory.addLast(new Location(copy));
-            while (roadMatchHistory.size() > ROAD_MATCH_MAX_HISTORY) roadMatchHistory.removeFirst();
-
-            if (!NeshanRoadMatcher.validKey(neshanServiceKey) || roadMatchHistory.size() < ROAD_MATCH_MIN_POINTS) {
-                emitNow = true;
-            } else {
-                roadMatchOutputBuffer.addLast(copy);
-            }
-        }
-        if (emitNow) {
-            emitAcceptedPoint(copy, false, 0.0);
-            return;
-        }
-        maybeStartRoadMatch();
+        // Snapping per point to alternating parallel streets created zigzag distance.
+        // Preserve only GNSS points already accepted by the movement filter.
+        emitAcceptedPoint(new Location(candidate), false, 0.0);
     }
 
     private void maybeStartRoadMatch() {
@@ -838,13 +893,14 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private void emitAcceptedPoint(Location point, boolean roadMatched, double confidence) {
         try {
             JSONObject p = locationJson(point);
+            p.put("client_point_id", java.util.UUID.randomUUID().toString());
             p.put("road_matched", roadMatched);
             if (roadMatched) {
                 p.put("road_match_provider", "neshan");
                 p.put("road_match_confidence", Math.round(confidence * 1000.0) / 1000.0);
             }
             appendPending(p);
-            broadcastPoint(p, null);
+            broadcastPoint(p, null, true);
             flushPending();
         } catch (Exception ignored) { }
     }
@@ -906,7 +962,14 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
         long dtMs = current.getTime() - lastAcceptedLocation.getTime();
         if (dtMs <= 0L) return false;
-        if (dtMs > 120000L) return true;
+        if (dtMs > 45000L) {
+            // A long GPS blackout must not deadlock an otherwise valid ride.
+            // Reconnect only when the average travel speed across the gap is plausible.
+            double gapKmh = lastAcceptedLocation.distanceTo(current) /
+                    (dtMs / 1000d) * 3.6d;
+            return gapKmh <= Math.min(45.0,
+                    Math.max(35.0,prefs.getFloat("max_speed_kmh",65f)));
+        }
 
         double meters = lastAcceptedLocation.distanceTo(current);
         double kmh = meters / (dtMs / 1000.0) * 3.6;
@@ -915,7 +978,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
         float curAcc = current.hasAccuracy() ? current.getAccuracy() : 8f;
         double uncertainty = Math.max(6.0, (prevAcc + curAcc) * 0.75);
 
-        double configuredMax = Math.max(45.0, prefs.getFloat("max_speed_kmh", 100f));
+        double configuredMax = Math.max(40.0, Math.min(75.0, prefs.getFloat("max_speed_kmh", 65f)));
         double recent = medianRecentSpeedKmh();
         double hardLimit = configuredMax * 1.15;
         double dynamicLimit = Math.max(65.0, recent * 3.2 + 28.0);
@@ -1067,11 +1130,12 @@ public class TrackingService extends Service implements LocationListener, Sensor
     private synchronized void appendPending(JSONObject point) {
         try {
             JSONArray arr = new JSONArray(prefs.getString("pending", "[]"));
+            if (!point.has("ride_id")) point.put("ride_id",prefs.getInt("ride_id",0));
             arr.put(point);
-            if (arr.length() > 3000) {
-                JSONArray trimmed = new JSONArray();
-                for (int i = arr.length() - 3000; i < arr.length(); i++) trimmed.put(arr.get(i));
-                arr = trimmed;
+            if (arr.length() > 3000 && arr.length() % 200 == 1) {
+                // Never truncate the oldest unsent ride points: those are the
+                // only recoverable record of an offline ride.
+                broadcastStatus("صف ارسال GPS طولانی شده است (" + arr.length() + " نقطه)؛ اینترنت را بررسی کنید.", true);
             }
             prefs.edit().putString("pending", arr.toString()).apply();
         } catch (Exception ignored) { }
@@ -1103,14 +1167,28 @@ public class TrackingService extends Service implements LocationListener, Sensor
                     if (p == null) break;
                     SendResult result = sendPoint(p, false);
                     if (!result.ok) break;
+                    // An ignored GPS point was intentionally discarded by the server.
+                    // Do not label it stored or replay it as a confirmed track point.
+                    boolean ignored = false;
+                    String reason = "";
+                    try {
+                        JSONObject acknowledgment = new JSONObject(result.body);
+                        ignored = acknowledgment.optBoolean("ignored", false);
+                        reason = acknowledgment.optString("reason", "");
+                    } catch (Exception ignoredJson) { }
                     removeFirstPending();
+                    if (ignored) {
+                        broadcastStatus("نقطه GPS توسط فیلتر سرور رد شد" +
+                                (reason.isEmpty() ? "" : " · " + reason), false);
+                        continue;
+                    }
                     // Do not replay historical queued points into WebView. The point was
                     // already delivered when it was recorded; only a near-current server
                     // acknowledgement is useful to the UI.
                     long pointTs = p.optLong("timestamp", 0L);
                     long currentTs = lastAcceptedLocation == null ? 0L : lastAcceptedLocation.getTime();
                     if (pointTs > 0L && currentTs > 0L && pointTs >= currentTs - 1800L) {
-                        broadcastPoint(p, result.body);
+                        broadcastPoint(p, result.body, true);
                     }
                 }
             } finally {
@@ -1124,6 +1202,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
         try {
             int rideId = prefs.getInt("ride_id", 0);
             JSONObject payload = new JSONObject(point.toString());
+            if (payload.optInt("ride_id",rideId) != rideId) {
+                broadcastStatus("صف ارسال GPS متعلق به رکاب دیگری است و حفظ شد",true);
+                return new SendResult(false,null);
+            }
             payload.put("ride_id", rideId);
 
             URL url = new URL(API + "?action=track_point");
@@ -1134,9 +1216,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             c.setRequestProperty("Accept", "application/json");
-            c.setRequestProperty("X-CSRF-Token", prefs.getString("csrf", ""));
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+            c.setRequestProperty("X-CSRF-Token",
+                    new ir.pedalpro.app.nativeapp.SessionStore(this).csrf());
+            String cookie = effectiveSessionCookie();
+            if (!cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
 
             byte[] data = payload.toString().getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(data.length);
@@ -1146,7 +1229,18 @@ public class TrackingService extends Service implements LocationListener, Sensor
             String body = readBody(code >= 400 ? c.getErrorStream() : c.getInputStream());
 
             if (code == 419 && !retried && refreshCsrf()) return sendPoint(point, true);
-            if (code >= 200 && code < 300) return new SendResult(true, body);
+            // An HTTP 2xx with {"ok":false} is NOT a stored GPS point.
+            if (code >= 200 && code < 300) {
+                try {
+                    JSONObject answer = new JSONObject(body);
+                    if (answer.optBoolean("ok", true)) return new SendResult(true, body);
+                    broadcastStatus(answer.optString("error", "سرور ثبت نقطه GPS را رد کرد"), true);
+                    return new SendResult(false, body);
+                } catch (org.json.JSONException malformed) {
+                    broadcastStatus("پاسخ نامعتبر سرور؛ نقاط GPS روی گوشی باقی ماندند", true);
+                    return new SendResult(false, body);
+                }
+            }
 
             String msg = "ارسال GPS به سرور ناموفق بود (" + code + ")";
             try {
@@ -1164,29 +1258,21 @@ public class TrackingService extends Service implements LocationListener, Sensor
     }
 
     private boolean refreshCsrf() {
-        HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(API + "?action=bootstrap").openConnection();
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(12000);
-            c.setRequestProperty("Accept", "application/json");
-            String cookie = CookieManager.getInstance().getCookie("https://pedalpro.ir/");
-            if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
-            int code = c.getResponseCode();
-            if (code < 200 || code >= 300) return false;
-            JSONObject j = new JSONObject(readBody(c.getInputStream()));
-            String token = j.optString("csrf", "");
-            String key = firstNeshanKey(j);
-            SharedPreferences.Editor e = prefs.edit();
-            if (NeshanRoadMatcher.validKey(key)) {
-                neshanServiceKey = key.trim();
-                e.putString("neshan_service_key", neshanServiceKey);
+            // Share cookie/CSRF rotation with the authenticated Native API transport.
+            JSONObject data = new ir.pedalpro.app.nativeapp.PedalProApiClient(this).bootstrap();
+            String newToken = data.optString("csrf", "");
+            String serviceKey = firstNeshanKey(data);
+            SharedPreferences.Editor editor = prefs.edit();
+            if (NeshanRoadMatcher.validKey(serviceKey)) {
+                neshanServiceKey = serviceKey.trim();
+                editor.putString("neshan_service_key", neshanServiceKey);
             }
-            if (token.isEmpty()) { e.apply(); return false; }
-            e.putString("csrf", token).apply();
-            return true;
-        } catch (Exception e) { return false; }
-        finally { if (c != null) c.disconnect(); }
+            editor.apply();
+            return !newToken.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String firstNeshanKey(JSONObject root) {
@@ -1206,6 +1292,15 @@ public class TrackingService extends Service implements LocationListener, Sensor
         return "";
     }
 
+    private String nativeSessionCookie() {
+        return new ir.pedalpro.app.nativeapp.SessionStore(this).cookie();
+    }
+
+    private String effectiveSessionCookie() {
+        // Match PedalProApiClient's authenticated native PHP session, never a stale browser cookie.
+        return nativeSessionCookie();
+    }
+
     private static String readBody(InputStream in) throws Exception {
         if (in == null) return "";
         StringBuilder sb = new StringBuilder();
@@ -1215,9 +1310,11 @@ public class TrackingService extends Service implements LocationListener, Sensor
         return sb.toString();
     }
 
-    private void broadcastPoint(JSONObject p, String response) {
+    private void broadcastPoint(JSONObject p, String response, boolean recorded) {
         try {
             JSONObject out = new JSONObject();
+            out.put("ride_id", prefs.getInt("ride_id", 0));
+            out.put("recorded", recorded);
             out.put("lat", p.optDouble("lat"));
             out.put("lng", p.optDouble("lng"));
             out.put("altitude", p.has("altitude") ? p.opt("altitude") : JSONObject.NULL);
@@ -1251,7 +1348,9 @@ public class TrackingService extends Service implements LocationListener, Sensor
 
     private void stopTracking() {
         flushRoadMatchBufferRaw();
-        prefs.edit().putBoolean("active", false).apply();
+        prefs.edit().putBoolean("active", false)
+                .putBoolean("finish_prepared", false)
+                .remove("finish_ride_id").apply();
         gpsWatchdogHandler.removeCallbacks(gpsWatchdog);
         stopAllLocationUpdates();
         stopSensorFusion();
@@ -1277,6 +1376,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
             roadMatchOutputBuffer.clear();
         }
         lastAcceptedLocation = null;
+        initialLockFix = null;
         pendingCandidate = null;
         pendingCandidateReceivedAt = 0L;
         lastAcceptedAt = 0L;

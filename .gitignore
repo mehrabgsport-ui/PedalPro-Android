@@ -1,0 +1,8 @@
+# Local Android SDK / signing material
+app/src/main/res/raw/neshan.licence
+app/*.jks
+app/*.keystore
+*.keystore
+local.properties
+.gradle/
+**/build/

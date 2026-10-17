@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <queries>
+        <package android:name="org.rajman.neshan.traffic.tehran.navigator" />
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -26,6 +30,8 @@
         android:icon="@drawable/pedalpro_app_icon"
         android:label="PedalPro"
         android:theme="@style/Theme.PedalPro">
+        <meta-data android:name="org.maplibre.android.API_KEY"
+                   android:value="${neshanMobileApiKey}" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -36,9 +42,8 @@
         </provider>
 
         <activity
-            android:name=".MainActivity"
+            android:name=".nativeapp.NativeMainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="unspecified">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -51,11 +56,34 @@
                 <data android:scheme="https" android:host="pedalpro.ir" />
                 <data android:scheme="https" android:host="www.pedalpro.ir" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
-                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
-            </intent-filter>
         </activity>
+
+        <activity android:name=".nativeapp.NativeLauncherActivity" android:exported="false" />
+        <activity android:name=".nativeapp.LowPowerRideActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".nativeapp.NativeRideDetailActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSavedRouteFollowActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeLiveNavigationActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeClubActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativePerformanceActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeChatActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeGroupsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeFollowListActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeGroupChatActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAiActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSensorsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSafetyActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSocialActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAdvancedActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeHeatmapActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSegmentLeaderboardActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeSiteSettingsActivity" android:exported="false" />
+        <activity android:name=".nativeapp.NativeAppSettingsActivity" android:exported="false" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="unspecified" />
 
         <service
             android:name=".TrackingService"

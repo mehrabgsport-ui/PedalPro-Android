@@ -12,6 +12,7 @@ import android.content.Intent;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import androidx.core.content.FileProvider;
+import androidx.core.content.ContextCompat;
 import java.io.File;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
@@ -201,8 +202,7 @@ public class MainActivity extends Activity {
         IntentFilter filter = new IntentFilter();
         filter.addAction(TrackingService.ACTION_UPDATE);
         filter.addAction(TrackingService.ACTION_STATUS);
-        if (Build.VERSION.SDK_INT >= 33) registerReceiver(trackingReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        else registerReceiver(trackingReceiver, filter);
+        ContextCompat.registerReceiver(this, trackingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     private void scheduleNotificationJob() {

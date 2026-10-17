@@ -2,17 +2,38 @@ plugins {
     id 'com.android.application'
 }
 
+// Current official Neshan SDK uses MOBILE API key in manifest, not legacy .license.
+def neshanMobileKey = providers.environmentVariable('NESHAN_MOBILE_API_KEY').orElse('').get().trim()
+def neshanEnabled = !neshanMobileKey.isEmpty()
+
 android {
     namespace 'ir.pedalpro.app'
+    sourceSets {
+        main {
+            if (neshanEnabled) java.srcDir 'src/neshanmaplibre/java'
+        }
+    }
     compileSdk 36
     buildFeatures { buildConfig true }
 
     defaultConfig {
+        buildConfigField 'boolean', 'PEDALPRO_NESHAN_ANDROID_ENABLED', neshanEnabled.toString()
+        manifestPlaceholders = [neshanMobileApiKey: neshanEnabled ? neshanMobileKey : 'UNCONFIGURED']
         applicationId 'ir.pedalpro.app'
         minSdk 26
         targetSdk 36
-        versionCode 37
-        versionName '1.4.32'
+        versionCode 80
+        versionName '2.0.0-native-rc36'
+        // Override with -PpedalproMapTileTemplate='https://licensed-host/{z}/{x}/{y}.png'
+        // OSM tiles are a development fallback; production must respect provider terms.
+        def mapTemplate = providers.gradleProperty('pedalproMapTileTemplate')
+                .orElse('https://tile.openstreetmap.org/{z}/{x}/{y}.png').get()
+        buildConfigField 'String', 'PEDALPRO_MAP_TILE_TEMPLATE',
+                '"' + mapTemplate.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        def mapCredit = providers.gradleProperty('pedalproMapAttribution')
+                .orElse('© OpenStreetMap contributors').get()
+        buildConfigField 'String', 'PEDALPRO_MAP_ATTRIBUTION',
+                '"' + mapCredit.replace('\\', '\\\\').replace('"', '\\"') + '"'
     }
 
     flavorDimensions 'distribution'
@@ -44,4 +65,7 @@ dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'com.google.firebase:firebase-messaging:24.1.2'
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+    if (neshanEnabled) {
+        implementation 'org.neshan.maplibre:android-sdk-opengl:13.4.1'
+    }
 }
