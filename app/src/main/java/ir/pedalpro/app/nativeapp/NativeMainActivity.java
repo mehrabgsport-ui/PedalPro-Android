@@ -5344,35 +5344,51 @@ public final class NativeMainActivity extends Activity {
                 int rideId = created.optInt("ride_id", 0);
                 if (rideId <= 0) throw new IllegalStateException("شناسه رکاب از سرور دریافت نشد.");
 
-                // Important: do not persist the UI preflight fix. TrackingService
-                // creates the first stored GPS point after its two-fix accuracy lock.
-                // The preflight fix may center the map, but never affects distance.
+                // The server has created the ride: never depend on a second network
+                // request before activating local tracking. A failed bootstrap must
+                // not leave an active server ride with no GPS recorder.
+                // The UI-only preflight fix must NOT be stored as a track point.
+                activeRide = new JSONObject()
+                        .put("id", rideId)
+                        .put("title", rideTitle)
+                        .put("public_tracking", publicTracking)
+                        .put("duration_seconds", 0);
+                manualPaused = false;
+                rideBaseSeconds = 0L;
+                rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
+                String trackingError = "";
+                try {
+                    startTrackingService(rideId);
+                } catch (Exception failedService) {
+                    // Keep the already created ride visible; do not offer to create it again.
+                    trackingError = failedService.getMessage() == null
+                            ? "اجازه اجرای سرویس GPS صادر نشد" : failedService.getMessage();
+                }
+
                 String groupStartError = "";
-                if (eventId > 0) {
+                if (eventId > 0 && trackingError.isEmpty()) {
                     try {
                         api.post("event_group_start", new JSONObject()
                                 .put("event_id", eventId).put("ride_id", rideId));
                     } catch (Exception failure) {
-                        // The personal ride exists: never hide group-start failure or orphan GPS.
                         groupStartError = failure.getMessage();
                     }
                 }
-                final String groupNotice = groupStartError;
-
-                JSONObject d = api.bootstrap();
-                bootstrap = d;
-                activeRide = d.optJSONObject("my_active_ride");
-                if (activeRide == null) {
-                    activeRide = new JSONObject()
-                            .put("id", rideId)
-                            .put("title", rideTitle)
-                            .put("public_tracking", publicTracking)
-                            .put("duration_seconds", 0);
+                // A refresh failure is nonfatal after start_ride succeeds.
+                try {
+                    JSONObject d = api.bootstrap();
+                    bootstrap = d;
+                    JSONObject serverRide = d.optJSONObject("my_active_ride");
+                    if (serverRide != null && serverRide.optInt("id", 0) == rideId) {
+                        activeRide = serverRide;
+                        rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
+                        rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
+                    }
+                } catch (Exception ignored) {
+                    // Keep the server-confirmed ID and local tracking running.
                 }
-                manualPaused = false;
-                rideBaseSeconds = activeRide.optLong("duration_seconds", 0);
-                rideTimerAnchorElapsed = SystemClock.elapsedRealtime();
-                startTrackingService(rideId);
+                final String groupNotice = groupStartError;
+                final String gpsNotice = trackingError;
 
                 main.post(() -> {
                     pendingFreshFix = null;
@@ -5381,14 +5397,34 @@ public final class NativeMainActivity extends Activity {
                     if (activeRideRouteView != null) {
                         activeRideRouteView.setCurrent(fix.getLatitude(), fix.getLongitude());
                     }
-                    toast(groupNotice.isEmpty() ? "ثبت GPS شروع شد." :
-                            "رکاب شخصی شروع شد، اما برنامه گروهی فعال نشد: " + groupNotice);
+                    if (!gpsNotice.isEmpty()) {
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("رکاب‌زنی ایجاد شد؛ GPS فعال نشد")
+                                .setMessage("فعالیت در سرور ثبت شده است، اما سرویس GPS اجرا نشد: "
+                                        + gpsNotice + "\nاز صفحه رکاب‌زنی گزینه «ادامه ثبت» را بررسی کنید؛ دوباره شروع نزنید.")
+                                .setPositiveButton("متوجه شدم", null).show();
+                    } else {
+                        toast(groupNotice.isEmpty() ? "ثبت GPS شروع شد." :
+                                "رکاب شخصی شروع شد، اما برنامه گروهی فعال نشد: " + groupNotice);
+                    }
                 });
             } catch (Exception e) {
                 main.post(() -> {
                     setProxyEnabled(start, true);
-                    state.setText("شروع انجام نشد: " + e.getMessage());
+                    String message = e.getMessage() == null ? "خطای نامشخص سرور" : e.getMessage();
+                    state.setText("شروع انجام نشد: " + message);
                     state.setTextColor(RED);
+                    if (message.contains("شماره موبایل") || message.contains("شماره تلفن")
+                            || message.contains("تأیید نشده")) {
+                        new android.app.AlertDialog.Builder(this)
+                                .setTitle("برای شروع رکاب‌زنی، شماره تلفن را تأیید کنید")
+                                .setMessage(message)
+                                .setNegativeButton("بستن", null)
+                                .setPositiveButton("حساب کاربری", (dialog, which) -> showMe())
+                                .show();
+                    } else {
+                        toast("شروع رکاب‌زنی انجام نشد: " + message);
+                    }
                 });
             }
         });
@@ -5740,9 +5776,15 @@ public final class NativeMainActivity extends Activity {
                 stop.setAction(TrackingService.ACTION_STOP);
                 startService(stop);
 
-                JSONObject d = api.bootstrap();
-                bootstrap = d;
-                activeRide = d.optJSONObject("my_active_ride");
+                // stop_ride has already succeeded. A subsequent bootstrap outage
+                // must not report a failed save or restart a completed activity.
+                try {
+                    JSONObject d = api.bootstrap();
+                    bootstrap = d;
+                    activeRide = d.optJSONObject("my_active_ride");
+                } catch (Exception ignored) {
+                    activeRide = null;
+                }
                 manualPaused = false;
                 rideTimerAnchorElapsed = 0;
                 rideBaseSeconds = 0;
