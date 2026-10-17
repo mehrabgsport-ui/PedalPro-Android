@@ -382,6 +382,23 @@ expect "$NATIVE/NativeChatActivity.java" 'protected boolean useFixedContentViewp
 expect "$NATIVE/NativeChatActivity.java" 'new LinearLayout.LayoutParams(-1,0,1f)' "Chat messages expand into remaining viewport"
 expect "$NATIVE/NativeChatActivity.java" 'cancelCompose.setVisibility(View.VISIBLE)' "Reply and edit can always be cancelled"
 
+# RC36: start must activate GPS after confirmed server creation without
+# depending on bootstrap refresh, and finish must keep a successful stop.
+python3 - "$NATIVE/NativeMainActivity.java" <<'PY'
+import sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = source.split("private void createRideAndStartTracking(", 1)[1].split("private JSONObject findChallengeById(", 1)[0]
+assert start.count('api.post("start_ride", body)') == 1, "one create request per tap"
+assert start.index('startTrackingService(rideId);') < start.index('api.bootstrap();'), "GPS startup must precede optional bootstrap"
+assert 'serverRide.optInt("id", 0) == rideId' in start, "refresh must not substitute another ride"
+assert 'فعالیت جدیدی شروع نکنید' in start, "tracker retry must not create duplicate server rides"
+assert 'message.contains("شماره موبایل")' in start, "phone verification rejection needs visible guidance"
+stop = source.split("private void finishRide(Button button, String notes)", 1)[1].split("private boolean isTrackingServiceActive()", 1)[0]
+assert 'api.post("stop_ride"' in stop and 'A subsequent bootstrap outage' in stop, "saved ride survives bootstrap outage"
+print("PASS RC36 GPS start and finish resilience")
+PY
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
