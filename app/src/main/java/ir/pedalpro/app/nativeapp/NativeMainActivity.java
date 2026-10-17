@@ -5401,8 +5401,17 @@ public final class NativeMainActivity extends Activity {
                         new android.app.AlertDialog.Builder(this)
                                 .setTitle("رکاب‌زنی ایجاد شد؛ GPS فعال نشد")
                                 .setMessage("فعالیت در سرور ثبت شده است، اما سرویس GPS اجرا نشد: "
-                                        + gpsNotice + "\nاز صفحه رکاب‌زنی گزینه «ادامه ثبت» را بررسی کنید؛ دوباره شروع نزنید.")
-                                .setPositiveButton("متوجه شدم", null).show();
+                                        + gpsNotice + "\nفعالیت جدیدی شروع نکنید؛ تلاش مجدد همان رکاب‌زنی را فعال می‌کند.")
+                                .setNegativeButton("بعداً", null)
+                                .setPositiveButton("تلاش مجدد GPS", (dialog, which) -> {
+                                    try {
+                                        startTrackingService(rideId);
+                                        toast("درخواست اجرای دوباره GPS ارسال شد.");
+                                        showRide();
+                                    } catch (Exception retryFailure) {
+                                        toast("GPS فعال نشد: " + retryFailure.getMessage());
+                                    }
+                                }).show();
                     } else {
                         toast(groupNotice.isEmpty() ? "ثبت GPS شروع شد." :
                                 "رکاب شخصی شروع شد، اما برنامه گروهی فعال نشد: " + groupNotice);
