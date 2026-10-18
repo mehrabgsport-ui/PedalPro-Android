@@ -5517,7 +5517,8 @@ public final class NativeMainActivity extends Activity {
                 api.post("ride_delete",new JSONObject().put("ride_id",rideId));
                 Intent discard=new Intent(this,TrackingService.class);
                 discard.setAction(TrackingService.ACTION_DISCARD);
-                startService(discard); // Explicitly erase GPS queue for this deleted ride.
+                discard.putExtra("ride_id", rideId);
+                startService(discard); // Purge ONLY this server-confirmed ride's queued fixes.
                 try {
                     bootstrap=api.bootstrap();
                     activeRide=bootstrap.optJSONObject("my_active_ride");
