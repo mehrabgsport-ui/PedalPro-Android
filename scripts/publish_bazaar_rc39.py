@@ -67,12 +67,29 @@ def main():
     session.headers["CAFEBAZAAR-PISHKHAN-API-SECRET"]=token
 
     draft=session.get(BASE+"last-uncommitted/",timeout=45)
+    def valid_release(value):
+        """The API may return 200 with an empty/null release and a message."""
+        if not isinstance(value,dict):
+            return False
+        if value.get("id") or value.get("release_id"):
+            return True
+        for key in ("release","data","result"):
+            child=value.get(key)
+            if isinstance(child,dict) and (child.get("id") or child.get("release_id")):
+                return True
+        return False
     if draft.status_code==404:
-        check(session.post(BASE,timeout=45),"create-draft")
-        print("Created a new Pishkhan release draft.",flush=True)
+        current={}
     else:
-        check(draft,"last-uncommitted")
-        print("Found the existing Pishkhan release draft.",flush=True)
+        current=check(draft,"last-uncommitted")
+    if not valid_release(current):
+        # RC38 and the first RC39 run both received HTTP 400 on upload:
+        # "رهانش ثبت‌شده‌ای وجود ندارد." GET 200 alone is not a draft.
+        print("Pishkhan returned no valid uncommitted release; creating one.",flush=True)
+        created=check(session.post(BASE,timeout=45),"create-draft")
+        print("Pishkhan release creation accepted.",flush=True)
+    else:
+        print("Pishkhan existing release draft ID verified.",flush=True)
 
     with args.apk.open("rb") as fp:
         response=session.post(
