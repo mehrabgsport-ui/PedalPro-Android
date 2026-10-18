@@ -30,6 +30,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private boolean traffic;
     private boolean alternateTiles;
     private boolean amoled;
+    private boolean fullRideMode;
     public interface BatterySaverListener { void onBatterySaverChanged(boolean enabled); }
     private BatterySaverListener batterySaverListener;
     public void setBatterySaverListener(BatterySaverListener listener){batterySaverListener=listener;}
@@ -119,9 +120,9 @@ public final class PedalNeshanMapSurface extends FrameLayout {
 
     private GradientDrawable panelBackground(){
         GradientDrawable drawable=new GradientDrawable();
-        drawable.setColor(amoled?OledBatteryTheme.PANEL:Color.argb(225,6,28,45));
+        drawable.setColor(fullRideMode&&amoled?OledBatteryTheme.PANEL:Color.argb(225,6,28,45));
         drawable.setCornerRadius(dp(13));
-        drawable.setStroke(dp(1),amoled?OledBatteryTheme.BORDER:Color.argb(75,164,235,244));
+        drawable.setStroke(dp(1),fullRideMode&&amoled?OledBatteryTheme.BORDER:Color.argb(75,164,235,244));
         return drawable;
     }
     private void refreshControlPanels(){
@@ -133,6 +134,8 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
 
     public void setFullRideMode(boolean enabled){
+        fullRideMode=enabled;
+        refreshControlPanels();
         if(mapControls==null)return;
         FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(44),-2,
                 enabled?Gravity.BOTTOM|Gravity.START:Gravity.TOP|Gravity.END);
