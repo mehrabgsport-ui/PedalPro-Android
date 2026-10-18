@@ -8033,11 +8033,8 @@ public final class NativeMainActivity extends Activity {
                     attended.setTextColor(MUTED);
                     attended.setChecked(r.optInt("attended", 0) == 1);
                     int regId = r.optInt("id", 0);
-                    attended.setOnCheckedChangeListener((button, checked) -> {
-                        if (checked && "completed".equals(event.optString("status", "")))
-                            promptRetrospectiveAttendance(regId,attended);
-                        else saveAttendance(regId, checked, attended, "");
-                    });
+                    bindAttendanceToggle(attended,regId,
+                            "completed".equals(event.optString("status","")));
                     row.addView(attended, new LinearLayout.LayoutParams(-2, dp(42)));
                 } else {
                     TextView state = text(r.optInt("attended", 0) == 1 ? "✓ حاضر" : "ثبت‌نام", 11, false, MUTED);
@@ -8187,6 +8184,13 @@ public final class NativeMainActivity extends Activity {
 
 
 
+    private void bindAttendanceToggle(CheckBox control,int registrationId,boolean completed){
+        control.setOnCheckedChangeListener((button,checked)->{
+            if(checked && completed)promptRetrospectiveAttendance(registrationId,control);
+            else saveAttendance(registrationId,checked,control,"",completed);
+        });
+    }
+
     private void promptRetrospectiveAttendance(int registrationId, CheckBox control) {
         EditText joined=input("انتخاب تاریخ شمسی و ساعت ورود عضو");
         joined.setSingleLine(true);
@@ -8208,14 +8212,14 @@ public final class NativeMainActivity extends Activity {
                     restoreAttendanceToggle(control,false,registrationId);
                     toast("زمان باید قالب YYYY-MM-DD HH:mm:ss داشته باشد.");return;
                 }
-                saveAttendance(registrationId,true,control,entered);
+                saveAttendance(registrationId,true,control,entered,true);
             }).show();
     }
 
     private void restoreAttendanceToggle(CheckBox control,boolean value,int registrationId) {
         control.setOnCheckedChangeListener(null);
         control.setChecked(value);
-        control.setOnCheckedChangeListener((b,checked)->saveAttendance(registrationId,checked,control,""));
+        bindAttendanceToggle(control,registrationId,true);
     }
 
     private void showLateMemberPicker(JSONObject event, Dialog parent) {
@@ -8261,11 +8265,8 @@ public final class NativeMainActivity extends Activity {
             }).show();
     }
 
-    private void saveAttendance(int registrationId, boolean attended, CheckBox control) {
-        saveAttendance(registrationId,attended,control,"");
-    }
-
-    private void saveAttendance(int registrationId, boolean attended, CheckBox control, String attendedAt) {
+    private void saveAttendance(int registrationId, boolean attended, CheckBox control,
+                                String attendedAt,boolean completed) {
         if(registrationId<=0||!control.isEnabled())return;
         // Prevent overlapping toggles. Server remains authoritative for attendance,
         // event-distance credits and overlapping personal GPS rides.
@@ -8289,10 +8290,12 @@ public final class NativeMainActivity extends Activity {
                 main.post(()->{
                     control.setOnCheckedChangeListener(null);
                     control.setChecked(!attended);
-                    control.setOnCheckedChangeListener((button,checked)->
-                            saveAttendance(registrationId,checked,control,""));
+                    bindAttendanceToggle(control,registrationId,completed);
                     control.setEnabled(true);
-                    toast("ثبت حضور ناموفق بود؛ مقدار قبلی بازگردانده شد.");
+                    String reason=e.getMessage();
+                    if(reason!=null && reason.length()>140)reason=reason.substring(0,140);
+                    toast("ثبت حضور ناموفق بود؛ مقدار قبلی بازگردانده شد."
+                            +(reason==null||reason.isBlank()?"":" "+reason));
                 });
             }
         });
