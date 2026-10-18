@@ -27,6 +27,8 @@ import java.util.List;
 public final class NativeRouteView extends View {
     private final Paint grid = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint route = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint routeGlow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint routeHalo = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint live = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint roadRoute = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint roadRouteBorder = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -76,6 +78,15 @@ public final class NativeRouteView extends View {
         route.setStyle(Paint.Style.STROKE);
         route.setStrokeCap(Paint.Cap.ROUND);
         route.setStrokeJoin(Paint.Join.ROUND);
+        for(Paint glow:new Paint[]{routeGlow,routeHalo}){
+            glow.setStyle(Paint.Style.STROKE);
+            glow.setStrokeCap(Paint.Cap.ROUND);
+            glow.setStrokeJoin(Paint.Join.ROUND);
+        }
+        routeGlow.setColor(Color.argb(54,18,225,252));
+        routeGlow.setStrokeWidth(dp(22));
+        routeHalo.setColor(Color.argb(118,0,231,255));
+        routeHalo.setStrokeWidth(dp(13));
         roadRouteBorder.setColor(Color.rgb(229,254,255));
         roadRouteBorder.setStrokeWidth(dp(11));
         roadRouteBorder.setStyle(Paint.Style.STROKE);
@@ -300,6 +311,8 @@ public final class NativeRouteView extends View {
 
     public void setAmoledBatterySaver(boolean enabled){
         amoledBatterySaver=enabled;
+        route.setColor(enabled?Color.rgb(87,247,255):Color.rgb(44,220,225));
+        route.setStrokeWidth(dp(enabled?7.5f:4f));
         setBackgroundColor(enabled?Color.BLACK:Color.rgb(6,19,31));
         invalidate();
     }
@@ -443,7 +456,13 @@ public final class NativeRouteView extends View {
             if (first) { p.moveTo(sx, sy); first = false; }
             else p.lineTo(sx, sy);
         }
-        if (!first) canvas.drawPath(p, route);
+        if (!first) {
+            if(amoledBatterySaver){
+                canvas.drawPath(p,routeGlow);
+                canvas.drawPath(p,routeHalo);
+            }
+            canvas.drawPath(p, route);
+        }
 
         if (!navigationPoints.isEmpty()) {
             Path road = new Path();
