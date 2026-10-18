@@ -30,6 +30,9 @@ public final class PedalNeshanMapSurface extends FrameLayout {
     private boolean traffic;
     private boolean alternateTiles;
     private boolean amoled;
+    public interface BatterySaverListener { void onBatterySaverChanged(boolean enabled); }
+    private BatterySaverListener batterySaverListener;
+    public void setBatterySaverListener(BatterySaverListener listener){batterySaverListener=listener;}
 
     public PedalNeshanMapSurface(Context context) {
         super(context);
@@ -53,8 +56,7 @@ public final class PedalNeshanMapSurface extends FrameLayout {
             }
         }
         overlay=new NativeRouteView(context);
-        amoled=context.getSharedPreferences("pedalpro_map_display",Context.MODE_PRIVATE)
-                .getBoolean("amoled_enabled",false);
+        amoled=OledBatteryTheme.enabled(context);
         overlay.setAmoledBatterySaver(amoled);
         if(sdkBridge!=null)sdkBridge.setAmoled(amoled);
         // A projected Canvas track cannot overlay a tilted MapLibre camera.
@@ -117,10 +119,16 @@ public final class PedalNeshanMapSurface extends FrameLayout {
 
     private GradientDrawable panelBackground(){
         GradientDrawable drawable=new GradientDrawable();
-        drawable.setColor(Color.argb(225,6,28,45));
+        drawable.setColor(amoled?OledBatteryTheme.PANEL:Color.argb(225,6,28,45));
         drawable.setCornerRadius(dp(13));
-        drawable.setStroke(dp(1),Color.argb(75,164,235,244));
+        drawable.setStroke(dp(1),amoled?OledBatteryTheme.BORDER:Color.argb(75,164,235,244));
         return drawable;
+    }
+    private void refreshControlPanels(){
+        if(mapControls==null)return;
+        mapControls.setBackground(panelBackground());
+        for(int i=0;i<mapControls.getChildCount();i++)
+            mapControls.getChildAt(i).setBackground(panelBackground());
     }
     private int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
 
@@ -136,10 +144,12 @@ public final class PedalNeshanMapSurface extends FrameLayout {
 
     private void toggleBatterySaver(){
         amoled=!amoled;
-        getContext().getSharedPreferences("pedalpro_map_display",Context.MODE_PRIVATE)
-                .edit().putBoolean("amoled_enabled",amoled).apply();
+        getContext().getSharedPreferences(OledBatteryTheme.PREFS,Context.MODE_PRIVATE)
+                .edit().putBoolean(OledBatteryTheme.KEY_ENABLED,amoled).apply();
         overlay.setAmoledBatterySaver(amoled);
         if(sdkBridge!=null)sdkBridge.setAmoled(amoled);
+        refreshControlPanels();
+        if(batterySaverListener!=null)batterySaverListener.onBatterySaverChanged(amoled);
         android.widget.Toast.makeText(getContext(),
                 amoled?"حالت ذخیره باتری نقشه فعال شد":"حالت ذخیره باتری نقشه خاموش شد",
                 android.widget.Toast.LENGTH_SHORT).show();
