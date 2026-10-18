@@ -5512,12 +5512,18 @@ public final class NativeMainActivity extends Activity {
         setProxyEnabled(button,false);
         io.execute(()->{
             try{
-                Intent stop=new Intent(this,TrackingService.class);
-                stop.setAction(TrackingService.ACTION_STOP);
-                startService(stop);
+                // Never interrupt the active recorder before the server confirms
+                // deletion. A failed request must leave GPS recording and the queue intact.
                 api.post("ride_delete",new JSONObject().put("ride_id",rideId));
-                bootstrap=api.bootstrap();
-                activeRide=bootstrap.optJSONObject("my_active_ride");
+                Intent discard=new Intent(this,TrackingService.class);
+                discard.setAction(TrackingService.ACTION_DISCARD);
+                startService(discard); // Explicitly erase GPS queue for this deleted ride.
+                try {
+                    bootstrap=api.bootstrap();
+                    activeRide=bootstrap.optJSONObject("my_active_ride");
+                } catch(Exception refreshFailure) {
+                    activeRide=null; // Deletion succeeded; refresh is non-critical.
+                }
                 manualPaused=false;
                 rideTimerAnchorElapsed=0;
                 rideBaseSeconds=0;
