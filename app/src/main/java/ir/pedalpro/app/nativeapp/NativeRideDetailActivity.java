@@ -42,12 +42,14 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
     private NativeRideProfileView.Mode profileMode=NativeRideProfileView.Mode.ELEVATION;
     private long lastScrubAt;
     private long lastProfileMapFocusAt;
+    private View liveMetricGrid;
+    private int drawnPointCount=-1;
+    private long drawnLastPointId=-1L;
 
     private final Runnable livePoll=new Runnable(){
         @Override public void run(){
             if(destroyed||!active)return;
-            load(true);
-            main.postDelayed(this,8000L);
+            load(true); // Schedule the next poll only after this one completes.
         }
     };
 
@@ -86,10 +88,14 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
             try{
                 Map<String,Object> q=new HashMap<>();
                 q.put("ride_id",rideId);
-                q.put("point_mode","nav");
+                // Server provides a <=900-point downsampled preview, not the full
+                // long-ride GPS dataset. Every stored GPS point remains untouched.
+                q.put("point_mode","live");
                 JSONObject details=api.get("ride_details",q);
                 JSONObject r=details.optJSONObject("ride");
-                JSONObject b=api.bootstrap();
+                // Repeated bootstrap includes whole-site histories and is expensive.
+                // The already-authenticated detail poll needs only ride_details.
+                JSONObject b=fromPoll?null:api.bootstrap();
                 main.post(()->{
                     if(destroyed)return;
                     if(r==null){
@@ -100,13 +106,19 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
                         return;
                     }
                     ride=r;
-                    boot=b;
-                    if(fromPoll && android.os.SystemClock.elapsedRealtime()-lastScrubAt<6000L)return;
-                    renderRide();
+                    if(b!=null)boot=b;
+                    if(fromPoll && active && "active".equals(r.optString("status"))) {
+                        if(android.os.SystemClock.elapsedRealtime()-lastScrubAt>=6000L)
+                            updateLiveRide();
+                    } else {
+                        renderRide();
+                    }
+                    if(fromPoll && !destroyed && active)main.postDelayed(livePoll,8000L);
                 });
             }catch(Exception e){
                 main.post(()->{
                     if(!destroyed&&!fromPoll)renderLoadError(e.getMessage());
+                    if(!destroyed&&fromPoll&&active)main.postDelayed(livePoll,8000L);
                 });
             }
         });
@@ -152,6 +164,10 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         profileMap=new PedalNeshanMapSurface(this);
         profileMap.setPoints(ride.optJSONArray("points"));
+        JSONArray initialPoints=ride.optJSONArray("points");
+        drawnPointCount=initialPoints==null?0:initialPoints.length();
+        JSONObject initialTail=drawnPointCount>0?initialPoints.optJSONObject(drawnPointCount-1):null;
+        drawnLastPointId=initialTail==null?0L:initialTail.optLong("id",0L);
         double markerLat=ride.optDouble("last_lat",Double.NaN);
         double markerLng=ride.optDouble("last_lng",Double.NaN);
         if(Double.isFinite(markerLat)&&Double.isFinite(markerLng))
@@ -168,7 +184,8 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
                 active?"در حال اجرا":"پایان یافته",active?GREEN:MUTED));
         content.addView(notice,cardLp());
 
-        content.addView(metricGrid(),cardLp());
+        liveMetricGrid=metricGrid();
+        content.addView(liveMetricGrid,cardLp());
 
         if(ride.has("met_value")&&!ride.isNull("met_value")){
             TextView energy=text("MET تقریبی: "+ride.optString("met_value")+". "+ride.optString("energy_basis",""),11,false,MUTED);
@@ -259,6 +276,32 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
 
         VazirmatnLoader.apply(this,content);
         if(active)main.postDelayed(livePoll,8000L);
+    }
+
+    /** Refresh an active ride in place: no Neshan renderer recreation, image reload,
+     *  repeated comments fetch or loss of scroll/scrubber position every 8 seconds. */
+    private void updateLiveRide(){
+        if(profileMap==null||profile==null||liveMetricGrid==null){renderRide();return;}
+        int at=content.indexOfChild(liveMetricGrid);
+        if(at>=0){
+            content.removeViewAt(at);
+            liveMetricGrid=metricGrid();
+            content.addView(liveMetricGrid,at,cardLp());
+        }
+        JSONArray points=ride.optJSONArray("points");
+        int count=points==null?0:points.length();
+        JSONObject tail=count>0?points.optJSONObject(count-1):null;
+        long lastId=tail==null?0L:tail.optLong("id",0L);
+        if(count!=drawnPointCount||lastId!=drawnLastPointId){
+            drawnPointCount=count;
+            drawnLastPointId=lastId;
+            profileMap.setPoints(points);
+            profile.setPoints(points);
+            double latitude=ride.optDouble("last_lat",Double.NaN);
+            double longitude=ride.optDouble("last_lng",Double.NaN);
+            if(selectedProfileIndex<0&&Double.isFinite(latitude)&&Double.isFinite(longitude))
+                profileMap.setTarget(latitude,longitude);
+        }
     }
 
     private LinearLayout deferredMap(){
