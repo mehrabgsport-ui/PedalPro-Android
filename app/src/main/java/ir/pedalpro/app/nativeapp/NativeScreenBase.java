@@ -403,10 +403,17 @@ abstract class NativeScreenBase extends Activity {
     protected Button primary(String s){
         Button b=plainButton(s,13);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        b.setTextColor(Color.rgb(5,40,55));
-        GradientDrawable g=new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{Color.rgb(19,220,232),Color.rgb(37,200,244)});
+        boolean oled=OledBatteryTheme.enabled(this);
+        b.setTextColor(oled?Color.rgb(66,235,249):Color.rgb(5,40,55));
+        GradientDrawable g;
+        if(oled){
+            g=new GradientDrawable();
+            g.setColor(Color.BLACK);
+            g.setStroke(dp(1),Color.argb(125,66,235,249));
+        }else{
+            g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{Color.rgb(19,220,232),Color.rgb(37,200,244)});
+        }
         g.setCornerRadius(dp(17));
         b.setBackground(g);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
