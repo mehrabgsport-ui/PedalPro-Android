@@ -29,7 +29,9 @@ public final class PedalActionView extends LinearLayout {
         setLayoutDirection(LAYOUT_DIRECTION_RTL);
         setPadding(dp(12), 0, dp(12), 0);
 
-        int fg = style == Style.PRIMARY ? WEB_PRIMARY_TEXT : WEB_TEXT;
+        int fg = OledBatteryTheme.enabled(c) ?
+                (style == Style.PRIMARY ? WEB_CYAN : WEB_TEXT) :
+                (style == Style.PRIMARY ? WEB_PRIMARY_TEXT : WEB_TEXT);
         icon = new PedalIconView(c, type, fg);
         label = new TextView(c);
         label.setText(text);
@@ -64,6 +66,13 @@ public final class PedalActionView extends LinearLayout {
 
     private GradientDrawable background(Style style) {
         GradientDrawable g;
+        if(OledBatteryTheme.enabled(getContext())){
+            g=new GradientDrawable();
+            g.setColor(OledBatteryTheme.PANEL);
+            if(style!=Style.GHOST)g.setStroke(dp(1),OledBatteryTheme.BORDER);
+            g.setCornerRadius(dp(style==Style.BOTTOM?21:17));
+            return g;
+        }
         if (style == Style.PRIMARY) {
             g = new GradientDrawable(
                     GradientDrawable.Orientation.TL_BR,
