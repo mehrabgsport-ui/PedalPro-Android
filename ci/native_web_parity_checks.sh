@@ -203,7 +203,7 @@ from pathlib import Path
 import sys
 s=Path(sys.argv[1]).read_text()
 assert 'bindAttendanceToggle(attended,regId,' in s
-assert 'bindAttendanceToggle(attended,regId,' in s
+assert 'if(checked && completed)promptRetrospectiveAttendance(registrationId,control);' in s
 assert 'api.post("event_late_add",new JSONObject()' in s
 assert 'showLateMemberPicker(event, dialog)' in s
 print('PASS RC19 late-member check-in and historical attendance timestamp UI')
@@ -463,10 +463,11 @@ print("PASS RC39 scoped OLED ride HUD, restored pages, clipped scroll header, tr
 PY
 
 # RC40: attendance history and GPS ride deletion must be robust.
-python3 - "$NATIVE/NativeMainActivity.java" <<'PY'
+python3 - "$NATIVE/NativeMainActivity.java" "$ROOT/app/src/main/java/ir/pedalpro/app/TrackingService.java" <<'PY'
 from pathlib import Path
 import sys
 main=Path(sys.argv[1]).read_text(encoding="utf-8")
+service=Path(sys.argv[2]).read_text(encoding="utf-8")
 assert 'bindAttendanceToggle(attended,regId,' in main
 assert 'if(checked && completed)promptRetrospectiveAttendance(registrationId,control);' in main
 assert 'bindAttendanceToggle(control,registrationId,true);' in main
@@ -474,17 +475,21 @@ assert 'bindAttendanceToggle(control,registrationId,completed);' in main
 assert 'request.put("attended_at",attendedAt)' in main
 section=main.split('private void discardRide(Button button)',1)[1].split('private void toggleManualPause',1)[0]
 assert section.index('api.post("ride_delete"') < section.index('TrackingService.ACTION_DISCARD')
+assert 'discard.putExtra("ride_id", rideId);' in section
 assert 'TrackingService.ACTION_STOP' not in section
 assert 'activeRide=null; // Deletion succeeded; refresh is non-critical.' in section
 assert 'setProxyEnabled(button,true);' in section
-print("PASS RC40 retrospective check-in, server-first ride discard and recorder-on-failure")
+assert 'discardTracking(intent.getIntExtra("ride_id", 0));' in service
+discard=service.split('private void discardTracking(int expectedRideId)',1)[1].split('private void stopAllLocationUpdates',1)[0]
+assert 'removePendingForRide(expectedRideId);' in discard
+assert 'deleteRawLogForRide(expectedRideId);' in discard
+assert discard.index('if (currentRideId != expectedRideId)') < discard.index('.putBoolean("active", false)')
+assert '.remove("pending")' not in discard
+assert 'if (rawWriterRideId == rideId) closeRawWriter();' in service
+assert 'removeFirstPending(p);' in service
+assert 'arr.getJSONObject(0).toString().equals(acknowledged.toString())' in service
+print("PASS RC40 attendance, server-first ID-scoped delete and in-flight GPS queue safety")
 PY
-
-if [[ "$failed" -ne 0 ]]; then
-  printf 'Native parity structural guards FAILED.\n' >&2
-  exit 1
-fi
-printf 'Native parity structural guards passed. Build/device and source-reference QA remain separate gates.\n'
 
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_create' "Groups creation uses authenticated server endpoint"
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_answer' "Group invite responses submitted to server"
@@ -497,3 +502,9 @@ expect "$NATIVE/NativeGroupsActivity.java" 'catch(org.json.JSONException e)' "Gr
 
 expect "$NATIVE/NativeGroupPointPicker.java" 'setOnMapTapListener' "Program selection on map"
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_redeem' "Invitation link requires explicit user acceptance"
+
+if [[ "$failed" -ne 0 ]]; then
+  printf 'Native parity structural guards FAILED.\n' >&2
+  exit 1
+fi
+printf 'Native parity structural guards passed. Build/device and source-reference QA remain separate gates.\n'
