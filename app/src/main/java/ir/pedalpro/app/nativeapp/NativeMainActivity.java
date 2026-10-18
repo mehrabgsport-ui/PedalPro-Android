@@ -357,7 +357,7 @@ public final class NativeMainActivity extends Activity {
     private void renderShell() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         stageRoot = new FrameLayout(this);
-        stageRoot.setBackgroundColor(OledBatteryTheme.enabled(this)?Color.BLACK:BG);
+        stageRoot.setBackgroundColor(BG);
 
         siteBackground = new ImageView(this);
         siteBackground.setImageResource(R.drawable.site_bg_reference);
@@ -366,7 +366,6 @@ public final class NativeMainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 31) {
             siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(2), dp(2), Shader.TileMode.CLAMP));
         }
-        siteBackground.setVisibility(OledBatteryTheme.enabled(this)?View.GONE:View.VISIBLE);
         stageRoot.addView(siteBackground, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -379,7 +378,7 @@ public final class NativeMainActivity extends Activity {
         appRoot.setOrientation(LinearLayout.VERTICAL);
         appRoot.setBackgroundColor(Color.TRANSPARENT);
         appRoot.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        appRoot.setClipChildren(false);
+        appRoot.setClipChildren(true); // Prevent scrolling page content painting above the fixed header.
 
         ViewCompat.setOnApplyWindowInsetsListener(appRoot, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -389,16 +388,18 @@ public final class NativeMainActivity extends Activity {
 
         appRoot.addView(buildWebHeader(), new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        webHeader.setElevation(dp(12)); // Keep fixed header above the scrolling viewport.
 
         mainScroll = new ScrollView(this);
         mainScroll.setFillViewport(true);
-        mainScroll.setClipToPadding(false);
+        mainScroll.setClipToPadding(true);
+        mainScroll.setClipChildren(true);
         mainScroll.setBackgroundColor(Color.TRANSPARENT);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         // Allow the last form fields and buttons to scroll above the raised ride dock.
         content.setPadding(dp(16), dp(12), dp(16), dp(124));
-        content.setClipChildren(false);
+        content.setClipChildren(true);
         mainScroll.addView(content);
         appRoot.addView(mainScroll, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
@@ -2256,10 +2257,6 @@ public final class NativeMainActivity extends Activity {
             activeRideRouteView = new PedalNeshanMapSurface(this);
             activeRideMapRideId=shownRideId;
             activeRideRouteView.setBatterySaverListener(enabled -> {
-                stageRoot.setBackgroundColor(enabled?Color.BLACK:BG);
-                if(siteBackground!=null)siteBackground.setVisibility(enabled?View.GONE:View.VISIBLE);
-                if(webHeader!=null)webHeader.setBackground(headerGradient());
-                if(bottomNavDock!=null)bottomNavDock.setBackground(bottomGradient());
                 if(activeRide!=null && "ride".equals(currentPage)){
                     hideImmersiveRideOverlay();
                     showRide(); // Re-skin current controls without re-creating MapLibre.
@@ -2332,6 +2329,9 @@ public final class NativeMainActivity extends Activity {
                                     PedalActionView stop,LinearLayout gpsCard) {
         if(activeRide==null||activeRideRouteView==null||stageRoot==null)return;
         // Keep controls attached to the existing ride callbacks; no TrackingService logic changes.
+        boolean oledRide=OledBatteryTheme.enabled(this);
+        for(PedalActionView control:new PedalActionView[]{live,pause,low,details,stop})
+            control.setOledRideMode(oledRide);
         content.removeView(activeRideRouteView);
         content.removeView(live);
         content.removeView(pause);
@@ -2383,6 +2383,7 @@ public final class NativeMainActivity extends Activity {
 
         PedalActionView back=action(PedalIconView.Icon.BACK,"برگشت",PedalActionView.Style.OUTLINE);
         back.setOnClickListener(v->showHome());
+        back.setOledRideMode(oledRide);
         stateBar.addView(back,new LinearLayout.LayoutParams(dp(84),dp(51)));
         top.addView(stateBar,new LinearLayout.LayoutParams(-1,dp(80)));
 
@@ -2408,6 +2409,7 @@ public final class NativeMainActivity extends Activity {
 
         PedalActionView group=action(PedalIconView.Icon.ROUTE,"مسیریابی گروه",PedalActionView.Style.OUTLINE);
         group.setOnClickListener(v->openGroupNavigation());
+        group.setOledRideMode(oledRide);
         LinearLayout.LayoutParams groupLp=new LinearLayout.LayoutParams(dp(158),dp(48));
         groupLp.gravity=Gravity.RIGHT;
         groupLp.setMargins(0,dp(10),0,0);
@@ -2417,6 +2419,7 @@ public final class NativeMainActivity extends Activity {
         if (groupAdmin) {
             PedalActionView program=action(PedalIconView.Icon.GROUP,"برنامه گروهی",PedalActionView.Style.OUTLINE);
             program.setOnClickListener(v->showGroupProgramDialog());
+            program.setOledRideMode(oledRide);
             LinearLayout.LayoutParams programLp=new LinearLayout.LayoutParams(dp(158),dp(48));
             programLp.gravity=Gravity.RIGHT;
             programLp.setMargins(0,dp(7),0,0);
@@ -2442,6 +2445,7 @@ public final class NativeMainActivity extends Activity {
                 "ابزارهای رکاب",PedalActionView.Style.OUTLINE);
         menu.setOnClickListener(v->tools.setVisibility(
                 tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
+        menu.setOledRideMode(oledRide);
         LinearLayout.LayoutParams menuLp=new LinearLayout.LayoutParams(-1,dp(46));
         menuLp.setMargins(0,dp(5),0,dp(8));
         bottom.addView(menu,menuLp);
@@ -6321,8 +6325,7 @@ public final class NativeMainActivity extends Activity {
         box.setPadding(dp(16), dp(15), dp(16), dp(15));
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
+                new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
         g.setCornerRadius(dp(radius));
         g.setStroke(dp(1), Color.argb(54, 255, 255, 255));
         box.setBackground(g);
@@ -6342,8 +6345,7 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable headerGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(251, 17, 49, 70), Color.argb(253, 5, 25, 42)});
+                new int[]{Color.argb(251, 17, 49, 70), Color.argb(253, 5, 25, 42)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         return g;
@@ -6351,8 +6353,7 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable bottomGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(250, 13, 44, 64), Color.argb(254, 5, 24, 42)});
+                new int[]{Color.argb(250, 13, 44, 64), Color.argb(254, 5, 24, 42)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
         g.setStroke(dp(1), Color.argb(61, 255, 255, 255));
         return g;
