@@ -67,7 +67,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private final java.util.HashMap<Integer,Marker> otherRiderMarkers=new java.util.HashMap<>();
     private final android.util.SparseArray<org.maplibre.android.annotations.Icon> riderIcons = new android.util.SparseArray<>();
     private int currentRiderDirectionBucket = Integer.MIN_VALUE;
-    private Polyline recorded,suggested;
+    private Polyline recorded,recordedGlow,recordedHalo,suggested;
     private JSONArray recordedPoints,suggestedPoints;
     private boolean started,resumed;
     private final Runnable delayedGeometry=()->applyGeometry();
@@ -135,12 +135,14 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 if(rider!=null){try{map.removeMarker(rider);}catch(Exception ignored){}}
                 if(goal!=null){try{map.removeMarker(goal);}catch(Exception ignored){}}
                 if(recorded!=null){try{map.removePolyline(recorded);}catch(Exception ignored){}}
+                if(recordedGlow!=null){try{map.removePolyline(recordedGlow);}catch(Exception ignored){}}
+                if(recordedHalo!=null){try{map.removePolyline(recordedHalo);}catch(Exception ignored){}}
                 if(suggested!=null){try{map.removePolyline(suggested);}catch(Exception ignored){}}
                 for(Marker marker:otherRiderMarkers.values()){
                     try{map.removeMarker(marker);}catch(Exception ignored){}
                 }
                 otherRiderMarkers.clear();
-                rider=null;goal=null;recorded=null;suggested=null;
+                rider=null;goal=null;recorded=null;recordedGlow=null;recordedHalo=null;suggested=null;
                 currentRiderDirectionBucket=Integer.MIN_VALUE;
                 applyGeometry();
                 updateRiderMarker(true);
@@ -154,8 +156,10 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         if(amoled==enabled)return;
         amoled=enabled;
         if(!ready||destroyed)return;
-        if(enabled)applyAmoledStyle(currentStyle);
-        else { ready=false;setNight(night); }
+        if(enabled){
+            applyAmoledStyle(currentStyle);
+            scheduleGeometry(); // change display layers, never the persisted GPS track
+        } else { ready=false;setNight(night); }
     }
     private void applyAmoledStyle(Style style){
         if(style==null)return;
@@ -362,11 +366,22 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private void applyGeometry(){
         if(destroyed||!ready||map==null)return;
         if(recorded!=null){map.removePolyline(recorded);recorded=null;}
+        if(recordedGlow!=null){map.removePolyline(recordedGlow);recordedGlow=null;}
+        if(recordedHalo!=null){map.removePolyline(recordedHalo);recordedHalo=null;}
         if(suggested!=null){map.removePolyline(suggested);suggested=null;}
         List<LatLng> history=cleanRecordedGeometry(parse(recordedPoints)),route=parse(suggestedPoints);
         if(history.size()>1){
+            if(amoled){
+                // Three translucent native strokes approximate a neon bloom without
+                // blurring the map or changing stored GPS geometry.
+                recordedGlow=map.addPolyline(new PolylineOptions()
+                        .addAll(history).color(Color.argb(54,18,225,252)).width(22f));
+                recordedHalo=map.addPolyline(new PolylineOptions()
+                        .addAll(history).color(Color.argb(118,0,231,255)).width(13f));
+            }
             recorded=map.addPolyline(new PolylineOptions()
-                    .addAll(history).color(Color.rgb(28,215,230)).width(5f));
+                    .addAll(history).color(amoled?Color.rgb(87,247,255):Color.rgb(28,215,230))
+                    .width(amoled?7.5f:5f));
             if(firstCamera&&!navigation){
                 LatLngBounds.Builder bounds=new LatLngBounds.Builder();
                 for(LatLng point:history)bounds.include(point);
