@@ -182,8 +182,9 @@ public class TrackingService extends Service implements LocationListener, Sensor
         }
 
         if (intent != null && ACTION_DISCARD.equals(intent.getAction())) {
-            discardTracking();
-            return START_NOT_STICKY;
+            // A delayed delete confirmation must never discard a different active ride.
+            discardTracking(intent.getIntExtra("ride_id", 0));
+            return prefs.getBoolean("active", false) ? START_STICKY : START_NOT_STICKY;
         }
 
         if (intent != null && ACTION_PREPARE_FINISH.equals(intent.getAction())) {
@@ -1072,10 +1073,10 @@ public class TrackingService extends Service implements LocationListener, Sensor
         rawWriterRideId = 0;
     }
 
-    private synchronized void deleteRawLogForCurrentRide() {
-        int rideId = prefs.getInt("ride_id", 0);
-        closeRawWriter();
+    private synchronized void deleteRawLogForRide(int rideId) {
         if (rideId <= 0) return;
+        // Do not close the writer belonging to a subsequent, unrelated ride.
+        if (rawWriterRideId == rideId) closeRawWriter();
         try {
             File file = new File(new File(getFilesDir(), "raw_gps"), "ride_" + rideId + ".jsonl");
             if (file.exists()) file.delete();
@@ -1149,13 +1150,37 @@ public class TrackingService extends Service implements LocationListener, Sensor
         } catch (Exception e) { return null; }
     }
 
-    private synchronized void removeFirstPending() {
+    private synchronized void removeFirstPending(JSONObject acknowledged) {
         try {
             JSONArray arr = new JSONArray(prefs.getString("pending", "[]"));
+            // Deletion can remove a point while the HTTP request is in flight.
+            // Only dequeue the point actually acknowledged, not the next ride's point.
+            if (acknowledged == null || arr.length() == 0 ||
+                    !arr.getJSONObject(0).toString().equals(acknowledged.toString())) return;
             JSONArray next = new JSONArray();
             for (int i = 1; i < arr.length(); i++) next.put(arr.get(i));
-            prefs.edit().putString("pending", next.toString()).apply();
+            if (next.length() == 0) prefs.edit().remove("pending").apply();
+            else prefs.edit().putString("pending", next.toString()).apply();
         } catch (Exception ignored) { }
+    }
+
+    private synchronized void removePendingForRide(int rideId) {
+        if (rideId <= 0) return;
+        try {
+            JSONArray arr = new JSONArray(prefs.getString("pending", "[]"));
+            JSONArray kept = new JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                Object entry = arr.get(i);
+                if (!(entry instanceof JSONObject) ||
+                        ((JSONObject) entry).optInt("ride_id", 0) != rideId) {
+                    kept.put(entry);
+                }
+            }
+            if (kept.length() == 0) prefs.edit().remove("pending").apply();
+            else prefs.edit().putString("pending", kept.toString()).apply();
+        } catch (Exception ignored) {
+            // Preserve the original queue if it cannot be parsed losslessly.
+        }
     }
 
     private void flushPending() {
@@ -1176,7 +1201,7 @@ public class TrackingService extends Service implements LocationListener, Sensor
                         ignored = acknowledgment.optBoolean("ignored", false);
                         reason = acknowledgment.optString("reason", "");
                     } catch (Exception ignoredJson) { }
-                    removeFirstPending();
+                    removeFirstPending(p);
                     if (ignored) {
                         broadcastStatus("نقطه GPS توسط فیلتر سرور رد شد" +
                                 (reason.isEmpty() ? "" : " · " + reason), false);
@@ -1361,11 +1386,24 @@ public class TrackingService extends Service implements LocationListener, Sensor
         stopSelf();
     }
 
-    private void discardTracking() {
-        deleteRawLogForCurrentRide();
+    private void discardTracking(int expectedRideId) {
+        if (expectedRideId <= 0) {
+            broadcastStatus("شناسه رکاب برای حذف GPS نامعتبر است؛ داده‌ها حفظ شدند", true);
+            if (!prefs.getBoolean("active", false)) stopSelf();
+            return;
+        }
+        int currentRideId = prefs.getInt("ride_id", 0);
+        removePendingForRide(expectedRideId);
+        deleteRawLogForRide(expectedRideId);
+        if (currentRideId != expectedRideId) {
+            // The user may already be recording a new ride.
+            if (!prefs.getBoolean("active", false)) stopSelf();
+            return;
+        }
         prefs.edit()
                 .putBoolean("active", false)
-                .remove("pending")
+                .putBoolean("finish_prepared", false)
+                .remove("finish_ride_id")
                 .remove("ride_id")
                 .remove("csrf")
                 .apply();
