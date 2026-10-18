@@ -128,6 +128,7 @@ public final class NativeMainActivity extends Activity {
     private ImageView siteBackground;
     private LinearLayout appRoot;
     private LinearLayout webHeader;
+    private FrameLayout bottomNavDock;
     private TextView rideDockLabel;
     private ScrollView mainScroll;
     private String currentPage = "dashboard";
@@ -2257,6 +2258,8 @@ public final class NativeMainActivity extends Activity {
             activeRideRouteView.setBatterySaverListener(enabled -> {
                 stageRoot.setBackgroundColor(enabled?Color.BLACK:BG);
                 if(siteBackground!=null)siteBackground.setVisibility(enabled?View.GONE:View.VISIBLE);
+                if(webHeader!=null)webHeader.setBackground(headerGradient());
+                if(bottomNavDock!=null)bottomNavDock.setBackground(bottomGradient());
                 if(activeRide!=null && "ride".equals(currentPage)){
                     hideImmersiveRideOverlay();
                     showRide(); // Re-skin current controls without re-creating MapLibre.
@@ -6199,6 +6202,7 @@ public final class NativeMainActivity extends Activity {
         // Keep the complete CTA inside the dock's actual layout bounds.
         // TranslationY(-38dp) previously pushed much of its circle outside the visible dock.
         FrameLayout dock = new FrameLayout(this);
+        bottomNavDock=dock;
         dock.setClipChildren(false);
         dock.setClipToPadding(false);
         dock.setBackground(bottomGradient());
