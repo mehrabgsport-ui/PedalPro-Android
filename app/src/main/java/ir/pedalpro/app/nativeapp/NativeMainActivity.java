@@ -5324,10 +5324,22 @@ public final class NativeMainActivity extends Activity {
             String title,
             boolean publicTracking,
             JSONArray viewerIds) {
-        if (pendingFreshFix == null) return;
+        // The preflight lock can expire while the user fills the ride form.
+        // Do not silently ignore Start or create a ride from a stale position.
+        Location fix = pendingFreshFix;
+        long age = fix == null ? Long.MAX_VALUE :
+                Math.max(0L, System.currentTimeMillis() - fix.getTime());
+        float accuracy = fix != null && fix.hasAccuracy() ? fix.getAccuracy() : Float.MAX_VALUE;
+        if (fix == null || age > 12000L || accuracy > 35f) {
+            pendingFreshFix = null;
+            setProxyEnabled(start, false);
+            state.setText("موقعیت GPS قدیمی یا نامعتبر است. «بررسی دوباره GPS» را بزنید.");
+            state.setTextColor(ORANGE);
+            toast("برای شروع، GPS را دوباره بررسی کنید.");
+            return;
+        }
         setProxyEnabled(start, false);
         state.setText("در حال شروع رکاب‌زنی…");
-        Location fix = pendingFreshFix;
         String rideTitle = title == null || title.trim().isBlank() ? "رکاب‌زنی من" : title.trim();
 
         io.execute(() -> {
