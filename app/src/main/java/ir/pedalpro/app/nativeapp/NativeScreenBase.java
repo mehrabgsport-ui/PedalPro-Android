@@ -78,19 +78,17 @@ abstract class NativeScreenBase extends Activity {
 
     private void buildShell(){
         FrameLayout frame=new FrameLayout(this);
-        frame.setBackgroundColor(OledBatteryTheme.enabled(this)?Color.BLACK:BG);
+        frame.setBackgroundColor(BG);
 
         ImageView bg=new ImageView(this);
         bg.setImageResource(R.drawable.site_bg_reference);
         bg.setScaleType(ImageView.ScaleType.CENTER_CROP);
         bg.setAlpha(.82f);
-        if(!OledBatteryTheme.enabled(this))
-            frame.addView(bg,new FrameLayout.LayoutParams(-1,-1));
+        frame.addView(bg,new FrameLayout.LayoutParams(-1,-1));
 
         View shade=new View(this);
         shade.setBackgroundColor(Color.argb(58,2,12,20));
-        if(!OledBatteryTheme.enabled(this))
-            frame.addView(shade,new FrameLayout.LayoutParams(-1,-1));
+        frame.addView(shade,new FrameLayout.LayoutParams(-1,-1));
 
         LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -113,7 +111,7 @@ abstract class NativeScreenBase extends Activity {
         if(useStickyHeader()){
             stickyHeader=new LinearLayout(this);
             stickyHeader.setOrientation(LinearLayout.VERTICAL);
-            stickyHeader.setBackgroundColor(OledBatteryTheme.enabled(this)?Color.BLACK:Color.rgb(9,34,51));
+            stickyHeader.setBackgroundColor(Color.rgb(9,34,51));
             root.addView(stickyHeader,new LinearLayout.LayoutParams(-1,dp(58)));
         }
 
@@ -343,8 +341,7 @@ abstract class NativeScreenBase extends Activity {
         x.setPadding(dp(16),dp(15),dp(16),dp(15));
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(245,15,42,61),Color.argb(251,6,27,45)});
+                new int[]{Color.argb(245,15,42,61),Color.argb(251,6,27,45)});
         g.setCornerRadius(dp(26));
         g.setStroke(dp(1),Color.argb(54,255,255,255));
         x.setBackground(g);
@@ -356,8 +353,7 @@ abstract class NativeScreenBase extends Activity {
         LinearLayout x=card();
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(239,16,82,96),Color.argb(248,8,42,59)});
+                new int[]{Color.argb(239,16,82,96),Color.argb(248,8,42,59)});
         g.setCornerRadius(dp(26));
         g.setStroke(dp(1),accent);
         x.setBackground(g);
@@ -392,7 +388,7 @@ abstract class NativeScreenBase extends Activity {
         e.setTextSize(13);
         e.setSingleLine(false);
         e.setPadding(dp(12),dp(11),dp(12),dp(11));
-        e.setBackground(round(OledBatteryTheme.enabled(this)?Color.BLACK:Color.argb(247,5,25,40),
+        e.setBackground(round(Color.argb(247,5,25,40),
                 15,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);
         lp.setMargins(0,dp(6),0,dp(6));
@@ -403,17 +399,10 @@ abstract class NativeScreenBase extends Activity {
     protected Button primary(String s){
         Button b=plainButton(s,13);
         b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
-        boolean oled=OledBatteryTheme.enabled(this);
-        b.setTextColor(oled?Color.rgb(66,235,249):Color.rgb(5,40,55));
-        GradientDrawable g;
-        if(oled){
-            g=new GradientDrawable();
-            g.setColor(Color.BLACK);
-            g.setStroke(dp(1),Color.argb(125,66,235,249));
-        }else{
-            g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                    new int[]{Color.rgb(19,220,232),Color.rgb(37,200,244)});
-        }
+        b.setTextColor(Color.rgb(5,40,55));
+        GradientDrawable g=new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.rgb(19,220,232),Color.rgb(37,200,244)});
         g.setCornerRadius(dp(17));
         b.setBackground(g);
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(52));
@@ -424,7 +413,7 @@ abstract class NativeScreenBase extends Activity {
 
     protected Button normal(String s){
         Button b=plainButton(s,13);
-        b.setBackground(round(OledBatteryTheme.enabled(this)?Color.BLACK:Color.argb(236,14,38,54),
+        b.setBackground(round(Color.argb(236,14,38,54),
                 17,Color.argb(46,255,255,255)));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(50));
         lp.setMargins(0,dp(8),0,0);
@@ -482,8 +471,7 @@ abstract class NativeScreenBase extends Activity {
     private GradientDrawable headerGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(251,19,49,71),Color.argb(253,8,31,50)});
+                new int[]{Color.argb(251,19,49,71),Color.argb(253,8,31,50)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1),Color.argb(51,255,255,255));
         return g;
@@ -492,8 +480,7 @@ abstract class NativeScreenBase extends Activity {
     private GradientDrawable bottomGradient(){
         GradientDrawable g=new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
-                        :new int[]{Color.argb(251,15,47,68),Color.argb(253,5,27,44)});
+                new int[]{Color.argb(251,15,47,68),Color.argb(253,5,27,44)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
         g.setStroke(dp(1),Color.argb(61,255,255,255));
         return g;
