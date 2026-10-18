@@ -421,6 +421,37 @@ assert 'main.postDelayed(this' not in poll, "avoid overlapping live-poll request
 print("PASS RC37 stale GPS preflight and bounded in-place detail refresh")
 PY
 
+# RC38 OLED map presentation: theme must be opt-in, restoreable, and visual-only.
+python3 - "$NATIVE" "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" <<'PY'
+import sys
+from pathlib import Path
+native=Path(sys.argv[1])
+bridge=Path(sys.argv[2]).read_text(encoding="utf-8")
+get=lambda name:(native/name).read_text(encoding="utf-8")
+theme=get("OledBatteryTheme.java")
+surface=get("PedalNeshanMapSurface.java")
+route=get("NativeRouteView.java")
+main=get("NativeMainActivity.java")
+screen=get("NativeScreenBase.java")
+button=get("PedalActionView.java")
+assert '"pedalpro_map_display"' in theme and '"amoled_enabled"' in theme
+assert "OledBatteryTheme.enabled(context)" in surface
+assert 'putBoolean(OledBatteryTheme.KEY_ENABLED,amoled)' in surface
+assert "refreshControlPanels();" in surface and "onBatterySaverChanged(amoled)" in surface
+assert "OledBatteryTheme.PANEL" in surface and "OledBatteryTheme.PANEL" in button
+assert "OledBatteryTheme.enabled(this)" in screen
+assert "rideOverlayPanel(" in main and "bottomNavDock.setBackground(bottomGradient())" in main
+assert 'hideImmersiveRideOverlay();' in main and "showRide(); // Re-skin" in main
+assert "routeGlow" in route and "routeHalo" in route and "if(amoledBatterySaver)" in route
+assert "recordedGlow" in bridge and "recordedHalo" in bridge
+assert "if(amoled){" in bridge and "recordedGlow=map.addPolyline" in bridge
+assert "recorded=null;recordedGlow=null;recordedHalo=null;" in bridge
+assert "if(enabled){" in bridge and "scheduleGeometry();" in bridge
+assert "road?Color.rgb(222,241,247):Color.rgb(24,39,45)" in bridge, "don't change approved street palette"
+assert 'api.post("pause_ride"' not in main, "Staging-only RC38 API must not be called in production Android"
+print("PASS RC38 AMOLED backgrounds, toggle persistence and 3-stroke neon GPS path")
+PY
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
