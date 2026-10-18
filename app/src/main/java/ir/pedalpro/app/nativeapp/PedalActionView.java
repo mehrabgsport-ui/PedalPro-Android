@@ -20,6 +20,8 @@ public final class PedalActionView extends LinearLayout {
     private final TextView label;
     private final Style style;
     private int accent = WEB_CYAN;
+    private boolean customAccent;
+    private boolean oledRideMode;
 
     public PedalActionView(Context c, PedalIconView.Icon type, String text, Style style) {
         super(c);
@@ -29,9 +31,7 @@ public final class PedalActionView extends LinearLayout {
         setLayoutDirection(LAYOUT_DIRECTION_RTL);
         setPadding(dp(12), 0, dp(12), 0);
 
-        int fg = OledBatteryTheme.enabled(c) ?
-                (style == Style.PRIMARY ? WEB_CYAN : WEB_TEXT) :
-                (style == Style.PRIMARY ? WEB_PRIMARY_TEXT : WEB_TEXT);
+        int fg = style == Style.PRIMARY ? WEB_PRIMARY_TEXT : WEB_TEXT;
         icon = new PedalIconView(c, type, fg);
         label = new TextView(c);
         label.setText(text);
@@ -54,10 +54,21 @@ public final class PedalActionView extends LinearLayout {
 
     public void setAccent(int value) {
         accent = value;
+        customAccent = true;
         if (style != Style.PRIMARY) {
             icon.setColor(value);
             label.setTextColor(value);
         }
+    }
+
+    /** Applies OLED black exclusively to action buttons in the active-ride HUD. */
+    public void setOledRideMode(boolean enabled) {
+        oledRideMode=enabled;
+        int fg=customAccent?accent
+                :(style==Style.PRIMARY ?(enabled?WEB_CYAN:WEB_PRIMARY_TEXT):WEB_TEXT);
+        icon.setColor(fg);
+        label.setTextColor(fg);
+        setBackground(background(style));
     }
 
     public void setLabel(String value) { label.setText(value); }
@@ -66,7 +77,7 @@ public final class PedalActionView extends LinearLayout {
 
     private GradientDrawable background(Style style) {
         GradientDrawable g;
-        if(OledBatteryTheme.enabled(getContext())){
+        if(oledRideMode){
             g=new GradientDrawable();
             g.setColor(OledBatteryTheme.PANEL);
             if(style!=Style.GHOST)g.setStroke(dp(1),OledBatteryTheme.BORDER);
