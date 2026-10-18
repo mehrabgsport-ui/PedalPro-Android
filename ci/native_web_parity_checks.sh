@@ -462,6 +462,24 @@ assert 'api.post("pause_ride"' not in main
 print("PASS RC39 scoped OLED ride HUD, restored pages, clipped scroll header, transparent official logo and neon GPS")
 PY
 
+# RC40: attendance history and GPS ride deletion must be robust.
+python3 - "$NATIVE/NativeMainActivity.java" <<'PY'
+from pathlib import Path
+import sys
+main=Path(sys.argv[1]).read_text(encoding="utf-8")
+assert 'bindAttendanceToggle(attended,regId,' in main
+assert 'if(checked && completed)promptRetrospectiveAttendance(registrationId,control);' in main
+assert 'bindAttendanceToggle(control,registrationId,true);' in main
+assert 'bindAttendanceToggle(control,registrationId,completed);' in main
+assert 'request.put("attended_at",attendedAt)' in main
+section=main.split('private void discardRide(Button button)',1)[1].split('private void toggleManualPause',1)[0]
+assert section.index('api.post("ride_delete"') < section.index('TrackingService.ACTION_DISCARD')
+assert 'TrackingService.ACTION_STOP' not in section
+assert 'activeRide=null; // Deletion succeeded; refresh is non-critical.' in section
+assert 'setProxyEnabled(button,true);' in section
+print("PASS RC40 retrospective check-in, server-first ride discard and recorder-on-failure")
+PY
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
