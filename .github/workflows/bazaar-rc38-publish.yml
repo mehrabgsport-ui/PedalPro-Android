@@ -1,10 +1,8 @@
 name: Bazaar RC38 One-Time Publish
 
+# Manual launch is disabled until the owner approves the tested APK.
+# No push trigger, no automatic marketplace publication.
 on:
-  push:
-    branches: [ native/web-parity ]
-    paths:
-      - .github/release-requests/bazaar-rc38.txt
   workflow_dispatch:
 
 permissions:
@@ -16,7 +14,8 @@ concurrency:
 
 jobs:
   publish:
-    if: github.repository == 'mehrabgsport-ui/PedalPro-Android' && github.ref == 'refs/heads/native/web-parity'
+    if: ${{ false }} # Deliberate release freeze; explicit approval required to enable.
+    # Previous condition: github.repository == 'mehrabgsport-ui/PedalPro-Android' && github.ref == 'refs/heads/native/web-parity'
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
