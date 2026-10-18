@@ -5015,18 +5015,17 @@ public final class NativeMainActivity extends Activity {
                 12,true,baleConnected?GREEN:ORANGE);
         baleState.setPadding(0,dp(8),0,dp(8));
         baleInfo.addView(baleState);
-        PedalActionView baleButton=action(PedalIconView.Icon.CHAT,"مدیریت اتصال به ربات بله",PedalActionView.Style.OUTLINE);
+        PedalActionView baleButton=action(PedalIconView.Icon.CHAT,\n                baleConnected?"باز کردن / اتصال مجدد ربات بله":"اتصال به ربات بله",\n                PedalActionView.Style.OUTLINE);
         baleButton.setOnClickListener(v->{
             JSONObject invite=bootstrap==null?null:bootstrap.optJSONObject("bale_invite");
             if(invite==null){
                 JSONObject me=bootstrap==null?null:bootstrap.optJSONObject("user");
                 invite=me==null?null:me.optJSONObject("bale_invite");
             }
-            if(invite!=null&&invite.optBoolean("connected",false)){
-                toast("حساب شما به ربات بله متصل است.");
-                return;
-            }
+            boolean alreadyConnected=invite!=null&&invite.optBoolean("connected",false);
             String serverUrl=invite==null?"":invite.optString("url","").trim();
+            if(alreadyConnected&&!serverUrl.isBlank())
+                toast("اتصال قبلی ثبت شده؛ ربات بله برای اتصال مجدد باز می‌شود.");
             try{
                 Uri link=Uri.parse(serverUrl);
                 String host=link.getHost()==null?"":link.getHost().toLowerCase(Locale.ROOT);
@@ -5037,7 +5036,9 @@ public final class NativeMainActivity extends Activity {
                     return;
                 }
             }catch(Exception ignored){}
-            toast("لینک شخصی اتصال هنوز از سرور دریافت نشده؛ شماره موبایل را تأیید کنید.");
+            toast(alreadyConnected
+                    ?"لینک اتصال مجدد از سرور دریافت نشد. از تنظیمات مدیر، بخش «ربات بله» وضعیت را بررسی کنید."
+                    :"لینک شخصی اتصال هنوز از سرور دریافت نشده؛ شماره موبایل را تأیید کنید.");
             showProfileEditor();
         });
         baleInfo.addView(baleButton,fullActionLp(48));
