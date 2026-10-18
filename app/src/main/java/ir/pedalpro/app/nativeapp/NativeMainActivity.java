@@ -516,10 +516,12 @@ public final class NativeMainActivity extends Activity {
         contentSplash.setGravity(Gravity.CENTER);
         contentSplash.setPadding(dp(24),dp(20),dp(24),dp(20));
         ImageView logo=new ImageView(this);
-        // Use the project's existing official artwork asset; never recreate the brand.
-        logo.setImageResource(R.drawable.pedalpro_logo_transparent);
+        // Official 192px brand source (not the 96px thumbnail): transparent matte
+        // and filtered scaling, retaining PedalPro's exact existing logo artwork.
+        logo.setImageDrawable(SplashBrandLogo.load(this));
+        logo.setBackgroundColor(Color.TRANSPARENT);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        contentSplash.addView(logo,new LinearLayout.LayoutParams(dp(200),dp(200)));
+        contentSplash.addView(logo,new LinearLayout.LayoutParams(dp(196),dp(196)));
         TextView motto=text("مسیرت را ثبت کن، پیشرفتت را ببین، قوی‌تر رکاب بزن",13,false,
                 Color.rgb(204,230,235));
         motto.setGravity(Gravity.CENTER);
