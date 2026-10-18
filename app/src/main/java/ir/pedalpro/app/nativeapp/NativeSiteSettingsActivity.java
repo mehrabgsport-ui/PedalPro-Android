@@ -281,6 +281,19 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 " · توکن: "+(settings.optBoolean("token_configured")?"تنظیم شده":"تنظیم نشده")+
                 " · Webhook: "+(settings.optBoolean("webhook_configured")?"تنظیم شده":"تنظیم نشده"),
                 12,false,MUTED));
+
+        JSONObject adminInvite=currentAdminBaleInvite();
+        boolean adminConnected=adminInvite!=null&&adminInvite.optBoolean("connected",false);
+        TextView adminConnection=text(
+                adminConnected?"وضعیت مدیر: اتصال قبلی ثبت شده":"وضعیت مدیر: اتصال تأیید نشده",
+                12,true,adminConnected?GREEN:ORANGE);
+        adminConnection.setPadding(0,dp(8),0,dp(4));
+        form.addView(adminConnection);
+        Button reconnectAdmin=primary(adminConnected
+                ?"باز کردن بله و اتصال مجدد مدیر"
+                :"اتصال مدیر به ربات بله");
+        reconnectAdmin.setOnClickListener(v->openAdminBaleReconnect(settings));
+        form.addView(reconnectAdmin);
         CheckBox enabled=new CheckBox(this);
         enabled.setText("ربات بله فعال است");
         enabled.setTextColor(TEXT);enabled.setChecked(settings.optBoolean("enabled",false));
@@ -411,6 +424,48 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         refresh.setOnClickListener(v->refreshBalePanel());
         logs.addView(refresh);
         content.addView(logs,cardLp());
+    }
+
+    private JSONObject currentAdminBaleInvite(){
+        JSONObject invite=data==null?null:data.optJSONObject("bale_invite");
+        if(invite==null&&data!=null){
+            JSONObject me=data.optJSONObject("user");
+            invite=me==null?null:me.optJSONObject("bale_invite");
+        }
+        return invite;
+    }
+
+    private void openAdminBaleReconnect(JSONObject settings){
+        JSONObject invite=currentAdminBaleInvite();
+        String serverUrl=invite==null?"":invite.optString("url","").trim();
+        if(openSafeBaleLink(serverUrl))return;
+
+        String username=settings==null?"":settings.optString("username","").trim();
+        if(username.startsWith("@"))username=username.substring(1);
+        if(username.matches("^[A-Za-z0-9_.-]{3,64}$")){
+            if(openSafeBaleLink("https://ble.ir/"+username)){
+                toast("لینک شخصی اتصال از سرور دریافت نشد؛ ربات بله باز شد. دستور /start را ارسال کنید و سپس «ارسال پیام تست به مدیر» را بزنید.");
+                return;
+            }
+        }
+        toast("لینک اتصال مدیر از سرور دریافت نشد. نام کاربری ربات یا تنظیمات Webhook را بررسی کنید.");
+    }
+
+    private boolean openSafeBaleLink(String raw){
+        if(raw==null||raw.trim().isEmpty())return false;
+        try{
+            Uri link=Uri.parse(raw.trim());
+            String scheme=link.getScheme()==null?"":link.getScheme().toLowerCase(Locale.ROOT);
+            String host=link.getHost()==null?"":link.getHost().toLowerCase(Locale.ROOT);
+            boolean allowed="https".equals(scheme)&&(
+                    host.equals("ble.ir")||host.endsWith(".ble.ir")||
+                    host.equals("bale.ai")||host.endsWith(".bale.ai"));
+            if(!allowed)return false;
+            startActivity(new Intent(Intent.ACTION_VIEW,link));
+            return true;
+        }catch(Exception ignored){
+            return false;
+        }
     }
 
     private int pageOrOne(){return Math.max(1,balePage);}
