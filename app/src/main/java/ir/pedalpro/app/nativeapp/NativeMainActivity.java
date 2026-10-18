@@ -356,7 +356,7 @@ public final class NativeMainActivity extends Activity {
     private void renderShell() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         stageRoot = new FrameLayout(this);
-        stageRoot.setBackgroundColor(BG);
+        stageRoot.setBackgroundColor(OledBatteryTheme.enabled(this)?Color.BLACK:BG);
 
         siteBackground = new ImageView(this);
         siteBackground.setImageResource(R.drawable.site_bg_reference);
@@ -365,6 +365,7 @@ public final class NativeMainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 31) {
             siteBackground.setRenderEffect(RenderEffect.createBlurEffect(dp(2), dp(2), Shader.TileMode.CLAMP));
         }
+        siteBackground.setVisibility(OledBatteryTheme.enabled(this)?View.GONE:View.VISIBLE);
         stageRoot.addView(siteBackground, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -2253,6 +2254,14 @@ public final class NativeMainActivity extends Activity {
         if(activeRideRouteView==null){
             activeRideRouteView = new PedalNeshanMapSurface(this);
             activeRideMapRideId=shownRideId;
+            activeRideRouteView.setBatterySaverListener(enabled -> {
+                stageRoot.setBackgroundColor(enabled?Color.BLACK:BG);
+                if(siteBackground!=null)siteBackground.setVisibility(enabled?View.GONE:View.VISIBLE);
+                if(activeRide!=null && "ride".equals(currentPage)){
+                    hideImmersiveRideOverlay();
+                    showRide(); // Re-skin current controls without re-creating MapLibre.
+                }
+            });
             seedDisplayMapFromLastLocation(activeRideRouteView);
         }
         content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
@@ -2329,7 +2338,7 @@ public final class NativeMainActivity extends Activity {
         gpsCard.removeView(rideGps);
 
         FrameLayout immersive=new FrameLayout(this);
-        immersive.setBackgroundColor(Color.rgb(7,20,31));
+        immersive.setBackgroundColor(OledBatteryTheme.enabled(this)?Color.BLACK:Color.rgb(7,20,31));
         immersive.setClipChildren(false);
         immersive.setClipToPadding(false);
         ViewCompat.setOnApplyWindowInsetsListener(immersive,(v,insets)->{
@@ -2352,7 +2361,7 @@ public final class NativeMainActivity extends Activity {
         stateBar.setGravity(Gravity.CENTER_VERTICAL);
         stateBar.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         stateBar.setPadding(dp(9),dp(8),dp(9),dp(8));
-        stateBar.setBackground(roundRect(Color.argb(245,13,38,56),22,Color.argb(110,56,195,218)));
+        stateBar.setBackground(rideOverlayPanel(Color.argb(245,13,38,56),22,Color.argb(110,56,195,218)));
 
         stop.setLabel("پایان");
         stateBar.addView(stop,new LinearLayout.LayoutParams(dp(74),dp(51)));
@@ -2378,7 +2387,7 @@ public final class NativeMainActivity extends Activity {
         running.setGravity(Gravity.CENTER_VERTICAL);
         running.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
         running.setPadding(dp(12),dp(6),dp(12),dp(6));
-        running.setBackground(roundRect(Color.argb(244,12,38,55),20,Color.argb(104,49,184,213)));
+        running.setBackground(rideOverlayPanel(Color.argb(244,12,38,55),20,Color.argb(104,49,184,213)));
         TextView title=text("رکاب‌زنی در حال ثبت است",16,true,TEXT);
         running.addView(new PedalIconView(this,PedalIconView.Icon.HEADING,Color.rgb(33,219,236)),
                 new LinearLayout.LayoutParams(dp(30),dp(30)));
@@ -2419,7 +2428,7 @@ public final class NativeMainActivity extends Activity {
         LinearLayout tools=new LinearLayout(this);
         tools.setOrientation(LinearLayout.VERTICAL);
         tools.setPadding(dp(10),dp(10),dp(10),dp(10));
-        tools.setBackground(roundRect(Color.argb(240,10,33,49),20,Color.argb(108,50,182,207)));
+        tools.setBackground(rideOverlayPanel(Color.argb(240,10,33,49),20,Color.argb(108,50,182,207)));
         tools.setVisibility(View.GONE);
         tools.addView(live,new LinearLayout.LayoutParams(-1,dp(49)));
         tools.addView(low,new LinearLayout.LayoutParams(-1,dp(49)));
@@ -2437,7 +2446,7 @@ public final class NativeMainActivity extends Activity {
         LinearLayout stats=new LinearLayout(this);
         stats.setGravity(Gravity.CENTER);
         stats.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        stats.setBackground(roundRect(Color.argb(248,13,38,55),22,Color.argb(114,57,197,218)));
+        stats.setBackground(rideOverlayPanel(Color.argb(248,13,38,55),22,Color.argb(114,57,197,218)));
         rideTimer=metricValue("زمان",formatDuration(displayedRideSeconds()));
         rideDistance=metricValue("مسافت",String.format(Locale.US,"%.2f",activeRide.optDouble("distance_km",0)));
         rideSpeed=metricValue("سرعت",String.format(Locale.US,"%.1f",activeRide.optDouble("avg_speed_kmh",0)));
@@ -6308,7 +6317,8 @@ public final class NativeMainActivity extends Activity {
         box.setPadding(dp(16), dp(15), dp(16), dp(15));
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
+                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
+                        :new int[]{Color.argb(243, 15, 42, 61), Color.argb(250, 5, 24, 41)});
         g.setCornerRadius(dp(radius));
         g.setStroke(dp(1), Color.argb(54, 255, 255, 255));
         box.setBackground(g);
@@ -6316,6 +6326,11 @@ public final class NativeMainActivity extends Activity {
         return box;
     }
 
+    private GradientDrawable rideOverlayPanel(int normalFill,int radius,int normalStroke){
+        return OledBatteryTheme.enabled(this)
+                ?roundRect(Color.BLACK,radius,OledBatteryTheme.BORDER)
+                :roundRect(normalFill,radius,normalStroke);
+    }
     private GradientDrawable roundRect(int fill,int radius,int stroke) {
         GradientDrawable g = new GradientDrawable(); g.setColor(fill); g.setCornerRadius(dp(radius));
         if(stroke!=0) g.setStroke(dp(1),stroke); return g;
@@ -6323,7 +6338,8 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable headerGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(251, 17, 49, 70), Color.argb(253, 5, 25, 42)});
+                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
+                        :new int[]{Color.argb(251, 17, 49, 70), Color.argb(253, 5, 25, 42)});
         g.setCornerRadii(new float[]{0,0,0,0,dp(26),dp(26),dp(26),dp(26)});
         g.setStroke(dp(1), Color.argb(51, 255, 255, 255));
         return g;
@@ -6331,7 +6347,8 @@ public final class NativeMainActivity extends Activity {
     private GradientDrawable bottomGradient() {
         GradientDrawable g = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.argb(250, 13, 44, 64), Color.argb(254, 5, 24, 42)});
+                OledBatteryTheme.enabled(this)?new int[]{Color.BLACK,Color.BLACK}
+                        :new int[]{Color.argb(250, 13, 44, 64), Color.argb(254, 5, 24, 42)});
         g.setCornerRadii(new float[]{dp(36),dp(36),dp(36),dp(36),0,0,0,0});
         g.setStroke(dp(1), Color.argb(61, 255, 255, 255));
         return g;
