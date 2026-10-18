@@ -496,7 +496,7 @@ expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_answer' "Group invit
 expect "$NATIVE/NativeGroupChatActivity.java" 'pp_group_message_send' "Group chat submit is authenticated"
 
 expect "$NATIVE/NativeFollowListActivity.java" 'pp_follow_list' "Profile follower lists server-authorized"
-expect "$NATIVE/NativeSiteSettingsActivity.java" 'وضعیت ربات بله' "Admin member Bale status displayed"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'ربات بله: متصل' "Admin member Bale status displayed"
 
 expect "$NATIVE/NativeGroupsActivity.java" 'catch(org.json.JSONException e)' "Group JSON serialization errors are handled"
 
