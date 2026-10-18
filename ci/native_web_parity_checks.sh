@@ -399,6 +399,28 @@ assert 'api.post("stop_ride"' in stop and 'A subsequent bootstrap outage' in sto
 print("PASS RC36 GPS start and finish resilience")
 PY
 
+# RC37: avoid resubmitting old GPS and rebuilding an expensive native map on each
+# live ride-detail poll. Production GPS algorithms and persisted points remain unchanged.
+python3 - "$NATIVE/NativeMainActivity.java" "$NATIVE/NativeRideDetailActivity.java" <<'PY'
+import sys
+from pathlib import Path
+main=Path(sys.argv[1]).read_text(encoding="utf-8")
+detail=Path(sys.argv[2]).read_text(encoding="utf-8")
+start=main.split("private void createRideAndStartTracking(",1)[1].split("private JSONObject findChallengeById(",1)[0]
+assert "age > 12000L" in start and "accuracy > 35f" in start, "preflight must expire before ride create"
+assert "toast(\"برای شروع، GPS را دوباره بررسی کنید.\");" in start, "stale GPS error must be visible"
+assert 'q.put("point_mode","live");' in detail, "historical detail should request bounded preview"
+assert 'JSONObject b=fromPoll?null:api.bootstrap();' in detail, "live polling must not download full site bootstrap"
+assert 'updateLiveRide();' in detail, "live ride details must refresh in place"
+update=detail.split("private void updateLiveRide()",1)[1].split("private LinearLayout deferredMap()",1)[0]
+assert 'profileMap.setPoints(points);' in update
+assert 'profile.setPoints(points);' in update
+assert 'new PedalNeshanMapSurface' not in update, "poll should not recreate native map renderer"
+poll=detail.split("private final Runnable livePoll",1)[1].split("};",1)[0]
+assert 'main.postDelayed(this' not in poll, "avoid overlapping live-poll requests"
+print("PASS RC37 stale GPS preflight and bounded in-place detail refresh")
+PY
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
