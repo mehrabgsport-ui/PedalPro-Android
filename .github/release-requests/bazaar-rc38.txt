@@ -1,0 +1,9 @@
+PedalPro Native RC38 release request
+Authorized by owner in project conversation 2026-10-18.
+Package: ir.pedalpro.app
+Version: 2.0.0-native-rc38 (82)
+Target: Cafe Bazaar via official Pishkhan API
+Rollout: 10% automatically after Bazaar review/approval
+Secret: BAZAAR_PISHKHAN_API_SECRET (GitHub Actions only; never in APK or Git)
+This marker triggers the one-time guarded Bazaar workflow when first committed.
+If secret is missing, fail before contacting any marketplace.

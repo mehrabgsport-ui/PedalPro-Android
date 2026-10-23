@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="70dp" android:height="112dp"
+    android:viewportWidth="100" android:viewportHeight="160">
+    <!-- Both black tires lie on the longitudinal axis, top is the travel direction. -->
+    <path android:fillColor="#33253F" android:pathData="M50,4 C47,4 45,7 45,13 L45,43 C45,49 55,49 55,43 L55,13 C55,7 53,4 50,4 Z"/>
+    <path android:fillColor="#33253F" android:pathData="M50,111 C47,111 45,115 45,122 L45,155 C45,161 55,161 55,155 L55,122 C55,115 53,111 50,111 Z"/>
+    <path android:fillColor="#1B60B7" android:pathData="M38,29 L38,143 Q38,151 44,151 L46,151 L46,26 Z"/>
+    <path android:fillColor="#1B60B7" android:pathData="M54,26 L54,151 L56,151 Q62,151 62,143 L62,29 Z"/>
+    <path android:fillColor="#3694CF" android:pathData="M46,20 L54,20 L54,147 L46,147 Z"/>
+    <!-- Blue frame and silver curved handlebar match the supplied overhead reference. -->
+    <path android:fillColor="#344669" android:pathData="M45,42 L55,42 L57,72 L43,72 Z"/>
+    <path android:strokeColor="#86A8CF" android:strokeWidth="5.5"
+        android:strokeLineCap="round" android:fillColor="@android:color/transparent"
+        android:pathData="M19,41 Q50,32 81,41"/>
+    <path android:strokeColor="#352A42" android:strokeWidth="5"
+        android:strokeLineCap="round" android:fillColor="@android:color/transparent"
+        android:pathData="M15,42 L21,41 M79,41 L85,42"/>
+    <!-- Arms and palms around the handlebar; rider seen strictly from above. -->
+    <path android:fillColor="#578E23"
+        android:pathData="M27,46 Q23,49 23,61 L26,92 Q30,111 39,114 L50,119 L61,114 Q70,111 74,92 L77,61 Q77,49 73,46 L67,48 L63,75 L57,89 L50,93 L43,89 L37,75 L33,48 Z"/>
+    <path android:fillColor="#75A83C"
+        android:pathData="M29,49 Q30,70 36,88 Q41,98 50,99 Q59,98 64,88 Q70,70 71,49 L76,49 Q75,75 70,97 Q67,112 57,114 L43,114 Q33,111 30,97 Q25,75 24,49 Z"/>
+    <path android:fillColor="#EDA277"
+        android:pathData="M17,38 C11,40 12,48 16,51 Q22,56 29,48 L30,41 Q24,34 17,38 Z"/>
+    <path android:fillColor="#EDA277"
+        android:pathData="M83,38 C89,40 88,48 84,51 Q78,56 71,48 L70,41 Q76,34 83,38 Z"/>
+    <!-- Hair, head, shoulders and shorts. -->
+    <path android:fillColor="#813F3D"
+        android:pathData="M50,64 C39,63 33,70 33,83 C33,95 39,101 50,102 C63,101 69,94 69,83 C69,71 60,64 50,64 Z"/>
+    <path android:fillColor="#B85C51"
+        android:pathData="M50,68 C40,67 36,74 36,82 C36,90 42,94 51,94 C61,94 65,89 65,81 C65,73 58,68 50,68 Z"/>
+    <path android:fillColor="#4B8221"
+        android:pathData="M34,88 Q32,99 38,113 Q43,119 50,120 Q58,119 63,113 Q69,99 66,88 Q61,98 50,102 Q40,98 34,88 Z"/>
+    <path android:fillColor="#432558"
+        android:pathData="M38,116 Q50,120 62,116 L66,127 L59,132 L41,132 L34,127 Z"/>
+    <path android:fillColor="#633A80"
+        android:pathData="M36,125 L44,127 L42,148 Q41,154 35,153 Q30,151 31,145 L31,130 Z"/>
+    <path android:fillColor="#BD613F"
+        android:pathData="M42,130 Q50,133 58,130 Q57,138 50,141 Q43,138 42,130 Z"/>
+</vector>

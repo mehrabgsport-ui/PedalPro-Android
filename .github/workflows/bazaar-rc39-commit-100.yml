@@ -1,0 +1,40 @@
+name: Bazaar RC39 Commit Approved Release
+
+on:
+  push:
+    branches: [ native/web-parity ]
+    paths:
+      - .github/release-requests/bazaar-rc39-commit-100.txt
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pedalpro-bazaar-rc39-commit-one-time
+  cancel-in-progress: false
+
+jobs:
+  commit:
+    if: github.repository == 'mehrabgsport-ui/PedalPro-Android' && github.ref == 'refs/heads/native/web-parity'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate owner-approved RC39 artifact and Pishkhan token
+        shell: bash
+        env:
+          BAZAAR_PISHKHAN_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "${BAZAAR_PISHKHAN_API_SECRET:-}" || { echo "::error::Missing Pishkhan secret"; exit 1; }
+          grep -Fq 'versionCode 83' app/build.gradle
+          grep -Fq "versionName '2.0.0-native-rc39'" app/build.gradle
+          test -f .github/release-requests/bazaar-rc39-commit-100.txt
+          echo "Release RC39 v83 approved; token available. The APK upload has already succeeded."
+      - name: Commit existing Bazaar release at permitted 100 percent
+        shell: bash
+        env:
+          BAZAAR_PISHKHAN_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'requests==2.32.3'
+          python3 scripts/commit_bazaar_rc39.py

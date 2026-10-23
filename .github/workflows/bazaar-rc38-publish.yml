@@ -1,0 +1,116 @@
+name: Bazaar RC38 One-Time Publish
+
+# Manual launch is disabled until the owner approves the tested APK.
+# No push trigger, no automatic marketplace publication.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pedalpro-bazaar-rc38-one-time
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ false }} # Deliberate release freeze; explicit approval required to enable.
+    # Previous condition: github.repository == 'mehrabgsport-ui/PedalPro-Android' && github.ref == 'refs/heads/native/web-parity'
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      NESHAN_MOBILE_API_KEY: ${{ secrets.NESHAN_MOBILE_API_KEY }}
+    steps:
+      - name: Checkout pinned branch commit
+        uses: actions/checkout@v4
+
+      - name: Require RC38 and Pishkhan publisher credential
+        shell: bash
+        env:
+          BAZAAR_PISHKHAN_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
+          KEYSTORE_BASE64: ${{ secrets.PEDALPRO_BAZAAR_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.BAZAAR_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BAZAAR_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BAZAAR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "${BAZAAR_PISHKHAN_API_SECRET:-}" || { echo "::error::Missing repository secret BAZAAR_PISHKHAN_API_SECRET"; exit 1; }
+          test -n "${NESHAN_MOBILE_API_KEY:-}" || { echo "::error::Missing Neshan MOBILE key"; exit 1; }
+          test -n "${KEYSTORE_BASE64:-}" && test -n "${KEYSTORE_PASSWORD:-}" &&
+            test -n "${KEY_ALIAS:-}" && test -n "${KEY_PASSWORD:-}" ||
+            { echo "::error::Signing secrets are incomplete"; exit 1; }
+          grep -Fq 'versionCode 82' app/build.gradle
+          grep -Fq "versionName '2.0.0-native-rc38'" app/build.gradle
+          test -f .github/release-requests/bazaar-rc38.txt
+          echo "Secret/configuration preflight passed. Version RC38 and code 82 confirmed."
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build Bazaar RC38
+        run: gradle :app:assembleBazaarRelease --no-daemon --stacktrace
+
+      - name: Align, sign, verify and assert APK identity
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PEDALPRO_BAZAAR_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.BAZAAR_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BAZAAR_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BAZAAR_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p app/build/outputs/signed
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > app/pedalpro-release.jks
+          APK="$(find app/build/outputs/apk/bazaar/release -name '*.apk' -type f | head -n 1)"
+          test -f "$APK"
+          ZIPALIGN="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          "$ZIPALIGN" -f -p 4 "$APK" app/build/outputs/signed/bazaar-aligned.apk
+          "$SIGNER" sign --ks app/pedalpro-release.jks --ks-type JKS --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass pass:"$KEYSTORE_PASSWORD" --key-pass pass:"$KEY_PASSWORD" \
+            --out app/build/outputs/signed/PedalPro-RC38-Bazaar-signed.apk \
+            app/build/outputs/signed/bazaar-aligned.apk
+          SIGNED=app/build/outputs/signed/PedalPro-RC38-Bazaar-signed.apk
+          "$SIGNER" verify --verbose "$SIGNED"
+          "$AAPT" dump badging "$SIGNED" | grep -Eq "^package: name='ir.pedalpro.app' versionCode='82' versionName='2.0.0-native-rc38'"
+          "$AAPT" dump xmltree "$SIGNED" AndroidManifest.xml | grep -Fq 'org.maplibre.android.API_KEY'
+          if "$AAPT" dump xmltree "$SIGNED" AndroidManifest.xml | grep -Fq UNCONFIGURED; then
+            echo "::error::Neshan native API key was not configured"; exit 1
+          fi
+          echo "Signed RC38 Bazaar package / version / genuine Neshan map verified."
+
+      - name: Preserve signed APK as private Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PedalPro-RC38-Bazaar-submission
+          path: app/build/outputs/signed/PedalPro-RC38-Bazaar-signed.apk
+          if-no-files-found: error
+
+      - name: Submit release to Cafe Bazaar Pishkhan API
+        shell: bash
+        env:
+          BAZAAR_PISHKHAN_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'requests==2.32.3'
+          python3 scripts/publish_bazaar_rc38.py \
+            --apk app/build/outputs/signed/PedalPro-RC38-Bazaar-signed.apk \
+            --version-code 82 --rollout 10

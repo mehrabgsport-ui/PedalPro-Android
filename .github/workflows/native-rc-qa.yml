@@ -1,0 +1,140 @@
+name: Native RC QA
+
+on:
+  push:
+    branches: [ native/android-2.0.0, native/web-parity ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      NESHAN_MOBILE_API_KEY: ${{ secrets.NESHAN_MOBILE_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER"             "platforms;android-36"             "build-tools;36.0.0"             "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Neshan MOBILE API key check
+        shell: bash
+        run: |
+          if [ -n "${NESHAN_MOBILE_API_KEY:-}" ]; then
+            echo "Current Neshan MapLibre SDK selected."
+          else
+            echo "::warning::NESHAN_MOBILE_API_KEY unset: output will use labelled XYZ fallback."
+          fi
+
+      - name: Source architecture checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'android:name=".nativeapp.NativeMainActivity"' app/src/main/AndroidManifest.xml
+          grep -q 'versionCode 85' app/build.gradle
+          grep -q "versionName '2.0.0-native-rc42'" app/build.gradle
+          ! grep -q 'new WebView' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
+          ! grep -q 'WeatherUiModel' app/src/main/java/ir/pedalpro/app/nativeapp/NativeMainActivity.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/LowPowerRideActivity.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/PedalIconView.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/WeatherClient.java
+          test -f app/src/main/java/ir/pedalpro/app/nativeapp/JalaliDate.java
+
+      - name: Phase 5 UI state contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          NATIVE="app/src/main/java/ir/pedalpro/app/nativeapp"
+          grep -Fq 'EXTRA_IS_PAUSED' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'EXTRA_RESULT_SECONDS' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'paused?PedalIconView.Icon.PLAY:PedalIconView.Icon.PAUSE' "$NATIVE/LowPowerRideActivity.java"
+          grep -Fq 'EXTRA_BASE_SECONDS, displayedRideSeconds()' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'if(requestCode==REQ_LOW_POWER)' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'rideBaseSeconds = Math.max(serverSeconds, locallyDisplayed)' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'PedalIconView.Icon.HEADING' "$NATIVE/NativeLiveNavigationActivity.java"
+          grep -Fq 'case HEADING:' "$NATIVE/PedalIconView.java"
+          grep -Fq 'PedalIconView.Icon.SENSOR' "$NATIVE/NativeMainActivity.java"
+          grep -Fq 'create.setEnabled(false)' "$NATIVE/NativeSafetyActivity.java"
+
+      - name: Native web-parity contract audit
+        shell: bash
+        run: bash ci/native_web_parity_checks.sh
+
+      - name: Unit tests
+        run: |
+          gradle             :app:testBazaarReleaseUnitTest             :app:testMyketReleaseUnitTest             --stacktrace
+
+      - name: Android lint
+        id: lint
+        continue-on-error: true
+        run: |
+          gradle             :app:lintBazaarRelease             :app:lintMyketRelease             --stacktrace
+
+      - name: Dump lint report
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          find app/build -type f -name 'lint-results-*.txt' -print | while read -r f
+          do
+            echo "===== $f ====="
+            cat "$f"
+          done
+
+      - name: Unsigned release smoke build
+        run: |
+          gradle             :app:assembleBazaarRelease             :app:assembleMyketRelease             --stacktrace
+
+      - name: Compile Neshan MapLibre adapter without publishing test key
+        env:
+          NESHAN_MOBILE_API_KEY: CI_COMPILE_ONLY_NOT_A_REAL_MOBILE_KEY
+        run: gradle :app:compileBazaarReleaseJavaWithJavac --stacktrace
+
+      - name: APK manifest smoke checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt | sort | tail -1)"
+          BAZAAR="$(find app/build/outputs/apk/bazaar/release -name '*.apk' | head -n1)"
+          MYKET="$(find app/build/outputs/apk/myket/release -name '*.apk' | head -n1)"
+          test -n "$BAZAAR"
+          test -n "$MYKET"
+          "$AAPT" dump badging "$BAZAAR" | tee /tmp/bazaar-badging.txt
+          "$AAPT" dump badging "$MYKET" | tee /tmp/myket-badging.txt
+          grep -q "package: name='ir.pedalpro.app'" /tmp/bazaar-badging.txt
+          grep -q "versionCode='85'" /tmp/bazaar-badging.txt
+          grep -q "versionName='2.0.0-native-rc42'" /tmp/bazaar-badging.txt
+          grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/bazaar-badging.txt
+          grep -q "package: name='ir.pedalpro.app'" /tmp/myket-badging.txt
+          grep -q "versionCode='85'" /tmp/myket-badging.txt
+          grep -q "versionName='2.0.0-native-rc42'" /tmp/myket-badging.txt
+          grep -q "launchable-activity: name='ir.pedalpro.app.nativeapp.NativeMainActivity'" /tmp/myket-badging.txt
+
+      - name: Enforce lint success
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.lint.outcome }}" != "success" ]; then
+            echo "Android lint did not pass."
+            exit 1
+          fi
