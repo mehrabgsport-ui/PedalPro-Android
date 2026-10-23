@@ -496,6 +496,28 @@ public final class NativeRouteView extends View {
             double latitude=other.optDouble("lat",Double.NaN);
             double longitude=other.optDouble("lng",Double.NaN);
             if(!Double.isFinite(latitude)||!Double.isFinite(longitude))continue;
+            JSONArray history=other.optJSONArray("track_points");
+            if(history!=null&&history.length()>1){
+                Path peerPath=new Path();
+                boolean firstPeer=true;
+                for(int j=0;j<history.length();j++){
+                    JSONObject fix=history.optJSONObject(j);
+                    if(fix==null)continue;
+                    double la=fix.optDouble("lat",Double.NaN),lo=fix.optDouble("lng",Double.NaN);
+                    if(!Double.isFinite(la)||!Double.isFinite(lo)||
+                            Math.abs(la)>85||Math.abs(lo)>180)continue;
+                    float px=projectX(lo,b,w,pad),py=projectY(la,b,h,pad);
+                    if(firstPeer){peerPath.moveTo(px,py);firstPeer=false;}
+                    else peerPath.lineTo(px,py);
+                }
+                if(!firstPeer){
+                    Paint peerLine=new Paint(Paint.ANTI_ALIAS_FLAG);
+                    peerLine.setColor(Color.rgb(255,167,60));
+                    peerLine.setStyle(Paint.Style.STROKE);
+                    peerLine.setStrokeWidth(dp(4));
+                    canvas.drawPath(peerPath,peerLine);
+                }
+            }
             float ox=projectX(longitude,b,w,pad),oy=projectY(latitude,b,h,pad);
             Paint otherPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
             otherPaint.setColor(Color.rgb(255,157,52));
