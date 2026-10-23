@@ -236,7 +236,7 @@ expect "$NATIVE/NativeMainActivity.java" 'speedFilter.update(' "Full ride speed 
 expect "$NATIVE/NativeSpeedChartView.java" 'positive.size()>=2' "Speed chart fixes isolated zero samples"
 expect "$NATIVE/NativeRideProfileView.java" 'enum Mode { ELEVATION, SPEED, TIME }' "Elevation speed and time modes"
 expect "$NATIVE/NativeRideDetailActivity.java" 'profileMap.focusOn(latitude,longitude)' "Profile scrub synchronizes map marker"
-expect "$NATIVE/NativeLiveNavigationActivity.java" 'setNearbyRiders(others)' "Group navigation shows permitted nearby riders"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setNearbyRiders(permitted)' "Group navigation shows permitted nearby riders"
 expect "$NATIVE/NativeMainActivity.java" 'api.get("pp_live_riders")' "Main ride map fetches live riders"
 expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'updateNearbyRiderMarkers()' "Refresh other riders on Neshan vector map"
 tmp_speed_qa="$(mktemp -d)"
