@@ -503,6 +503,21 @@ expect "$NATIVE/NativeGroupsActivity.java" 'catch(org.json.JSONException e)' "Gr
 expect "$NATIVE/NativeGroupPointPicker.java" 'setOnMapTapListener' "Program selection on map"
 expect "$NATIVE/NativeGroupsActivity.java" 'pp_group_invite_redeem' "Invitation link requires explicit user acceptance"
 
+# RC42: owner-reported live-group issues, inbox and battery warning.
+expect "$NATIVE/NativeMainActivity.java" 'authorizedOthers(result.optJSONArray("riders"))' "Own ride filtered out of nearby map"
+expect "$NATIVE/NativeMainActivity.java" 'api.get("ride_live_points",args)' "Nearby peers fetch server-authorized live GPS history"
+expect "$NATIVE/NativeMainActivity.java" 'peer.put("track_points",bounded)' "Separate peer track appended for map renderer"
+expect "$NATIVE/NativeMainActivity.java" 'headerUnreadChat.setOnClickListener(v->showGroupChat());' "Header unread button opens native inbox"
+expect "$NATIVE/NativeMainActivity.java" 'api.get("chat_bootstrap")' "Unread state sourced from authenticated chat"
+expect "$NATIVE/NativeMainActivity.java" 'Settings.ACTION_APPLICATION_DETAILS_SETTINGS' "Pre-ride battery warning opens app settings"
+expect "$NATIVE/NativeMainActivity.java" 'openLiveLinkInBrowser(deepLink)' "Public Beacon/SOS links not swallowed into home"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'roadEnabled="group".equals(mode);' "Group navigation defaults to cycling routing"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'routeView.setNearbyRiders(new JSONArray().put(peer))' "Live viewer shows selected rider separately"
+expect "$NATIVE/NativeLiveNavigationActivity.java" 'selected.put("ride_id",rideId)' "Live viewer retains watched rider's route"
+expect "$NATIVE/NativeSiteSettingsActivity.java" 'openAdminBaleReconnect(settings)' "Admin Bale reconnect available"
+expect "$ROOT/app/src/neshanmaplibre/java/ir/pedalpro/app/nativeapp/NeshanMapLibreBridge.java" 'otherRiderRoutes.put(id,line)' "Authorized peer polylines drawn in Neshan map"
+expect "$ROOT/app/src/main/java/ir/pedalpro/app/PedalProFirebaseMessagingService.java" 'group_message".equalsIgnoreCase(eventType)' "FCM chat notification routes to native inbox"
+
 if [[ "$failed" -ne 0 ]]; then
   printf 'Native parity structural guards FAILED.\n' >&2
   exit 1
