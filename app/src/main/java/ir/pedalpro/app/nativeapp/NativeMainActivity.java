@@ -212,6 +212,9 @@ public final class NativeMainActivity extends Activity {
     private int launchMemberId = 0;
     private String launchGroupInviteToken = "";
     private PedalNeshanMapSurface activeRideRouteView;
+    // Presentation cache for server-authorized active peer tracks only.
+    private final java.util.HashMap<Integer,JSONArray> peerTrackCache=new java.util.HashMap<>();
+    private final java.util.HashMap<Integer,Long> peerPointCursor=new java.util.HashMap<>();
     private final Runnable nearbyRidersTick=new Runnable(){
         @Override public void run(){
             if(!"ride".equals(currentPage)||activeRideRouteView==null||activeRide==null)return;
@@ -220,6 +223,45 @@ public final class NativeMainActivity extends Activity {
                 try{
                     JSONObject result=api.get("pp_live_riders");
                     JSONArray riders=authorizedOthers(result.optJSONArray("riders"));
+                    java.util.HashSet<Integer> current=new java.util.HashSet<>();
+                    for(int i=0;i<Math.min(riders.length(),6);i++){
+                        JSONObject peer=riders.optJSONObject(i);
+                        if(peer==null)continue;
+                        int rid=peer.optInt("ride_id",0);
+                        if(rid<=0)continue;
+                        current.add(rid);
+                        try{
+                            java.util.LinkedHashMap<String,Object> args=new java.util.LinkedHashMap<>();
+                            args.put("ride_id",rid);
+                            args.put("after_id",peerPointCursor.getOrDefault(rid,0L));
+                            args.put("limit",300);
+                            JSONObject page=api.get("ride_live_points",args);
+                            JSONObject visible=page.optJSONObject("ride");
+                            if(visible==null||visible.optInt("id",rid)!=rid||
+                                    !"active".equals(visible.optString("status","")))continue;
+                            JSONArray old=peerTrackCache.get(rid);
+                            JSONArray merged=new JSONArray();
+                            if(old!=null)for(int n=0;n<old.length();n++)merged.put(old.opt(n));
+                            JSONArray items=page.optJSONArray("points");
+                            if(items!=null)for(int n=0;n<items.length();n++){
+                                JSONObject point=items.optJSONObject(n);
+                                if(point!=null)merged.put(point);
+                            }
+                            JSONArray bounded=new JSONArray();
+                            for(int n=Math.max(0,merged.length()-1500);n<merged.length();n++)
+                                bounded.put(merged.opt(n));
+                            peerTrackCache.put(rid,bounded);
+                            peerPointCursor.put(rid,Math.max(
+                                    peerPointCursor.getOrDefault(rid,0L),page.optLong("last_id",0L)));
+                            peer.put("track_points",bounded);
+                        }catch(Exception ignored){
+                            // No unauthorized route fallback; marker can still be shown.
+                            JSONArray previous=peerTrackCache.get(rid);
+                            if(previous!=null)peer.put("track_points",previous);
+                        }
+                    }
+                    peerTrackCache.keySet().retainAll(current);
+                    peerPointCursor.keySet().retainAll(current);
                     main.post(()->{
                         if(activeRideRouteView==screen&&"ride".equals(currentPage))
                             screen.setNearbyRiders(riders);
