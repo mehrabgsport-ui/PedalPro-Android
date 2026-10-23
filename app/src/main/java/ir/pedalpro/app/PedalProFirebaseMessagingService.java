@@ -29,16 +29,17 @@ public class PedalProFirebaseMessagingService extends FirebaseMessagingService {
         String title = data.get("title");
         String body = data.get("body");
         String actionUrl = data.get("action_url");
+        String eventType=data.get("type");
         if ((title == null || title.isEmpty()) && message.getNotification() != null)
             title = message.getNotification().getTitle();
         if ((body == null || body.isEmpty()) && message.getNotification() != null)
             body = message.getNotification().getBody();
         if (title == null || title.isEmpty()) title = "PedalPro";
         if (body == null) body = "";
-        post(title, body, actionUrl);
+        post(title, body, actionUrl, eventType);
     }
 
-    private void post(String title, String body, String actionUrl) {
+    private void post(String title, String body, String actionUrl, String eventType) {
         if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
 
@@ -51,8 +52,10 @@ public class PedalProFirebaseMessagingService extends FirebaseMessagingService {
 
         Intent open = new Intent(this,ir.pedalpro.app.nativeapp.NativeMainActivity.class);
         // Notifications must always open the native screen, never legacy WebView.
-        if(actionUrl!=null && (actionUrl.contains("chat")||
-                actionUrl.contains("message")||actionUrl.contains("conversation")))
+        if("chat".equalsIgnoreCase(eventType) || "group_message".equalsIgnoreCase(eventType)
+                || "private_message".equalsIgnoreCase(eventType) ||
+                (actionUrl!=null && (actionUrl.contains("chat")||
+                actionUrl.contains("message")||actionUrl.contains("conversation"))))
             open.putExtra("page","chat");
         if (actionUrl != null && !actionUrl.isEmpty()) {
             String url = actionUrl.startsWith("/") ? "https://pedalpro.ir" + actionUrl : actionUrl;
