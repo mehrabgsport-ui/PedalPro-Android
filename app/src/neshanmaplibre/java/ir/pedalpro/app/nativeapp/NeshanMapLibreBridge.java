@@ -65,6 +65,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private Marker rider,goal;
     private JSONArray nearbyRiders=new JSONArray();
     private final java.util.HashMap<Integer,Marker> otherRiderMarkers=new java.util.HashMap<>();
+    private final java.util.HashMap<Integer,Polyline> otherRiderRoutes=new java.util.HashMap<>();
     private final android.util.SparseArray<org.maplibre.android.annotations.Icon> riderIcons = new android.util.SparseArray<>();
     private int currentRiderDirectionBucket = Integer.MIN_VALUE;
     private Polyline recorded,recordedGlow,recordedHalo,suggested;
@@ -142,6 +143,10 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                     try{map.removeMarker(marker);}catch(Exception ignored){}
                 }
                 otherRiderMarkers.clear();
+                for(Polyline poly:otherRiderRoutes.values()){
+                    try{map.removePolyline(poly);}catch(Exception ignored){}
+                }
+                otherRiderRoutes.clear();
                 rider=null;goal=null;recorded=null;recordedGlow=null;recordedHalo=null;suggested=null;
                 currentRiderDirectionBucket=Integer.MIN_VALUE;
                 applyGeometry();
@@ -287,12 +292,25 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
                 marker.setTitle(title);
                 map.updateMarker(marker);
             }
+            // Draw only the GPS polyline returned by the authenticated and ACL-checked
+            // ride_live_points endpoint. Peers are orange; the owner's route stays cyan.
+            Polyline previous=otherRiderRoutes.remove(id);
+            if(previous!=null)try{map.removePolyline(previous);}catch(Exception ignored){}
+            JSONArray history=p.optJSONArray("track_points");
+            List<LatLng> safe=history==null?new ArrayList<>():cleanRecordedGeometry(parse(history));
+            if(safe.size()>1){
+                Polyline line=map.addPolyline(new PolylineOptions().addAll(safe)
+                        .color(Color.rgb(255,167,60)).width(5.5f));
+                otherRiderRoutes.put(id,line);
+            }
         }
         java.util.Iterator<java.util.Map.Entry<Integer,Marker>> it=otherRiderMarkers.entrySet().iterator();
         while(it.hasNext()){
             java.util.Map.Entry<Integer,Marker> e=it.next();
             if(found.contains(e.getKey()))continue;
             try{map.removeMarker(e.getValue());}catch(Exception ignored){}
+            Polyline old=otherRiderRoutes.remove(e.getKey());
+            if(old!=null)try{map.removePolyline(old);}catch(Exception ignored){}
             it.remove();
         }
     }
