@@ -68,6 +68,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
     private final java.util.HashMap<Integer,Polyline> otherRiderRoutes=new java.util.HashMap<>();
     private final android.util.SparseArray<org.maplibre.android.annotations.Icon> riderIcons = new android.util.SparseArray<>();
     private int currentRiderDirectionBucket = Integer.MIN_VALUE;
+    private org.maplibre.android.annotations.Icon otherBikeIcon;
     private Polyline recorded,recordedGlow,recordedHalo,suggested;
     private JSONArray recordedPoints,suggestedPoints;
     private boolean started,resumed;
@@ -246,6 +247,26 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
         return icon;
     }
 
+    private org.maplibre.android.annotations.Icon otherBikeMapIcon(){
+        if(otherBikeIcon!=null)return otherBikeIcon;
+        int side=(int)(68*activity.getResources().getDisplayMetrics().density);
+        side=Math.max(68,Math.min(side,192));
+        Bitmap bitmap=Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(bitmap);
+        Paint ring=new Paint(Paint.ANTI_ALIAS_FLAG);
+        ring.setColor(Color.rgb(255,167,60));
+        ring.setStyle(Paint.Style.STROKE);
+        ring.setStrokeWidth(side*.065f);
+        canvas.drawCircle(side/2f,side/2f,side*.40f,ring);
+        Drawable cyclist=ContextCompat.getDrawable(activity,ir.pedalpro.app.R.drawable.pedal_cyclist_topdown);
+        if(cyclist==null)throw new IllegalStateException("Cyclist marker drawable missing");
+        cyclist=cyclist.mutate();
+        cyclist.setBounds(Math.round(side*.24f),Math.round(side*.09f),
+                Math.round(side*.76f),Math.round(side*.91f));
+        cyclist.draw(canvas);
+        otherBikeIcon=IconFactory.getInstance(activity).fromBitmap(bitmap);
+        return otherBikeIcon;
+    }
     private void updateRiderMarker(boolean force){
         if(!ready||map==null||!Double.isFinite(lat))return;
         long now=SystemClock.elapsedRealtime();
@@ -285,7 +306,7 @@ public final class NeshanMapLibreBridge implements NeshanMapBridge {
             Marker marker=otherRiderMarkers.get(id);
             if(marker==null){
                 marker=map.addMarker(new MarkerOptions().position(new LatLng(a,b))
-                        .title(title).icon(bikeMapIcon(0)));
+                        .title(title).icon(otherBikeMapIcon()));
                 otherRiderMarkers.put(id,marker);
             }else {
                 marker.setPosition(new LatLng(a,b));
