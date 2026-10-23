@@ -65,7 +65,9 @@ abstract class NativeScreenBase extends Activity {
             io.execute(()->{
                 try{
                     JSONObject chat=api.get("chat_bootstrap");
-                    int unread=Math.max(0,chat.optInt("unread_count",0));
+                    int unread=chat.optInt("unread_count",-1);
+                    if(unread<0){
+                        unread=0;
                     JSONObject group=chat.optJSONObject("group");
                     if(group!=null)unread+=Math.max(0,group.optInt("unread_count",0));
                     org.json.JSONArray threads=chat.optJSONArray("private_threads");
@@ -73,7 +75,8 @@ abstract class NativeScreenBase extends Activity {
                         JSONObject t=threads.optJSONObject(i);
                         if(t!=null)unread+=Math.max(0,t.optInt("unread_count",0));
                     }
-                    boolean hasUnread=unread>0;
+                    }
+                                        boolean hasUnread=unread>0;
                     main.post(()->{
                         if(headerUnreadChat!=null)
                             headerUnreadChat.setVisibility(hasUnread?View.VISIBLE:View.GONE);
