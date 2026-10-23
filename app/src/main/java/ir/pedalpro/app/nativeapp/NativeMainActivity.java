@@ -215,6 +215,8 @@ public final class NativeMainActivity extends Activity {
     // Presentation cache for server-authorized active peer tracks only.
     private final java.util.HashMap<Integer,JSONArray> peerTrackCache=new java.util.HashMap<>();
     private final java.util.HashMap<Integer,Long> peerPointCursor=new java.util.HashMap<>();
+    private long lastPeersServerSuccessElapsed;
+    private TextView nearbyPeersStatus;
     private final Runnable nearbyRidersTick=new Runnable(){
         @Override public void run(){
             if(!"ride".equals(currentPage)||activeRideRouteView==null||activeRide==null)return;
@@ -262,13 +264,27 @@ public final class NativeMainActivity extends Activity {
                     }
                     peerTrackCache.keySet().retainAll(current);
                     peerPointCursor.keySet().retainAll(current);
+                    lastPeersServerSuccessElapsed=SystemClock.elapsedRealtime();
                     main.post(()->{
-                        if(activeRideRouteView==screen&&"ride".equals(currentPage))
+                        if(activeRideRouteView==screen&&"ride".equals(currentPage)){
                             screen.setNearbyRiders(riders);
+                            if(nearbyPeersStatus!=null&&nearbyPeersStatus.isAttachedToWindow()){
+                                nearbyPeersStatus.setText(riders.length()==0?
+                                        "رکاب‌زن عمومی دیگری در محدوده مجاز دیده نمی‌شود":
+                                        JalaliDate.fa(riders.length())+" رکاب‌زن زنده روی نقشه");
+                                nearbyPeersStatus.setTextColor(riders.length()>0?GREEN:MUTED);
+                            }
+                        }
                     });
                 }catch(Exception e){
+                    boolean expired=SystemClock.elapsedRealtime()-lastPeersServerSuccessElapsed>45000L;
                     main.post(()->{
-                        if(activeRideRouteView==screen)screen.setNearbyRiders(null);
+                        if(activeRideRouteView!=screen)return;
+                        if(expired)screen.setNearbyRiders(null);
+                        if(nearbyPeersStatus!=null&&nearbyPeersStatus.isAttachedToWindow()){
+                            nearbyPeersStatus.setText("دریافت رکاب‌زنان زنده ناموفق است؛ اتصال و دسترسی API را بررسی کنید.");
+                            nearbyPeersStatus.setTextColor(ORANGE);
+                        }
                     });
                 }
             });
@@ -2397,6 +2413,9 @@ public final class NativeMainActivity extends Activity {
             seedDisplayMapFromLastLocation(activeRideRouteView);
         }
         content.addView(activeRideRouteView, new LinearLayout.LayoutParams(-1, dp(280)));
+        nearbyPeersStatus=text("در حال دریافت رکاب‌زن‌های زنده و مسیر آن‌ها…",11,false,MUTED);
+        nearbyPeersStatus.setPadding(dp(8),dp(7),dp(8),dp(7));
+        content.addView(nearbyPeersStatus,fullWrapLp(2));
         main.removeCallbacks(nearbyRidersTick);
         main.post(nearbyRidersTick);
         loadActiveRideRoute();
