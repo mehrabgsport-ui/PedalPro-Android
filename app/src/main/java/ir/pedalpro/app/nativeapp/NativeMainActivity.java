@@ -113,6 +113,36 @@ public final class NativeMainActivity extends Activity {
     private TextView topStatus;
     private View headerAdminSettings;
     private PedalActionView headerAccount;
+    private PedalActionView headerUnreadChat;
+    private volatile boolean chatBadgeVisible;
+    private boolean headerPolling;
+    private final Runnable headerChatTick=new Runnable(){
+        @Override public void run(){
+            if(!headerPolling || bootstrap==null || !signedIn())return;
+            io.execute(()->{
+                try{
+                    JSONObject chat=api.get("chat_bootstrap");
+                    int unread=Math.max(0,chat.optInt("unread_count",0));
+                    JSONObject group=chat.optJSONObject("group");
+                    if(group!=null)unread+=Math.max(0,group.optInt("unread_count",0));
+                    JSONArray threads=chat.optJSONArray("private_threads");
+                    if(threads!=null)for(int i=0;i<threads.length();i++){
+                        JSONObject t=threads.optJSONObject(i);
+                        if(t!=null)unread+=Math.max(0,t.optInt("unread_count",0));
+                    }
+                    final boolean hasUnread=unread>0;
+                    main.post(()->{
+                        chatBadgeVisible=hasUnread;
+                        if(headerUnreadChat!=null)
+                            headerUnreadChat.setVisibility(hasUnread?View.VISIBLE:View.GONE);
+                    });
+                }catch(Exception ignored){
+                    // A network failure is not evidence that unread messages vanished.
+                }
+            });
+            main.postDelayed(this,20000L);
+        }
+    };
     private TextView rideTimer;
     private TextView rideGps;
     private TextView rideSpeed;
@@ -189,7 +219,7 @@ public final class NativeMainActivity extends Activity {
             io.execute(()->{
                 try{
                     JSONObject result=api.get("pp_live_riders");
-                    JSONArray riders=result.optJSONArray("riders");
+                    JSONArray riders=authorizedOthers(result.optJSONArray("riders"));
                     main.post(()->{
                         if(activeRideRouteView==screen&&"ride".equals(currentPage))
                             screen.setNearbyRiders(riders);
@@ -203,6 +233,22 @@ public final class NativeMainActivity extends Activity {
             main.postDelayed(this,10000L);
         }
     };
+    // The server must enforce viewer ACL; this is defense in depth against self markers.
+    private JSONArray authorizedOthers(JSONArray input){
+        JSONArray out=new JSONArray();
+        int ownRide=activeRide==null?0:activeRide.optInt("id",0);
+        JSONObject user=bootstrap==null?null:bootstrap.optJSONObject("user");
+        int ownUser=user==null?0:user.optInt("id",0);
+        if(input!=null)for(int i=0;i<input.length();i++){
+            JSONObject p=input.optJSONObject(i);if(p==null)continue;
+            int rid=p.optInt("ride_id",0);
+            int uid=p.optInt("user_id",p.optInt("owner_user_id",0));
+            if(rid<=0 || rid==ownRide || (ownUser>0&&uid==ownUser))continue;
+            if(p.optInt("age_seconds",99)>45)continue;
+            out.put(p);
+        }
+        return out;
+    }
     private int activeRideMapRideId;
     private long lastLiveTrackPointTime;
     private int lastLiveTrackRideId;
@@ -2149,6 +2195,16 @@ public final class NativeMainActivity extends Activity {
             start.setAlpha(.5f);
             gate.addView(statusRow);
             gate.addView(accuracy);
+            LinearLayout batteryNotice=glassCard(16);
+            batteryNotice.addView(text("پیش از شروع: برای جلوگیری از قطع GPS هنگام خاموش‌شدن صفحه، محدودیت باتری PedalPro را بردارید و فعالیت پس‌زمینه را مجاز کنید.",12,true,ORANGE));
+            PedalActionView batterySettings=action(PedalIconView.Icon.SETTINGS,"تنظیمات باتری و مجوزهای PedalPro",PedalActionView.Style.OUTLINE);
+            batterySettings.setOnClickListener(v->{
+                Intent settings=new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:"+getPackageName()));
+                try{startActivity(settings);}catch(Exception e){toast("تنظیمات برنامه در دسترس نیست.");}
+            });
+            batteryNotice.addView(batterySettings,fullActionLp(46));
+            gate.addView(batteryNotice,cardLp());
             gate.addView(check, fullActionLp(52));
             gate.addView(start, fullActionLp(58));
             if(admin){
@@ -6194,6 +6250,13 @@ public final class NativeMainActivity extends Activity {
             else showLogin();
         });
         webHeader.addView(headerAccount, new LinearLayout.LayoutParams(dp(105), dp(46)));
+        headerUnreadChat=action(PedalIconView.Icon.CHAT,"پیام جدید",PedalActionView.Style.OUTLINE);
+        headerUnreadChat.setContentDescription("پیام جدید دارید؛ باز کردن گفتگو");
+        headerUnreadChat.setOnClickListener(v->showGroupChat());
+        headerUnreadChat.setVisibility(View.GONE);
+        LinearLayout.LayoutParams unreadLp=new LinearLayout.LayoutParams(dp(92),dp(46));
+        unreadLp.setMargins(dp(5),0,0,0);
+        webHeader.addView(headerUnreadChat,unreadLp);
 
         headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage, "همه تنظیمات سایت و اپلیکیشن");
         headerAdminSettings.setVisibility(View.GONE);
@@ -8611,13 +8674,23 @@ public final class NativeMainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        headerPolling=true;
+        main.removeCallbacks(headerChatTick);
+        main.post(headerChatTick);
         if (bootstrap != null && signedIn()) refreshBootstrap(false);
+    }
+
+    @Override protected void onPause(){
+        headerPolling=false;
+        main.removeCallbacks(headerChatTick);
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
         main.removeCallbacks(clockTick);
         main.removeCallbacks(chatPoll);
+        main.removeCallbacks(headerChatTick);
         try { unregisterReceiver(trackingReceiver); } catch (Exception ignored) { }
         try { if (cyclingSensors != null) { cyclingSensors.stopScan(); cyclingSensors.disconnect(); } } catch (Throwable ignored) { }
         try { if (heartRateSensors != null) { heartRateSensors.stopScan(); heartRateSensors.disconnect(); } } catch (Throwable ignored) { }
