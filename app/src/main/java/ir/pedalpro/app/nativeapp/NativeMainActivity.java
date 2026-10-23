@@ -219,10 +219,16 @@ public final class NativeMainActivity extends Activity {
     private final java.util.HashMap<Integer,Long> peerPointCursor=new java.util.HashMap<>();
     private long lastPeersServerSuccessElapsed;
     private TextView nearbyPeersStatus;
+    private final java.util.concurrent.atomic.AtomicBoolean nearbyRefreshInFlight=
+            new java.util.concurrent.atomic.AtomicBoolean(false);
     private final Runnable nearbyRidersTick=new Runnable(){
         @Override public void run(){
             if(!"ride".equals(currentPage)||activeRideRouteView==null||activeRide==null)return;
             final PedalNeshanMapSurface screen=activeRideRouteView;
+            if(!nearbyRefreshInFlight.compareAndSet(false,true)){
+                main.postDelayed(this,10000L);
+                return;
+            }
             io.execute(()->{
                 try{
                     JSONObject result=api.get("pp_live_riders");
@@ -288,6 +294,8 @@ public final class NativeMainActivity extends Activity {
                             nearbyPeersStatus.setTextColor(ORANGE);
                         }
                     });
+                }finally{
+                    nearbyRefreshInFlight.set(false);
                 }
             });
             main.postDelayed(this,10000L);
