@@ -2237,6 +2237,10 @@ public final class NativeMainActivity extends Activity {
             android.widget.Spinner privacySpinner = challengeSpinner(
                     new String[]{"خصوصی؛ فقط افراد انتخابی", "عمومی؛ همه اعضا موقعیت زنده را ببینند"}, 0);
             form.addView(privacySpinner);
+            TextView liveVisibilityGuide=text(
+                    "نمایش شما و مسیر زنده‌تان روی نقشه دیگران فقط با انتخاب گزینه «عمومی» یا دادن دسترسی خصوصی فعال می‌شود. حالت پیش‌فرض خصوصی است.",11,false,MUTED);
+            liveVisibilityGuide.setPadding(dp(4),dp(5),dp(4),dp(7));
+            form.addView(liveVisibilityGuide);
 
             LinearLayout viewers = glassCard(18);
             viewers.addView(text("افراد مجاز برای دیدن رکاب خصوصی", 13, true, TEXT));
