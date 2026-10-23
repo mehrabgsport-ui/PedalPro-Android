@@ -6359,6 +6359,8 @@ public final class NativeMainActivity extends Activity {
 
 
     private LinearLayout buildWebHeader() {
+        final boolean compactHeader=getResources().getDisplayMetrics().widthPixels/
+                getResources().getDisplayMetrics().density<400f;
         webHeader = new LinearLayout(this);
         webHeader.setOrientation(LinearLayout.HORIZONTAL);
         webHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -6371,7 +6373,7 @@ public final class NativeMainActivity extends Activity {
         logo.setImageResource(R.drawable.pedalpro_logo_transparent);
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
-        webHeader.addView(logo, new LinearLayout.LayoutParams(dp(108), dp(54)));
+        webHeader.addView(logo, new LinearLayout.LayoutParams(dp(compactHeader?80:108), dp(54)));
 
         webHeader.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
 
@@ -6380,23 +6382,24 @@ public final class NativeMainActivity extends Activity {
             if (signedIn()) showMe();
             else showLogin();
         });
-        webHeader.addView(headerAccount, new LinearLayout.LayoutParams(dp(105), dp(46)));
-        headerUnreadChat=action(PedalIconView.Icon.CHAT,"پیام جدید",PedalActionView.Style.OUTLINE);
+        webHeader.addView(headerAccount, new LinearLayout.LayoutParams(dp(compactHeader?82:105), dp(46)));
+        headerUnreadChat=action(PedalIconView.Icon.CHAT,compactHeader?"●":"پیام جدید",
+                PedalActionView.Style.OUTLINE);
         headerUnreadChat.setContentDescription("پیام جدید دارید؛ باز کردن گفتگو");
         headerUnreadChat.setOnClickListener(v->showGroupChat());
         headerUnreadChat.setVisibility(View.GONE);
-        LinearLayout.LayoutParams unreadLp=new LinearLayout.LayoutParams(dp(92),dp(46));
+        LinearLayout.LayoutParams unreadLp=new LinearLayout.LayoutParams(dp(compactHeader?42:92),dp(46));
         unreadLp.setMargins(dp(5),0,0,0);
         webHeader.addView(headerUnreadChat,unreadLp);
 
         headerAdminSettings = iconSquare(PedalIconView.Icon.SETTINGS, this::showSiteSettingsPage, "همه تنظیمات سایت و اپلیکیشن");
         headerAdminSettings.setVisibility(View.GONE);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(46), dp(46));
+        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(dp(compactHeader?42:46), dp(46));
         sp.setMargins(dp(6), 0, 0, 0);
         webHeader.addView(headerAdminSettings, sp);
 
         FrameLayout menu = iconSquare(PedalIconView.Icon.MENU, this::showDrawer, "منو");
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(46), dp(46));
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(dp(compactHeader?42:46), dp(46));
         mp.setMargins(dp(6), 0, 0, 0);
         webHeader.addView(menu, mp);
 
