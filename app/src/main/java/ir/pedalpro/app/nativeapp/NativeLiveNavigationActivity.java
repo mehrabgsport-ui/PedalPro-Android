@@ -40,6 +40,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private int rideId=0;
     private String targetName="رکاب‌زن";
     private long lastPointId=0;
+    private final JSONArray viewedRiderTrack=new JSONArray();
     private double targetLat=Double.NaN,targetLng=Double.NaN;
     private double currentLat=Double.NaN,currentLng=Double.NaN;
     private PedalNeshanMapSurface routeView;
@@ -82,6 +83,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     @Override protected void onScreenReady(){
         mode=getIntent().getStringExtra(EXTRA_MODE);
         if(mode==null)mode="live";
+        // Reaching a moving group is a navigation request, not just a bearing HUD.
+        roadEnabled="group".equals(mode);
         rideId=getIntent().getIntExtra(EXTRA_RIDE_ID,0);
         targetName=getIntent().getStringExtra(EXTRA_TITLE);
         if(targetName==null||targetName.isBlank())targetName="هدف زنده";
@@ -142,7 +145,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         routing.addView(roadToggle);
         // Admin map credentials live only behind the account-adjacent settings gear.
         content.addView(routing,cardLp());
-        roadStatus.setText("برای مسیریابی دوچرخه، سرویس cycling-regular باید در Backend فعال باشد؛ نقشه نشان حفظ می‌شود.");
+        roadStatus.setText(roadEnabled?"در حال دریافت مسیر خیابانی دوچرخه تا مقصد متحرک…":
+                "برای مسیریابی دوچرخه، سرویس cycling-regular باید در Backend فعال باشد؛ نقشه نشان حفظ می‌شود.");
         addCard("راهنما","خط مستقیم فقط فاصله را نشان می‌دهد؛ خط ناوبری ویژه دوچرخه پس از پاسخ معتبر Backend ترسیم می‌شود.");
     }
 
@@ -151,7 +155,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         screenVisible=true;
         boolean preference=getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE)
-                .getBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,false);
+                .getBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,"group".equals(mode));
         if(preference!=roadEnabled){
             roadEnabled=preference;
             invalidateDirectionCache();
@@ -228,7 +232,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     JSONObject r=d.optJSONObject("ride");
                     JSONArray pts=d.optJSONArray("points");
                     long newLast=d.optLong("last_id",lastPointId);
-                    if(r==null||!"active".equals(r.optString("status"))){
+                    if(r==null||!"active".equals(r.optString("status")) ||
+                            (r.optInt("id",rideId)!=rideId)){
                         main.post(()->{
                             status.setText("انتشار زنده این رکاب‌زن متوقف شده است.");
                             routeView.clearNavigationRoute();
@@ -236,7 +241,22 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     }else{
                         double lat=r.optDouble("last_lat",Double.NaN),lng=r.optDouble("last_lng",Double.NaN);
                         lastPointId=Math.max(lastPointId,newLast);
-                        main.post(()->applyTarget(lat,lng,r.optString("owner_name",targetName),pts));
+                        if(pts!=null)for(int i=0;i<pts.length();i++){
+                            JSONObject p=pts.optJSONObject(i);
+                            if(p!=null)viewedRiderTrack.put(p);
+                        }
+                        JSONArray shown=new JSONArray();
+                        for(int i=Math.max(0,viewedRiderTrack.length()-1500);i<viewedRiderTrack.length();i++)
+                            shown.put(viewedRiderTrack.opt(i));
+                        JSONObject peer=new JSONObject();
+                        peer.put("ride_id",rideId).put("lat",lat).put("lng",lng)
+                                .put("display_name",r.optString("owner_name",targetName))
+                                .put("age_seconds",r.optInt("location_age_seconds",0))
+                                .put("track_points",shown);
+                        main.post(()->{
+                            routeView.setNearbyRiders(new JSONArray().put(peer));
+                            applyTarget(lat,lng,r.optString("owner_name",targetName),null);
+                        });
                     }
                 }
             }catch(Exception e){
@@ -377,7 +397,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         }
         targetLat=lat;targetLng=lng;
         targetName=name;
-        if(pts!=null)routeView.appendPoints(pts);
+        if(pts!=null && "group".equals(mode))routeView.appendPoints(pts);
         routeView.setTarget(lat,lng);
         status.setText("هدف زنده: "+name+" · آخرین بروزرسانی همین حالا");
         updateHud();
