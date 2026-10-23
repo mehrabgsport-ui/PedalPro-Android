@@ -184,6 +184,8 @@ abstract class NativeScreenBase extends Activity {
     }
 
     private LinearLayout buildWebHeader(){
+        final boolean compactHeader=getResources().getDisplayMetrics().widthPixels/
+                getResources().getDisplayMetrics().density<400f;
         webHeader=new LinearLayout(this);
         webHeader.setOrientation(LinearLayout.HORIZONTAL);
         webHeader.setGravity(Gravity.CENTER_VERTICAL);
@@ -197,28 +199,28 @@ abstract class NativeScreenBase extends Activity {
         logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         logo.setContentDescription("PedalPro");
         logo.setOnClickListener(v->openMain("dashboard"));
-        webHeader.addView(logo,new LinearLayout.LayoutParams(dp(108),dp(54)));
+        webHeader.addView(logo,new LinearLayout.LayoutParams(dp(compactHeader?80:108),dp(54)));
 
         webHeader.addView(new View(this),new LinearLayout.LayoutParams(0,1,1f));
 
         headerAccount=new PedalActionView(this,PedalIconView.Icon.USER,"ورود",PedalActionView.Style.OUTLINE);
         headerAccount.setOnClickListener(v->openMain(signedIn?"me":"login"));
-        webHeader.addView(headerAccount,new LinearLayout.LayoutParams(dp(105),dp(46)));
+        webHeader.addView(headerAccount,new LinearLayout.LayoutParams(dp(compactHeader?82:105),dp(46)));
         headerUnreadChat=new PedalActionView(this,PedalIconView.Icon.CHAT,
-                "پیام جدید",PedalActionView.Style.OUTLINE);
+                compactHeader?"●":"پیام جدید",PedalActionView.Style.OUTLINE);
         headerUnreadChat.setOnClickListener(v->openMain("chat"));
         headerUnreadChat.setContentDescription("پیام جدید دارید؛ مشاهده گفتگوها");
         headerUnreadChat.setVisibility(View.GONE);
-        webHeader.addView(headerUnreadChat,new LinearLayout.LayoutParams(dp(92),dp(46)));
+        webHeader.addView(headerUnreadChat,new LinearLayout.LayoutParams(dp(compactHeader?42:92),dp(46)));
 
         headerAdminSettings=iconSquare(PedalIconView.Icon.SETTINGS,()->startActivity(new Intent(this,NativeSiteSettingsActivity.class)),"تنظیمات سایت");
         headerAdminSettings.setVisibility(View.GONE);
-        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(46),dp(46));
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(dp(compactHeader?42:46),dp(46));
         sp.setMargins(dp(6),0,0,0);
         webHeader.addView(headerAdminSettings,sp);
 
         View menu=iconSquare(PedalIconView.Icon.MENU,()->openMain("menu"),"منو");
-        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(46),dp(46));
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(dp(compactHeader?42:46),dp(46));
         mp.setMargins(dp(6),0,0,0);
         webHeader.addView(menu,mp);
         return webHeader;
