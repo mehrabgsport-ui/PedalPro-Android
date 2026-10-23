@@ -263,6 +263,12 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                             (r.optInt("id",rideId)!=rideId)){
                         main.post(()->{
                             status.setText("انتشار زنده این رکاب‌زن متوقف شده است.");
+                            if(!"group".equals(mode)){
+                                viewedRiderTrack=new JSONArray();
+                                routeView.setNearbyRiders(null);
+                                targetLat=Double.NaN;targetLng=Double.NaN;
+                                routeView.clearTarget();
+                            }
                             routeView.clearNavigationRoute();
                         });
                     }else{
@@ -289,12 +295,14 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                 }
             }catch(Exception e){
                 main.post(()->{
-                    if("group".equals(mode)){
-                        targetLat=Double.NaN;targetLng=Double.NaN;
-                        routeView.clearTarget();routeView.clearNavigationRoute();
-                        invalidateDirectionCache();arrivalCandidateTime=0L;arrivalCandidateFixTime=0L;
+                    targetLat=Double.NaN;targetLng=Double.NaN;
+                    routeView.clearTarget();routeView.clearNavigationRoute();
+                    invalidateDirectionCache();arrivalCandidateTime=0L;arrivalCandidateFixTime=0L;
+                    if(!"group".equals(mode)){
+                        viewedRiderTrack=new JSONArray();
+                        routeView.setNearbyRiders(null);
                     }
-                    status.setText("خطای دریافت موقعیت؛ مقصد قدیمی حذف شد: "+e.getMessage());
+                    status.setText("موقعیت زنده معتبر یا دسترسی مشاهده در دسترس نیست؛ مسیر قبلی حذف شد.");
                 });
             }finally{busy=false;}
         });
