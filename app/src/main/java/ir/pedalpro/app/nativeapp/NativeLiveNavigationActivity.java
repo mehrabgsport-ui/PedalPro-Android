@@ -40,7 +40,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
     private int rideId=0;
     private String targetName="رکاب‌زن";
     private long lastPointId=0;
-    private final JSONArray viewedRiderTrack=new JSONArray();
+    private JSONArray viewedRiderTrack=new JSONArray();
     private double targetLat=Double.NaN,targetLng=Double.NaN;
     private double currentLat=Double.NaN,currentLng=Double.NaN;
     private PedalNeshanMapSurface routeView;
@@ -85,6 +85,8 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         if(mode==null)mode="live";
         // Reaching a moving group is a navigation request, not just a bearing HUD.
         roadEnabled="group".equals(mode);
+        if(roadEnabled)getSharedPreferences(NativeAppSettingsActivity.PREFS,MODE_PRIVATE)
+                .edit().putBoolean(NativeAppSettingsActivity.PREF_PREFER_ROADS,true).apply();
         rideId=getIntent().getIntExtra(EXTRA_RIDE_ID,0);
         targetName=getIntent().getStringExtra(EXTRA_TITLE);
         if(targetName==null||targetName.isBlank())targetName="هدف زنده";
@@ -273,6 +275,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                         JSONArray shown=new JSONArray();
                         for(int i=Math.max(0,viewedRiderTrack.length()-1500);i<viewedRiderTrack.length();i++)
                             shown.put(viewedRiderTrack.opt(i));
+                        viewedRiderTrack=shown;
                         JSONObject peer=new JSONObject();
                         peer.put("ride_id",rideId).put("lat",lat).put("lng",lng)
                                 .put("display_name",r.optString("owner_name",targetName))
