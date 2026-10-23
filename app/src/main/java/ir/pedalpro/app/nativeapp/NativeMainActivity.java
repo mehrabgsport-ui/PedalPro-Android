@@ -6970,6 +6970,14 @@ public final class NativeMainActivity extends Activity {
         }
         boolean admin = data != null && (data.optBoolean("is_admin", false) || data.optInt("is_admin", 0) == 1);
         if (headerAdminSettings != null) headerAdminSettings.setVisibility(admin ? View.VISIBLE : View.GONE);
+        if (user == null && headerUnreadChat != null) {
+            headerUnreadChat.setVisibility(View.GONE);
+            chatBadgeVisible=false;
+        }
+        if (user != null && headerPolling) {
+            main.removeCallbacks(headerChatTick);
+            main.post(headerChatTick);
+        }
     }
 
     private void openAdvancedSection(String section) {
