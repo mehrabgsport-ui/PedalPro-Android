@@ -515,10 +515,42 @@ public final class NativeMainActivity extends Activity {
             String host=deepLink.getHost();
             if("pedalpro.ir".equalsIgnoreCase(host)||"www.pedalpro.ir".equalsIgnoreCase(host)){
                 String token=deepLink.getQueryParameter("group_invite");
-                if(token!=null&&token.matches("(?i)^[0-9a-f]{48}$"))
+                if(token!=null&&token.matches("(?i)^[0-9a-f]{48}$")){
                     launchGroupInviteToken=token;
+                }else if(isPublicLiveLink(deepLink)){
+                    // Catch-all App Links previously swallowed Beacon/SOS links and
+                    // opened the dashboard. Public viewers belong in the web map.
+                    openLiveLinkInBrowser(deepLink);
+                    launchPage="";
+                }
             }
         }
+    }
+
+    private boolean isPublicLiveLink(Uri uri){
+        if(uri==null)return false;
+        String path=uri.getPath()==null?"":uri.getPath().toLowerCase(Locale.ROOT);
+        String query=uri.getEncodedQuery()==null?"":uri.getEncodedQuery().toLowerCase(Locale.ROOT);
+        return path.contains("beacon")||path.contains("sos")||path.contains("/live")||
+                query.contains("beacon")||query.contains("live_")||query.contains("sos_");
+    }
+
+    private void openLiveLinkInBrowser(Uri link){
+        try{
+            Intent view=new Intent(Intent.ACTION_VIEW,link);
+            view.addCategory(Intent.CATEGORY_BROWSABLE);
+            java.util.List<android.content.pm.ResolveInfo> browsers=
+                    getPackageManager().queryIntentActivities(view,0);
+            for(android.content.pm.ResolveInfo choice:browsers){
+                if(choice.activityInfo==null)continue;
+                String pkg=choice.activityInfo.packageName;
+                if(pkg==null||pkg.equals(getPackageName()))continue;
+                view.setPackage(pkg);
+                startActivity(view);
+                return;
+            }
+            toast("مرورگر برای بازکردن نقشه زنده پیدا نشد.");
+        }catch(Exception e){toast("بازکردن لینک زنده در مرورگر انجام نشد.");}
     }
 
     @Override protected void onNewIntent(Intent intent) {
