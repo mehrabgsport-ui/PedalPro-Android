@@ -260,7 +260,7 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
                     JSONArray pts=d.optJSONArray("points");
                     long newLast=d.optLong("last_id",lastPointId);
                     if(r==null||!"active".equals(r.optString("status")) ||
-                            (r.optInt("id",rideId)!=rideId)){
+                            (r.optInt("id",0)!=rideId)){
                         main.post(()->{
                             status.setText("انتشار زنده این رکاب‌زن متوقف شده است.");
                             if(!"group".equals(mode)){
