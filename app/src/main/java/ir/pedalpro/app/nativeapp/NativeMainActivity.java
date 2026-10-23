@@ -5191,7 +5191,9 @@ public final class NativeMainActivity extends Activity {
                 12,true,baleConnected?GREEN:ORANGE);
         baleState.setPadding(0,dp(8),0,dp(8));
         baleInfo.addView(baleState);
-        PedalActionView baleButton=action(PedalIconView.Icon.CHAT,\n                baleConnected?"باز کردن / اتصال مجدد ربات بله":"اتصال به ربات بله",\n                PedalActionView.Style.OUTLINE);
+        PedalActionView baleButton=action(PedalIconView.Icon.CHAT,
+                baleConnected?"باز کردن / اتصال مجدد ربات بله":"اتصال به ربات بله",
+                PedalActionView.Style.OUTLINE);
         baleButton.setOnClickListener(v->{
             JSONObject invite=bootstrap==null?null:bootstrap.optJSONObject("bale_invite");
             if(invite==null){
