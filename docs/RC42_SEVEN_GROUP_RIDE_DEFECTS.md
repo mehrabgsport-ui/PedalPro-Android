@@ -29,7 +29,7 @@ Scope: reports from a real group ride on 2026-10-22. Source changes reside on `n
 - No invented car geometry; test deviation reroute and moving leader roughly every 10 seconds. Missing provider is a failed dependency, not a completed navigation fix.
 
 ### D. Chat + notifications
-- `chat_bootstrap` reports accurate `unread_count` (thread/room and optionally top-level) and updates read receipts when opened.
+- `chat_bootstrap` reports accurate `unread_count` (thread/room and optionally top-level) and updates read receipts when opened. **Independent `pp_group_messages` rooms are not necessarily included in `chat_bootstrap`; their server-side unread aggregate and notification fanout remain separate P0 work and must be included in any universal chat indicator contract.**
 - For each committed private/group message, dispatch FCM once to authorized recipients, with `type=group_message` or `type=private_message` and room/action metadata; no alert to sender. Dedup with message id/nonce. Verify POST_NOTIFICATIONS permission and Android 13+ user consent.
 - Test sender/recipient with app open, background, force-closed and network loss. Foreground badge does not substitute for background FCM delivery.
 
