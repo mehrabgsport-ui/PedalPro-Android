@@ -180,8 +180,33 @@ public final class NativeLiveNavigationActivity extends NativeScreenBase {
         io.execute(()->{
             try{
                 JSONArray others=api.get("pp_live_riders").optJSONArray("riders");
+                int ownRide=getSharedPreferences(TrackingService.PREFS,MODE_PRIVATE).getInt("ride_id",0);
+                JSONArray permitted=new JSONArray();
+                if(others!=null)for(int i=0;i<others.length();i++){
+                    JSONObject person=others.optJSONObject(i);
+                    if(person==null)continue;
+                    int id=person.optInt("ride_id",0);
+                    if(id<=0||id==ownRide||person.optInt("age_seconds",99)>45)continue;
+                    permitted.put(person);
+                }
                 main.post(()->{
-                    if(screenVisible&&routeView!=null)routeView.setNearbyRiders(others);
+                    if(!screenVisible||routeView==null)return;
+                    if("live".equals(mode)&&rideId>0&&rideId!=ownRide&&
+                            Double.isFinite(targetLat)&&Double.isFinite(targetLng)){
+                        JSONObject selected=new JSONObject();
+                        try{
+                            selected.put("ride_id",rideId).put("lat",targetLat)
+                                    .put("lng",targetLng).put("display_name",targetName)
+                                    .put("age_seconds",0).put("track_points",viewedRiderTrack);
+                            // Selected target replaces a basic marker, keeping the route orange.
+                            JSONArray combined=new JSONArray().put(selected);
+                            for(int i=0;i<permitted.length();i++){
+                                JSONObject p=permitted.optJSONObject(i);
+                                if(p!=null&&p.optInt("ride_id",0)!=rideId)combined.put(p);
+                            }
+                            routeView.setNearbyRiders(combined);
+                        }catch(org.json.JSONException ignored){routeView.setNearbyRiders(permitted);}
+                    }else routeView.setNearbyRiders(permitted);
                 });
             }catch(Exception e){
                 main.post(()->{
