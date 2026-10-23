@@ -475,8 +475,18 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 .setNegativeButton("انصراف",null)
                 .setPositiveButton("تأیید",(dialog,which)->io.execute(()->{
                     try{
-                        api.post(action,new JSONObject());
-                        main.post(()->{toast("عملیات انجام شد.");refreshBalePanel();});
+                        JSONObject acknowledgement=api.post(action,new JSONObject());
+                        String delivery=acknowledgement.optString("delivery",
+                                acknowledgement.optString("status","")).trim().toLowerCase(Locale.ROOT);
+                        String feedback;
+                        if(acknowledgement.optBoolean("sent",false)||"sent".equals(delivery)){
+                            feedback="سرور ارسال را تأیید کرد؛ دریافت پیام را در بله بررسی کنید.";
+                        }else if("queued".equals(delivery)||acknowledgement.optBoolean("queued",false)){
+                            feedback="درخواست در صف ربات ثبت شد؛ هنوز تحویل پیام تأیید نشده است.";
+                        }else{
+                            feedback="درخواست توسط API پذیرفته شد؛ تحویل نهایی پیام باید بررسی شود.";
+                        }
+                        main.post(()->{toast(feedback);refreshBalePanel();});
                     }catch(Exception e){main.post(()->toast(e.getMessage()));}
                 })).show();
     }
