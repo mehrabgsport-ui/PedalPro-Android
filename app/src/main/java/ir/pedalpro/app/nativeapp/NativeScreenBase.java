@@ -56,7 +56,33 @@ abstract class NativeScreenBase extends Activity {
     private TextView subtitle;
     private LinearLayout webHeader;
     private PedalActionView headerAccount;
+    private PedalActionView headerUnreadChat;
     private View headerAdminSettings;
+    private boolean chatPollVisible;
+    private final Runnable unreadChatTick=new Runnable(){
+        @Override public void run(){
+            if(!chatPollVisible)return;
+            io.execute(()->{
+                try{
+                    JSONObject chat=api.get("chat_bootstrap");
+                    int unread=Math.max(0,chat.optInt("unread_count",0));
+                    JSONObject group=chat.optJSONObject("group");
+                    if(group!=null)unread+=Math.max(0,group.optInt("unread_count",0));
+                    org.json.JSONArray threads=chat.optJSONArray("private_threads");
+                    if(threads!=null)for(int i=0;i<threads.length();i++){
+                        JSONObject t=threads.optJSONObject(i);
+                        if(t!=null)unread+=Math.max(0,t.optInt("unread_count",0));
+                    }
+                    boolean hasUnread=unread>0;
+                    main.post(()->{
+                        if(headerUnreadChat!=null)
+                            headerUnreadChat.setVisibility(hasUnread?View.VISIBLE:View.GONE);
+                    });
+                }catch(Exception ignored){}
+            });
+            main.postDelayed(this,20000L);
+        }
+    };
     private TextView rideDockLabel;
     private boolean signedIn=false;
     private View bottomNav;
@@ -178,6 +204,12 @@ abstract class NativeScreenBase extends Activity {
         headerAccount=new PedalActionView(this,PedalIconView.Icon.USER,"ورود",PedalActionView.Style.OUTLINE);
         headerAccount.setOnClickListener(v->openMain(signedIn?"me":"login"));
         webHeader.addView(headerAccount,new LinearLayout.LayoutParams(dp(105),dp(46)));
+        headerUnreadChat=new PedalActionView(this,PedalIconView.Icon.CHAT,
+                "پیام جدید",PedalActionView.Style.OUTLINE);
+        headerUnreadChat.setOnClickListener(v->openMain("chat"));
+        headerUnreadChat.setContentDescription("پیام جدید دارید؛ مشاهده گفتگوها");
+        headerUnreadChat.setVisibility(View.GONE);
+        webHeader.addView(headerUnreadChat,new LinearLayout.LayoutParams(dp(92),dp(46)));
 
         headerAdminSettings=iconSquare(PedalIconView.Icon.SETTINGS,()->startActivity(new Intent(this,NativeSiteSettingsActivity.class)),"تنظیمات سایت");
         headerAdminSettings.setVisibility(View.GONE);
@@ -489,5 +521,20 @@ abstract class NativeScreenBase extends Activity {
     protected int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     protected void toast(String s){Toast.makeText(this,s==null?"خطا":s,Toast.LENGTH_LONG).show();}
 
-    @Override protected void onDestroy(){io.shutdownNow();super.onDestroy();}
+    @Override protected void onResume(){
+        super.onResume();
+        chatPollVisible=true;
+        main.removeCallbacks(unreadChatTick);
+        main.post(unreadChatTick);
+    }
+    @Override protected void onPause(){
+        chatPollVisible=false;
+        main.removeCallbacks(unreadChatTick);
+        super.onPause();
+    }
+    @Override protected void onDestroy(){
+        main.removeCallbacks(unreadChatTick);
+        io.shutdownNow();
+        super.onDestroy();
+    }
 }
