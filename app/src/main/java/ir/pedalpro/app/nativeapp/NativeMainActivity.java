@@ -60,6 +60,7 @@ import ir.pedalpro.app.R;
 import ir.pedalpro.app.TrackingService;
 import ir.pedalpro.app.CyclingSensorManager;
 import ir.pedalpro.app.HeartRateBleManager;
+import ir.pedalpro.app.FirebaseConfigManager;
 
 /**
  * PedalPro 2.0 native launcher.
@@ -207,6 +208,7 @@ public final class NativeMainActivity extends Activity {
     }
     private boolean manualPaused = false;
     private boolean serverOnline = false;
+    private boolean devicePushSynced;
     private String launchPage = "";
     private int launchEventId = 0;
     private int launchMemberId = 0;
@@ -704,6 +706,15 @@ public final class NativeMainActivity extends Activity {
                     updateHeaderAccess(d);
                     applyUiSettings(d);
                     JSONObject user = d.optJSONObject("user");
+                    if(user!=null){
+                        if(!devicePushSynced){
+                            devicePushSynced=true;
+                            // App start may have attempted FCM registration before login.
+                            // Re-register only after the PHP session is authenticated.
+                            FirebaseConfigManager.sync(getApplicationContext());
+                        }
+                        requestPushPermissionOnce();
+                    }
                     if (user == null) {
                         setTopStatus("ورود به PedalPro", MUTED);
                     } else {
@@ -725,6 +736,18 @@ public final class NativeMainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void requestPushPermissionOnce(){
+        if(Build.VERSION.SDK_INT<33)return;
+        if(ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)
+                ==PackageManager.PERMISSION_GRANTED)return;
+        android.content.SharedPreferences prefs=getSharedPreferences(
+                "pedalpro_native_notification_permissions",MODE_PRIVATE);
+        if(prefs.getBoolean("asked",false))return;
+        prefs.edit().putBoolean("asked",true).apply();
+        ActivityCompat.requestPermissions(this,
+                new String[]{Manifest.permission.POST_NOTIFICATIONS},2401);
     }
 
     private void showLogin() {
