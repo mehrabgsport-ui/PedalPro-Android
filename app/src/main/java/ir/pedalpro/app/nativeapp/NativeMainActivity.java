@@ -247,7 +247,7 @@ public final class NativeMainActivity extends Activity {
                             args.put("limit",300);
                             JSONObject page=api.get("ride_live_points",args);
                             JSONObject visible=page.optJSONObject("ride");
-                            if(visible==null||visible.optInt("id",rid)!=rid||
+                            if(visible==null||visible.optInt("id",0)!=rid||
                                     !"active".equals(visible.optString("status","")))continue;
                             JSONArray old=peerTrackCache.get(rid);
                             JSONArray merged=new JSONArray();
