@@ -61,6 +61,19 @@ final class RemoteImageLoader {
                 if(!cookie.isBlank())conn.setRequestProperty("Cookie",cookie);
                 conn.setRequestProperty("Accept","image/*");
                 int status=conn.getResponseCode();
+                // Some deployments rewrite /bike to the domain root. Try both
+                // exact same-origin upload locations; never follow redirects.
+                if((status==404||status==403)&&sameOrigin&&
+                        absolute.startsWith("https://pedalpro.ir/bike/")){
+                    String rootUrl="https://pedalpro.ir/"+absolute.substring("https://pedalpro.ir/bike/".length());
+                    conn.disconnect();
+                    conn=(HttpURLConnection)new URL(rootUrl).openConnection();
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setConnectTimeout(7000);conn.setReadTimeout(12000);
+                    if(!cookie.isBlank())conn.setRequestProperty("Cookie",cookie);
+                    conn.setRequestProperty("Accept","image/*");
+                    status=conn.getResponseCode();
+                }
                 if(status<200||status>=300)return;
                 String mime=conn.getContentType();
                 if(mime==null||!mime.toLowerCase(java.util.Locale.ROOT).startsWith("image/"))return;
