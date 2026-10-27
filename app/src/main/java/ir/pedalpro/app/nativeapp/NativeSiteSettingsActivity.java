@@ -288,6 +288,22 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 12,true,adminConnected?GREEN:ORANGE);
         adminConnection.setPadding(0,dp(8),0,dp(4));
         form.addView(adminConnection);
+        JSONObject automation=status.optJSONObject("automation");
+        if(automation!=null){
+            String last=automation.optString("cron_last_run_utc","").trim();
+            boolean recent=automation.optBoolean("cron_recent",false);
+            JSONObject outbox=automation.optJSONObject("outbox");
+            int waiting=outbox==null?0:outbox.optInt("pending",0)+outbox.optInt("retry",0);
+            int failed=outbox==null?0:outbox.optInt("failed",0);
+            String cronLine="Cron خودکار بله: "+(recent?"فعال (آخرین اجرا در ۳ دقیقه گذشته)":"غیرفعال یا بیش از ۳ دقیقه بدون اجرا");
+            form.addView(text(cronLine,last.isEmpty()?13:12,true,recent?GREEN:ORANGE));
+            form.addView(text("آخرین اجرا (UTC): "+(last.isEmpty()?"ثبت نشده":last)
+                    +" · در صف: "+waiting+" · ناموفق: "+failed,11,false,MUTED));
+            boolean adminChat=automation.optBoolean("admin_chat_configured",false);
+            if(!adminChat)form.addView(text("Chat ID مدیر ثبت نشده؛ اعلان عضویت و ثبت‌نام برای مدیر ارسال نمی‌شود.",12,true,ORANGE));
+        }else{
+            form.addView(text("گزارش Cron در Backend فعلی فعال نیست؛ برای نمایش آن بسته RC43 سایت باید نصب شود.",11,false,ORANGE));
+        }
         Button reconnectAdmin=primary(adminConnected
                 ?"باز کردن بله و اتصال مجدد مدیر"
                 :"اتصال مدیر به ربات بله");
@@ -315,6 +331,26 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
         reminder.setInputType(InputType.TYPE_CLASS_NUMBER);
         reminder.setText(String.valueOf(settings.optInt("reminder_hours",24)));
         form.addView(reminder);
+        CheckBox autoSignup=new CheckBox(this);
+        autoSignup.setText("ارسال عضویت‌های جدید به مدیر");
+        autoSignup.setTextColor(TEXT);
+        autoSignup.setChecked(settings.optBoolean("notify_admin_signup",true));
+        form.addView(autoSignup);
+        CheckBox autoEvents=new CheckBox(this);
+        autoEvents.setText("اعلام ثبت‌نام و انصراف برنامه به مدیر");
+        autoEvents.setTextColor(TEXT);
+        autoEvents.setChecked(settings.optBoolean("notify_admin_events",true));
+        form.addView(autoEvents);
+        CheckBox announceEvents=new CheckBox(this);
+        announceEvents.setText("ارسال برنامه جدید به اعضای متصل به ربات بله");
+        announceEvents.setTextColor(TEXT);
+        announceEvents.setChecked(settings.optBoolean("notify_new_events",true));
+        form.addView(announceEvents);
+        CheckBox autoReminders=new CheckBox(this);
+        autoReminders.setText("یادآوری خودکار برنامه‌های ثبت‌نام‌شده");
+        autoReminders.setTextColor(TEXT);
+        autoReminders.setChecked(settings.optBoolean("notify_reminders",true));
+        form.addView(autoReminders);
 
         JSONObject templateValues=settings.optJSONObject("templates");
         java.util.LinkedHashMap<String,EditText> templates=new java.util.LinkedHashMap<>();
@@ -339,6 +375,10 @@ public final class NativeSiteSettingsActivity extends NativeScreenBase {
                 payload.put("username",username.getText().toString().trim());
                 payload.put("admin_chat_id",adminChat.getText().toString().trim());
                 payload.put("reminder_hours",intValue(reminder,24));
+                payload.put("notify_admin_signup",autoSignup.isChecked());
+                payload.put("notify_admin_events",autoEvents.isChecked());
+                payload.put("notify_new_events",announceEvents.isChecked());
+                payload.put("notify_reminders",autoReminders.isChecked());
                 if(!token.getText().toString().trim().isEmpty())
                     payload.put("token",token.getText().toString().trim());
                 JSONObject messageTemplates=new JSONObject();
