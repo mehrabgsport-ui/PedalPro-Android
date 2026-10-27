@@ -3964,6 +3964,145 @@ public final class NativeMainActivity extends Activity {
             content.addView(b, cardLp());
         }
 
+        // Native dashboard parity: values and series come from the server's
+        // user_performance_report contract, never from synthetic chart points.
+        JSONObject weeklyGoal=root.optJSONObject("weekly_goal");
+        JSONObject monthlyGoal=root.optJSONObject("monthly_goal");
+        if(weeklyGoal!=null&&monthlyGoal!=null){
+            LinearLayout goals=glassCard(26);
+            goals.addView(text("اهداف شخصی رکاب‌زنی",21,true,TEXT));
+            goals.addView(text("هدف هفتگی و ماهانه خود را تنظیم کنید.",12,false,MUTED));
+            EditText weeklyInput=input("هدف هفتگی (km)");
+            weeklyInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            weeklyInput.setText(String.valueOf(weeklyGoal.optDouble("target_km",120)));
+            EditText monthlyInput=input("هدف ماهانه (km)");
+            monthlyInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            monthlyInput.setText(String.valueOf(monthlyGoal.optDouble("target_km",500)));
+            goals.addView(weeklyInput);goals.addView(monthlyInput);
+            goals.addView(text(String.format(Locale.US,"هفتگی: %.1f / %.1f km · %.0f%%",
+                    weeklyGoal.optDouble("current_km",0),weeklyGoal.optDouble("target_km",0),
+                    weeklyGoal.optDouble("percent",0)),12,true,GREEN));
+            goals.addView(text(String.format(Locale.US,"ماهانه: %.1f / %.1f km · %.0f%%",
+                    monthlyGoal.optDouble("current_km",0),monthlyGoal.optDouble("target_km",0),
+                    monthlyGoal.optDouble("percent",0)),12,true,GREEN));
+            PedalActionView saveGoals=action(PedalIconView.Icon.DETAILS,"ذخیره هدف‌ها",PedalActionView.Style.PRIMARY);
+            saveGoals.setOnClickListener(v->{
+                double weeklyValue,monthlyValue;
+                try{
+                    weeklyValue=Double.parseDouble(weeklyInput.getText().toString().trim());
+                    monthlyValue=Double.parseDouble(monthlyInput.getText().toString().trim());
+                    if(!Double.isFinite(weeklyValue)||!Double.isFinite(monthlyValue)||
+                            weeklyValue<=0||monthlyValue<=0)throw new IllegalArgumentException();
+                }catch(Exception invalid){toast("مقدار اهداف باید عدد مثبت باشد.");return;}
+                saveGoals.setEnabled(false);
+                final double w=weeklyValue,m=monthlyValue;
+                io.execute(()->{
+                    try{
+                        api.post("user_performance_goals_save",new JSONObject()
+                                .put("weekly_km",w).put("monthly_km",m));
+                        main.post(()->{toast("اهداف ذخیره شد.");showPerformance();});
+                    }catch(Exception error){main.post(()->{saveGoals.setEnabled(true);toast(error.getMessage());});}
+                });
+            });
+            goals.addView(saveGoals,fullActionLp(52));content.addView(goals,cardLp());
+            LinearLayout goalRing=glassCard(26);
+            goalRing.addView(text("هدف هفتگی",19,true,TEXT));
+            goalRing.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.GOAL,root),
+                    new LinearLayout.LayoutParams(-1,dp(270)));
+            content.addView(goalRing,cardLp());
+        }
+
+        JSONObject totals=root.optJSONObject("totals");if(totals==null)totals=summary;
+        if(totals!=null){
+            LinearLayout grid=glassCard(25);grid.addView(text("شاخص‌های رکاب‌زنی",19,true,TEXT));
+            String[][] cards={
+                {"⚡ حداکثر سرعت",String.format(Locale.US,"%.1f km/h",totals.optDouble("max_speed_kmh",0))},
+                {"⏱ میانگین سرعت",String.format(Locale.US,"%.1f km/h",totals.optDouble("avg_speed_kmh",0))},
+                {"△ ارتفاع‌گیری",String.format(Locale.US,"%.0f m",totals.optDouble("ascent_m",0))},
+                {"🔥 کالری ثبت‌شده",String.format(Locale.US,"%.0f kcal",totals.optDouble("calories_kcal",0))}
+            };
+            for(String[] card:cards){
+                LinearLayout block=glassCard(16);
+                block.addView(text(card[0],13,true,Color.rgb(31,231,242)));
+                block.addView(text(card[1],21,true,TEXT));
+                grid.addView(block,fullWrapLp(5));
+            }
+            content.addView(grid,cardLp());
+        }
+
+        JSONObject speedProfile=root.optJSONObject("profile");
+        if(speedProfile!=null){
+            LinearLayout p=glassCard(26);
+            p.addView(text("سرعت و ارتفاع در آخرین مسیر",18,true,TEXT));
+            p.addView(text(speedProfile.optString("title",""),12,false,MUTED));
+            p.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.SPEED_ELEVATION,root),
+                    new LinearLayout.LayoutParams(-1,dp(270)));
+            content.addView(p,cardLp());
+        }
+        JSONArray weekdays=root.optJSONArray("week_days");
+        if(weekdays!=null){
+            LinearLayout w=glassCard(26);
+            w.addView(text("مسافت هفتگی",20,true,TEXT));
+            w.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.WEEKLY,root),
+                    new LinearLayout.LayoutParams(-1,dp(230)));
+            content.addView(w,cardLp());
+        }
+        JSONArray heatmap=root.optJSONArray("heatmap");
+        if(heatmap!=null){
+            LinearLayout h=glassCard(26);
+            h.addView(text("فعالیت ۱۲ هفته اخیر",20,true,TEXT));
+            h.addView(text("هر خانه برابر یک روز است",12,false,MUTED));
+            h.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.HEATMAP,root),
+                    new LinearLayout.LayoutParams(-1,dp(240)));
+            content.addView(h,cardLp());
+        }
+        if(root.optJSONObject("scores")!=null){
+            LinearLayout radar=glassCard(26);
+            radar.addView(text("پروفایل عملکرد",20,true,TEXT));
+            radar.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.RADAR,root),
+                    new LinearLayout.LayoutParams(-1,dp(290)));
+            content.addView(radar,cardLp());
+        }
+        JSONObject records=root.optJSONObject("records");
+        if(records!=null){
+            LinearLayout bests=glassCard(24);
+            bests.addView(text("رکوردهای من",19,true,TEXT));
+            String[][] metricsLabels={
+                {"⚡ بیشترین سرعت","max_speed_kmh","km/h"},
+                {"△ بیشترین ارتفاع‌گیری","max_ascent_m","m"},
+                {"⌖ طولانی‌ترین رکاب","longest_km","km"},
+                {"🔥 بیشترین کالری یک رکاب","max_calories","kcal"}
+            };
+            for(String[] item:metricsLabels){
+                LinearLayout b=glassCard(14);
+                b.addView(text(item[0],14,true,GREEN));
+                b.addView(text(String.format(Locale.US,"%.1f %s",records.optDouble(item[1],0),item[2]),16,true,TEXT));
+                bests.addView(b,fullWrapLp(4));
+            }
+            content.addView(bests,cardLp());
+        }
+        JSONArray recent=root.optJSONArray("recent_rides");
+        if(recent!=null&&recent.length()>0){
+            LinearLayout list=glassCard(24);
+            list.addView(text("رکاب‌زنی‌های اخیر",19,true,TEXT));
+            for(int i=0;i<Math.min(recent.length(),8);i++){
+                JSONObject rideEntry=recent.optJSONObject(i);if(rideEntry==null)continue;
+                int id=rideEntry.optInt("id",0);
+                PedalActionView item=action(PedalIconView.Icon.RIDE,
+                        rideEntry.optString("title","رکاب‌زنی")+" · "+
+                        String.format(Locale.US,"%.1f km",rideEntry.optDouble("distance_km",0)),
+                        PedalActionView.Style.OUTLINE);
+                item.setOnClickListener(v->{
+                    if(id<=0){toast("این رکاب، اعتبار حضور در برنامه گروهی است.");return;}
+                    Intent details=new Intent(this,NativeRideDetailActivity.class);
+                    details.putExtra(NativeRideDetailActivity.EXTRA_RIDE_ID,id);
+                    startActivity(details);
+                });
+                list.addView(item,fullActionLp(56));
+            }
+            content.addView(list,cardLp());
+        }
+
         PedalActionView advanced = action(PedalIconView.Icon.CHART, "تحلیل حرفه‌ای، Segments و Heatmap", PedalActionView.Style.OUTLINE);
         advanced.setOnClickListener(v -> startActivity(new Intent(this, NativeAdvancedActivity.class)));
         content.addView(advanced, fullActionLp(54));
