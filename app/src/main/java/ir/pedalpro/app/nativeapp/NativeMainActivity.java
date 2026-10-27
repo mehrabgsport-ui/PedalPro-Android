@@ -6956,11 +6956,26 @@ public final class NativeMainActivity extends Activity {
         return PedalIconView.Icon.DETAILS;
     }
 
+    /** Distinct accessible icon accents by destination rather than monochrome glyphs. */
+    private int drawerAccent(String label) {
+        String x=label==null?"":label.toLowerCase(Locale.ROOT);
+        if(x.contains("رکاب")||x.contains("دوچرخه"))return Color.rgb(255,193,76);
+        if(x.contains("مسیر")||x.contains("نقشه")||x.contains("gps"))return Color.rgb(64,217,244);
+        if(x.contains("باشگاه")||x.contains("اعضا")||x.contains("گروه"))return Color.rgb(120,238,169);
+        if(x.contains("ارتباط")||x.contains("چت")||x.contains("پیام"))return Color.rgb(189,163,255);
+        if(x.contains("عملکرد")||x.contains("آمار")||x.contains("گزارش"))return Color.rgb(113,232,148);
+        if(x.contains("ایمنی")||x.contains("حریم")||x.contains("sos"))return Color.rgb(251,161,112);
+        if(x.contains("مدیریت")||x.contains("تنظیمات"))return Color.rgb(224,181,255);
+        if(x.contains("حساب")||x.contains("پروفایل"))return Color.rgb(99,175,255);
+        return Color.rgb(35,224,243);
+    }
+
     private View drawerItem(String glyph, String label, Runnable run, boolean active) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        // LTR container + text THEN icon places the icon on the physical right.
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         row.setPadding(dp(12), 0, dp(12), 0);
         row.setBackground(roundRect(
                 active ? Color.rgb(11,91,109) : Color.rgb(11,36,53),
@@ -6971,13 +6986,13 @@ public final class NativeMainActivity extends Activity {
         row.setContentDescription(label);
 
         int fg = active ? Color.rgb(85, 239, 247) : Color.rgb(220, 234, 243);
-        PedalIconView icon = new PedalIconView(this, drawerIcon(label), fg);
-        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
+        PedalIconView icon = new PedalIconView(this, drawerIcon(label), drawerAccent(label));
         TextView tv = text(label, 13, true, fg);
+        tv.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        tlp.setMargins(dp(10), 0, 0, 0);
+        tlp.setMargins(0, 0, dp(11), 0);
         row.addView(tv, tlp);
+        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(46));
         lp.setMargins(0, dp(3), 0, 0);
@@ -6997,19 +7012,20 @@ public final class NativeMainActivity extends Activity {
         LinearLayout head = new LinearLayout(this);
         head.setOrientation(LinearLayout.HORIZONTAL);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        head.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        head.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         head.setPadding(dp(12), 0, dp(12), 0);
 
-        PedalIconView sectionIcon = new PedalIconView(this, drawerIcon(title), Color.rgb(220, 234, 243));
+        PedalIconView sectionIcon = new PedalIconView(this, drawerIcon(title), drawerAccent(title));
         TextView titleView = text(title, 13, true, Color.rgb(220, 234, 243));
         TextView chevron = text(startOpen ? "⌃" : "⌄", 15, false, Color.rgb(128, 164, 187));
         chevron.setGravity(Gravity.CENTER);
 
-        head.addView(sectionIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1f);
-        titleLp.setMargins(dp(9), 0, 0, 0);
-        head.addView(titleView, titleLp);
         head.addView(chevron, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        titleView.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1f);
+        titleLp.setMargins(0, 0, dp(9), 0);
+        head.addView(titleView, titleLp);
+        head.addView(sectionIcon, new LinearLayout.LayoutParams(dp(24), dp(24)));
         host.addView(head, new LinearLayout.LayoutParams(-1, dp(50)));
 
         LinearLayout subs = new LinearLayout(this);
@@ -7022,20 +7038,20 @@ public final class NativeMainActivity extends Activity {
             LinearLayout sub = new LinearLayout(this);
             sub.setOrientation(LinearLayout.HORIZONTAL);
             sub.setGravity(Gravity.CENTER_VERTICAL);
-            sub.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+            sub.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
             sub.setPadding(dp(10), 0, dp(10), 0);
             sub.setBackground(roundRect(Color.rgb(10,36,51),12,Color.argb(45,112,171,195)));
             sub.setClickable(true);
             sub.setFocusable(true);
 
             String glyph = itemGlyphs != null && i < itemGlyphs.length ? itemGlyphs[i] : "";
-            PedalIconView gi = new PedalIconView(this, drawerIcon(labels[i]), Color.rgb(220, 234, 243));
-            sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
+            PedalIconView gi = new PedalIconView(this, drawerIcon(labels[i]), drawerAccent(labels[i]));
             TextView label = text(labels[i], 12, false, Color.rgb(220, 234, 243));
+            label.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
             LinearLayout.LayoutParams labelLp = new LinearLayout.LayoutParams(0, -2, 1f);
-            labelLp.setMargins(dp(9), 0, 0, 0);
+            labelLp.setMargins(0, 0, dp(9), 0);
             sub.addView(label, labelLp);
+            sub.addView(gi, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
             LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(42));
             sp.setMargins(0, dp(3), 0, 0);
