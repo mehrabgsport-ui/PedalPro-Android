@@ -96,8 +96,14 @@ final class RemoteImageLoader {
         return BitmapFactory.decodeByteArray(bytes,0,bytes.length,opts);
     }
     static String absolute(String value){
-        if(value.startsWith("http://")||value.startsWith("https://"))return value;
-        if(value.startsWith("/"))return "https://pedalpro.ir"+value;
-        return "https://pedalpro.ir/"+value;
+        if(value==null)return "";
+        String path=value.trim();
+        if(path.startsWith("http://")||path.startsWith("https://"))return path;
+        // PHP sources and uploaded photos live under public_html/bike.
+        // Do not prepend /bike twice to already-normalized server paths.
+        if(path.startsWith("/"))path=path.substring(1);
+        if(path.startsWith("uploads/")||path.startsWith("assets/"))
+            path="bike/"+path;
+        return "https://pedalpro.ir/"+path;
     }
 }
