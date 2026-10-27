@@ -27,6 +27,7 @@
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <application
+        android:supportsRtl="true"
         android:enableOnBackInvokedCallback="true"
         android:name=".PedalProApp"
         android:allowBackup="false"
