@@ -5558,6 +5558,16 @@ public final class NativeMainActivity extends Activity {
             extras.addView(navigate,actionWeightLp());
         }
         box.addView(extras);
+        if(admin){
+            PedalActionView delete=action(PedalIconView.Icon.CLOSE,"حذف برنامه",PedalActionView.Style.OUTLINE);
+            delete.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
+                    .setTitle("حذف قطعی برنامه")
+                    .setMessage("«"+event.optString("title","برنامه")+"» و ثبت‌نام‌های آن حذف شوند؟ مسیر GPS شخصی کاربران حفظ می‌شود.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("حذف برنامه",(dialog,which)->deleteEventAsAdmin(event.optInt("id",0),null))
+                    .show());
+            box.addView(delete,fullActionLp(46));
+        }
 
         shell.addView(box, new FrameLayout.LayoutParams(-1, -2));
         View stripe = new View(this);
@@ -8932,7 +8942,7 @@ public final class NativeMainActivity extends Activity {
                 api.post("event_delete",new JSONObject().put("event_id",eventId));
                 bootstrap=api.bootstrap();
                 activeRide=bootstrap.optJSONObject("my_active_ride");
-                main.post(()->{dialog.dismiss();toast("برنامه حذف شد.");showActivities();});
+                main.post(()->{if(dialog!=null)dialog.dismiss();toast("برنامه حذف شد.");showActivities();});
             }catch(Exception e){main.post(()->toast("حذف برنامه انجام نشد: "+e.getMessage()));}
         });
     }
