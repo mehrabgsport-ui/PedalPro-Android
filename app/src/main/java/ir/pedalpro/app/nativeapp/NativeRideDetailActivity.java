@@ -274,6 +274,27 @@ public final class NativeRideDetailActivity extends NativeScreenBase {
         sectionTitle("دیدگاه‌ها");
         renderComments();
 
+        // Match the website: activity owners can remove completed test rides too.
+        if(owner&&!active){
+            Button deleteActivity=danger("حذف این فعالیت");
+            deleteActivity.setOnClickListener(v->new AlertDialog.Builder(this)
+                    .setTitle("حذف فعالیت")
+                    .setMessage("این رکاب‌زنی، عکس‌ها، دیدگاه‌ها و مسیر GPS آن برای همیشه حذف شود؟")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("حذف فعالیت",(dialog,which)->{
+                        deleteActivity.setEnabled(false);
+                        io.execute(()->{
+                            try{
+                                api.post("ride_delete",new JSONObject().put("ride_id",rideId));
+                                main.post(()->{toast("فعالیت حذف شد.");finish();});
+                            }catch(Exception err){
+                                main.post(()->{deleteActivity.setEnabled(true);toast("حذف انجام نشد: "+err.getMessage());});
+                            }
+                        });
+                    }).show());
+            content.addView(deleteActivity,cardLp());
+        }
+
         VazirmatnLoader.apply(this,content);
         if(active)main.postDelayed(livePoll,8000L);
     }
