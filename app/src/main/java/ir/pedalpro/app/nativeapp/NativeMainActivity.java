@@ -8981,9 +8981,26 @@ public final class NativeMainActivity extends Activity {
     private void animatePageIn(){content.setAlpha(0f);content.setTranslationY(dp(8));content.animate().alpha(1f).translationY(0).setDuration(180).start();}
 
     private void pickImage(int requestCode){
+        // The system photo picker is isolated from app image decoding and handles
+        // large HEIC/JPEG photos without forcing a preview bitmap into this Activity.
+        // The selected Uri is streamed and compressed only on the background executor.
+        if(requestCode==REQ_EVENT_COVER && Build.VERSION.SDK_INT>=33){
+            try{
+                Intent picker=new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+                picker.setType("image/*");
+                picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivityForResult(picker,requestCode);
+                return;
+            }catch(android.content.ActivityNotFoundException ignored){
+                // Some OEM Android 13 builds do not provide the system picker.
+            }catch(Exception ignored){
+                // Retry with the document provider below.
+            }
+        }
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         try{startActivityForResult(i,requestCode);}
         catch(android.content.ActivityNotFoundException ex){toast("انتخاب‌گر عکس در دستگاه نصب نیست.");}
         catch(Exception ex){toast("بازکردن گالری ناموفق بود: "+ex.getMessage());}
