@@ -8938,7 +8938,20 @@ public final class NativeMainActivity extends Activity {
     }
 
     private void shareEvent(JSONObject event) {
-        Intent share=new Intent(Intent.ACTION_SEND);share.setType("text/plain");String text=event.optString("title","برنامه PedalPro")+"\n"+JalaliDate.format(event.optString("event_date",""),true)+"\n"+event.optString("meeting_location","")+(event.optString("description","").isBlank()?"":"\n"+event.optString("description",""));share.putExtra(Intent.EXTRA_TEXT,text);startActivity(Intent.createChooser(share,"اشتراک‌گذاری برنامه"));
+        String title=event.optString("title","برنامه PedalPro");
+        String date=JalaliDate.format(event.optString("event_date",""),true);
+        String where=event.optString("meeting_location","");
+        Uri url=Uri.parse("https://pedalpro.ir/").buildUpon()
+                .appendQueryParameter("share","event")
+                .appendQueryParameter("title",title)
+                .appendQueryParameter("when",date)
+                .appendQueryParameter("where",where)
+                .appendQueryParameter("club","PedalPro").build();
+        Intent share=new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT,title+"\n"+date+"\n"+where+"\n"+url.toString());
+        try{startActivity(Intent.createChooser(share,"اشتراک‌گذاری برنامه"));}
+        catch(Exception e){toast("اشتراک‌گذاری روی این دستگاه انجام نشد.");}
     }
 
     private int eventRegistrationCount(int eventId){JSONArray a=bootstrap==null?null:bootstrap.optJSONArray("registrations");int n=0;if(a!=null)for(int i=0;i<a.length();i++){JSONObject r=a.optJSONObject(i);if(r!=null&&r.optInt("event_id",0)==eventId)n++;}return n;}
