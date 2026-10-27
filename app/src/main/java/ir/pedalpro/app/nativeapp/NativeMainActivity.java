@@ -4103,70 +4103,7 @@ public final class NativeMainActivity extends Activity {
             content.addView(list,cardLp());
         }
 
-        // The API already supplies rich performance series. Render them natively
-        // without changing any stored GPS fixes or account records.
-        if(root.optJSONObject("weekly_goal")!=null){
-            LinearLayout goalCard=glassCard(24);
-            goalCard.addView(text("هدف هفتگی",19,true,TEXT));
-            goalCard.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.GOAL,root),
-                    new LinearLayout.LayoutParams(-1,dp(205)));
-            content.addView(goalCard,cardLp());
-        }
-        if(root.optJSONArray("week_days")!=null){
-            LinearLayout weeklyCard=glassCard(24);
-            weeklyCard.addView(text("مسافت هفتگی",19,true,TEXT));
-            weeklyCard.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.WEEKLY,root),
-                    new LinearLayout.LayoutParams(-1,dp(230)));
-            content.addView(weeklyCard,cardLp());
-        }
-        JSONObject latestProfile=root.optJSONObject("profile");
-        if(latestProfile!=null&&latestProfile.optJSONArray("points")!=null){
-            LinearLayout profileCard=glassCard(24);
-            profileCard.addView(text("سرعت و ارتفاع در آخرین مسیر",19,true,TEXT));
-            profileCard.addView(text(latestProfile.optString("title","آخرین رکاب‌زنی"),12,false,MUTED));
-            profileCard.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.SPEED_ELEVATION,root),
-                    new LinearLayout.LayoutParams(-1,dp(230)));
-            content.addView(profileCard,cardLp());
-        }
-        if(root.optJSONArray("heatmap")!=null){
-            LinearLayout heatCard=glassCard(24);
-            heatCard.addView(text("فعالیت ۱۲ هفته اخیر",19,true,TEXT));
-            heatCard.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.HEATMAP,root),
-                    new LinearLayout.LayoutParams(-1,dp(235)));
-            content.addView(heatCard,cardLp());
-        }
-        if(root.optJSONObject("scores")!=null){
-            LinearLayout radarCard=glassCard(24);
-            radarCard.addView(text("پروفایل عملکرد",19,true,TEXT));
-            radarCard.addView(new NativePerformanceCharts(this,NativePerformanceCharts.Mode.RADAR,root),
-                    new LinearLayout.LayoutParams(-1,dp(285)));
-            content.addView(radarCard,cardLp());
-        }
-        JSONObject records=root.optJSONObject("records");
-        if(records!=null&&records.length()>0){
-            LinearLayout recordsCard=glassCard(24);
-            recordsCard.addView(text("رکوردهای من",19,true,TEXT));
-            java.util.Iterator<String> keys=records.keys();
-            while(keys.hasNext()){
-                String key=keys.next();
-                String title;
-                switch(key){
-                    case "max_speed_kmh":title="⚡ بیشترین سرعت";break;
-                    case "max_ascent_m":title="⛰️ بیشترین ارتفاع‌گیری";break;
-                    case "longest_km":title="📍 طولانی‌ترین رکاب";break;
-                    case "max_calories_kcal":title="🔥 بیشترین کالری";break;
-                    default:title=key.replace('_',' ');
-                }
-                Object value=records.opt(key);
-                if(value instanceof JSONObject){
-                    JSONObject obj=(JSONObject)value;
-                    value=obj.optString("value",obj.optString("display_value",""));
-                }
-                recordsCard.addView(text(title+" · "+String.valueOf(value),13,true,TEXT));
-            }
-            content.addView(recordsCard,cardLp());
-        }
-                PedalActionView advanced = action(PedalIconView.Icon.CHART, "تحلیل حرفه‌ای، Segments و Heatmap", PedalActionView.Style.OUTLINE);
+        PedalActionView advanced = action(PedalIconView.Icon.CHART, "تحلیل حرفه‌ای، Segments و Heatmap", PedalActionView.Style.OUTLINE);
         advanced.setOnClickListener(v -> startActivity(new Intent(this, NativeAdvancedActivity.class)));
         content.addView(advanced, fullActionLp(54));
 
