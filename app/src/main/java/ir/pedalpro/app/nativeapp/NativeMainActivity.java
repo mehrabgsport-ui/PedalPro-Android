@@ -1562,10 +1562,8 @@ public final class NativeMainActivity extends Activity {
         row.addView(medal,new LinearLayout.LayoutParams(dp(48),dp(48)));
 
         String name=member.optString("display_name",member.optString("username","عضو "+member.optInt("id",0)));
-        String initial=name.trim().isEmpty()?"؟":name.trim().substring(0,1);
-        TextView avatar=text(initial,18,true,TEXT);
-        avatar.setGravity(Gravity.CENTER);
-        avatar.setBackground(roundRect(Color.argb(20,255,255,255),14,Color.argb(31,255,255,255)));
+        // Resolve each authenticated member's actual avatar_path; render an initial only when absent.
+        FrameLayout avatar=memberAvatar(member,name,42);
         LinearLayout.LayoutParams avatarLp=new LinearLayout.LayoutParams(dp(42),dp(42));
         avatarLp.setMargins(dp(10),0,0,0);
         row.addView(avatar,avatarLp);
@@ -6170,6 +6168,7 @@ public final class NativeMainActivity extends Activity {
             case "bikes": showBikes(); break;
             case "fitness": showFitness(); break;
             case "me": showMe(); break;
+            case "event_editor": break; // Preserve unsaved edits and selected cover.
             default: showHome(); break;
         }
     }
@@ -6303,7 +6302,10 @@ public final class NativeMainActivity extends Activity {
 
     private TextView text(String value, int sp, boolean bold, int color) {
         TextView v = new TextView(this);
-        v.setText(UiSafeText.display(value)); v.setTextSize(sp); v.setTextColor(color); v.setGravity(Gravity.END);
+        v.setText(UiSafeText.display(value)); v.setTextSize(sp); v.setTextColor(color);
+        v.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        v.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG_RTL);
+        v.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         v.setLineSpacing(dp(2),1f);
         if (bold) v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return v;
@@ -8822,7 +8824,8 @@ public final class NativeMainActivity extends Activity {
         headerPolling=true;
         main.removeCallbacks(headerChatTick);
         main.post(headerChatTick);
-        if (bootstrap != null && signedIn()) refreshBootstrap(false);
+        // Returning from the system image picker must not destroy the unsaved event form.
+        if (bootstrap != null && signedIn() && !"event_editor".equals(currentPage)) refreshBootstrap(false);
     }
 
     @Override protected void onPause(){
