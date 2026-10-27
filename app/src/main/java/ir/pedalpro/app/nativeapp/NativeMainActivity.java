@@ -5405,6 +5405,20 @@ public final class NativeMainActivity extends Activity {
             actions.addView(edit, actionWeightLp());
         }
         box.addView(actions);
+        LinearLayout extras=new LinearLayout(this);
+        extras.setOrientation(LinearLayout.HORIZONTAL);
+        extras.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalActionView share=action(PedalIconView.Icon.BEACON,"اشتراک‌گذاری",PedalActionView.Style.OUTLINE);
+        share.setOnClickListener(v->shareEvent(event));
+        extras.addView(share,actionWeightLp());
+        double meetingLat=event.optDouble("meeting_lat",Double.NaN);
+        double meetingLng=event.optDouble("meeting_lng",Double.NaN);
+        if(Double.isFinite(meetingLat)&&Double.isFinite(meetingLng)){
+            PedalActionView navigate=action(PedalIconView.Icon.LOCATION,"مسیریابی تا شروع",PedalActionView.Style.OUTLINE);
+            navigate.setOnClickListener(v->openEventMeetingDirections(meetingLat,meetingLng));
+            extras.addView(navigate,actionWeightLp());
+        }
+        box.addView(extras);
 
         shell.addView(box, new FrameLayout.LayoutParams(-1, -2));
         View stripe = new View(this);
@@ -8230,11 +8244,38 @@ public final class NativeMainActivity extends Activity {
         if (!meeting.isBlank()) notice.addView(text("📍 " + meeting, 12, false, TEXT));
         String routeName = event.optString("route_name", "");
         if (!routeName.isBlank()) notice.addView(text("🛣️ " + routeName, 12, false, TEXT));
+        int difficulty=event.optInt("difficulty",event.optInt("difficulty_level",0));
+        if(difficulty>0)notice.addView(text("درجه سختی "+JalaliDate.fa(difficulty)+" از ۱۰",12,true,ORANGE));
         String desc = event.optString("description", "");
         if (!desc.isBlank()) notice.addView(text(desc, 12, false, TEXT));
         LinearLayout.LayoutParams noticeLp = new LinearLayout.LayoutParams(-1, -2);
         noticeLp.setMargins(0, dp(12), 0, 0);
         box.addView(notice, noticeLp);
+        String coverUrl=eventCover(event);
+        if(!coverUrl.isBlank()){
+            ImageView cover=new ImageView(this);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setBackground(roundRect(Color.rgb(14,35,49),18,Color.rgb(62,113,135)));
+            cover.setClipToOutline(true);
+            RemoteImageLoader.load(this,cover,coverUrl,R.drawable.program_reference);
+            LinearLayout.LayoutParams coverLp=new LinearLayout.LayoutParams(-1,dp(188));
+            coverLp.setMargins(0,dp(10),0,dp(4));
+            box.addView(cover,coverLp);
+        }
+        LinearLayout eventCommands=new LinearLayout(this);
+        eventCommands.setOrientation(LinearLayout.HORIZONTAL);
+        eventCommands.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        PedalActionView shareEventButton=action(PedalIconView.Icon.BEACON,"اشتراک‌گذاری برنامه",PedalActionView.Style.OUTLINE);
+        shareEventButton.setOnClickListener(v->shareEvent(event));
+        eventCommands.addView(shareEventButton,actionWeightLp());
+        double fromLat=event.optDouble("meeting_lat",Double.NaN);
+        double fromLng=event.optDouble("meeting_lng",Double.NaN);
+        if(Double.isFinite(fromLat)&&Double.isFinite(fromLng)){
+            PedalActionView directions=action(PedalIconView.Icon.LOCATION,"مسیریابی تا شروع",PedalActionView.Style.OUTLINE);
+            directions.setOnClickListener(v->openEventMeetingDirections(fromLat,fromLng));
+            eventCommands.addView(directions,actionWeightLp());
+        }
+        box.addView(eventCommands);
 
         TextView participantsTitle = text("شرکت‌کنندگان", 17, true, TEXT);
         participantsTitle.setPadding(0, dp(14), 0, dp(7));
@@ -8321,6 +8362,28 @@ public final class NativeMainActivity extends Activity {
             mapActions.addView(fallback,new LinearLayout.LayoutParams(0,dp(48),1f));
             mapActions.addView(external,new LinearLayout.LayoutParams(0,dp(48),1f));
             box.addView(mapActions);
+            if("completed".equals(event.optString("status",""))){
+                TextView routeState=text("در حال دریافت مسیر GPS همین برنامه…",11,false,MUTED);
+                box.addView(routeState);
+                int eventId=event.optInt("id",0);
+                io.execute(()->{
+                    try{
+                        java.util.HashMap<String,Object> args=new java.util.HashMap<>();
+                        args.put("event_id",eventId);
+                        JSONObject routeData=api.get("event_route_preview",args);
+                        JSONArray points=routeData.optJSONArray("points");
+                        main.post(()->{
+                            if(!map.isAttachedToWindow())return;
+                            if(points!=null&&points.length()>1){
+                                map.setPoints(points);
+                                JSONObject first=points.optJSONObject(0);
+                                if(first!=null)map.focusOn(first.optDouble("lat",lat),first.optDouble("lng",lng));
+                                routeState.setText("مسیر GPS ثبت‌شده همین برنامه · "+JalaliDate.fa(points.length())+" نقطه");
+                            }else routeState.setText("برای این برنامه مسیر GPS گروهی ثبت نشده است.");
+                        });
+                    }catch(Exception error){main.post(()->routeState.setText("مسیر گروهی: "+error.getMessage()));}
+                });
+            }
         }
 
         JSONObject eventRide = null;
@@ -8346,6 +8409,17 @@ public final class NativeMainActivity extends Activity {
             box.addView(openRide, fullActionLp(50));
         }
 
+        if(admin){
+            PedalActionView deleteEvent=action(PedalIconView.Icon.CLOSE,
+                    "حذف برنامه",PedalActionView.Style.OUTLINE);
+            deleteEvent.setOnClickListener(v->new android.app.AlertDialog.Builder(this)
+                    .setTitle("حذف قطعی برنامه")
+                    .setMessage("«"+event.optString("title","برنامه")+"» و ثبت‌نام‌های آن حذف شود؟ مسیرهای GPS شخصی اعضا حفظ می‌شوند.")
+                    .setNegativeButton("انصراف",null)
+                    .setPositiveButton("حذف برنامه",(d,w)->deleteEventAsAdmin(event.optInt("id",0),dialog))
+                    .show());
+            box.addView(deleteEvent,fullActionLp(52));
+        }
         TextView galleryTitle = text("آلبوم تصاویر", 17, true, TEXT);
         galleryTitle.setPadding(0, dp(14), 0, dp(7));
         box.addView(galleryTitle);
@@ -8691,6 +8765,26 @@ public final class NativeMainActivity extends Activity {
         VazirmatnLoader.apply(this,content);
     }
 
+
+    private void openEventMeetingDirections(double lat,double lng){
+        try{
+            Uri target=Uri.parse("geo:"+lat+","+lng+"?q="+lat+","+lng);
+            Intent open=new Intent(Intent.ACTION_VIEW,target);
+            startActivity(open);
+        }catch(Exception e){toast("برنامه مسیریابی روی دستگاه پیدا نشد.");}
+    }
+
+    private void deleteEventAsAdmin(int eventId,Dialog dialog){
+        if(eventId<=0)return;
+        io.execute(()->{
+            try{
+                api.post("event_delete",new JSONObject().put("event_id",eventId));
+                bootstrap=api.bootstrap();
+                activeRide=bootstrap.optJSONObject("my_active_ride");
+                main.post(()->{dialog.dismiss();toast("برنامه حذف شد.");showActivities();});
+            }catch(Exception e){main.post(()->toast("حذف برنامه انجام نشد: "+e.getMessage()));}
+        });
+    }
 
     private void shareEvent(JSONObject event) {
         Intent share=new Intent(Intent.ACTION_SEND);share.setType("text/plain");String text=event.optString("title","برنامه PedalPro")+"\n"+JalaliDate.format(event.optString("event_date",""),true)+"\n"+event.optString("meeting_location","")+(event.optString("description","").isBlank()?"":"\n"+event.optString("description",""));share.putExtra(Intent.EXTRA_TEXT,text);startActivity(Intent.createChooser(share,"اشتراک‌گذاری برنامه"));
