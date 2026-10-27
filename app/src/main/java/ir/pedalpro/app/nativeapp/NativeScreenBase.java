@@ -411,7 +411,9 @@ abstract class NativeScreenBase extends Activity {
         t.setText(UiSafeText.display(s));
         t.setTextSize(sp);
         t.setTextColor(color);
-        t.setGravity(Gravity.END);
+        t.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        t.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        t.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG_RTL);
         t.setLineSpacing(dp(2),1.0f);
         if(bold)t.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         return t;
