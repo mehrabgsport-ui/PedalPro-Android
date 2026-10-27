@@ -61,18 +61,27 @@ final class RemoteImageLoader {
                 if(!cookie.isBlank())conn.setRequestProperty("Cookie",cookie);
                 conn.setRequestProperty("Accept","image/*");
                 int status=conn.getResponseCode();
-                // Some deployments rewrite /bike to the domain root. Try both
-                // exact same-origin upload locations; never follow redirects.
-                if((status==404||status==403)&&sameOrigin&&
-                        absolute.startsWith("https://pedalpro.ir/bike/")){
-                    String rootUrl="https://pedalpro.ir/"+absolute.substring("https://pedalpro.ir/bike/".length());
-                    conn.disconnect();
-                    conn=(HttpURLConnection)new URL(rootUrl).openConnection();
-                    conn.setInstanceFollowRedirects(false);
-                    conn.setConnectTimeout(7000);conn.setReadTimeout(12000);
-                    if(!cookie.isBlank())conn.setRequestProperty("Cookie",cookie);
-                    conn.setRequestProperty("Accept","image/*");
-                    status=conn.getResponseCode();
+                // Production has used both /bike/uploads/... and /uploads/....
+                // Retry only these two fixed HTTPS locations on the same host;
+                // do not follow arbitrary redirects or forward session cookies elsewhere.
+                if(sameOrigin && (status==404||status==403||status==301||
+                        status==302||status==307||status==308)){
+                    String alternate=null;
+                    String prefix="https://pedalpro.ir/";
+                    if(absolute.startsWith(prefix+"bike/uploads/")){
+                        alternate=prefix+absolute.substring((prefix+"bike/").length());
+                    }else if(absolute.startsWith(prefix+"uploads/")){
+                        alternate=prefix+"bike/"+absolute.substring(prefix.length());
+                    }
+                    if(alternate!=null){
+                        conn.disconnect();
+                        conn=(HttpURLConnection)new URL(alternate).openConnection();
+                        conn.setInstanceFollowRedirects(false);
+                        conn.setConnectTimeout(7000);conn.setReadTimeout(12000);
+                        if(!cookie.isBlank())conn.setRequestProperty("Cookie",cookie);
+                        conn.setRequestProperty("Accept","image/*");
+                        status=conn.getResponseCode();
+                    }
                 }
                 if(status<200||status>=300)return;
                 String mime=conn.getContentType();
