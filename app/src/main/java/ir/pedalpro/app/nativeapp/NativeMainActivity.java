@@ -8824,6 +8824,7 @@ public final class NativeMainActivity extends Activity {
     private void showEventEditor(JSONObject event) {
         boolean editing=event!=null;
         pendingEditorCoverUri=null;
+        final int[] savedEventId={event==null?0:event.optInt("id",0)};
         content.removeAllViews();currentPage="event_editor";selectNav(navActivities);
         addHero(editing?"ویرایش برنامه":"برنامه جدید","اطلاعات برنامه باشگاه");
 
@@ -8864,6 +8865,8 @@ public final class NativeMainActivity extends Activity {
         PedalActionView cover=action(PedalIconView.Icon.PLUS,"انتخاب تصویر کاور",PedalActionView.Style.OUTLINE);
         cover.setOnClickListener(v->pickImage(REQ_EVENT_COVER));
         form.addView(cover,fullActionLp(50));
+        TextView coverInfo=text("فرمت عکس: JPG، PNG، WEBP یا HEIC. تصویر همزمان با ذخیره برنامه ارسال می‌شود.",11,false,MUTED);
+        form.addView(coverInfo);
 
         PedalActionView save=action(PedalIconView.Icon.DETAILS,"ذخیره برنامه",PedalActionView.Style.PRIMARY);
         form.addView(save,fullActionLp(56));content.addView(form,cardLp());
@@ -8874,7 +8877,7 @@ public final class NativeMainActivity extends Activity {
             io.execute(()->{
                 try{
                     JSONObject payload=new JSONObject()
-                            .put("id",editing?event.optInt("id",0):0)
+                            .put("id",savedEventId[0])
                             .put("title",title.getText().toString().trim())
                             .put("event_date",chosenProgramDate[0])
                             .put("planned_distance",distance.getText().toString().trim())
@@ -8890,14 +8893,23 @@ public final class NativeMainActivity extends Activity {
                             .put("description",desc.getText().toString().trim())
                             .put("cover_image_path",editing?event.optString("cover_image_path",""):"");
                     JSONObject saved=api.post("save_event",payload);
-                    int eventId=saved.optInt("id",editing?event.optInt("id",0):0);
-                    if(pendingEditorCoverUri!=null&&eventId>0){
+                    int eventId=saved.optInt("id",savedEventId[0]);
+                    if(eventId<=0)throw new IllegalStateException("شناسه برنامه از سرور دریافت نشد.");
+                    savedEventId[0]=eventId; // Retry uploads without creating a duplicate program.
+                    if(pendingEditorCoverUri!=null){
                         java.util.LinkedHashMap<String,String> fields=new java.util.LinkedHashMap<>();fields.put("event_id",String.valueOf(eventId));
                         api.postMultipart("upload_event_cover",fields,pendingEditorCoverUri,"photo","event-cover.jpg",getContentResolver().getType(pendingEditorCoverUri));
                     }
                     bootstrap=api.bootstrap();activeRide=bootstrap.optJSONObject("my_active_ride");pendingEditorCoverUri=null;
-                    main.post(()->{toast("برنامه ذخیره شد.");showActivities();});
-                }catch(Exception e){main.post(()->{save.setEnabled(true);showInlineMessage("ذخیره انجام نشد",e.getMessage(),RED);});}
+                    main.post(()->{toast("برنامه و تصویر آن ذخیره شد.");showActivities();});
+                }catch(Exception e){main.post(()->{
+                    save.setEnabled(true);
+                    showInlineMessage(savedEventId[0]>0?
+                            "برنامه ذخیره شد؛ ارسال تصویر ناموفق بود":"ذخیره انجام نشد",
+                            (e.getMessage()==null?"خطای ناشناخته":e.getMessage())+
+                            (savedEventId[0]>0?" · برای ارسال مجدد عکس، همین دکمه ذخیره را بزنید.":""),
+                            RED);
+                });}
             });
         });
         PedalActionView cancel=action(PedalIconView.Icon.BACK,"انصراف",PedalActionView.Style.OUTLINE);cancel.setOnClickListener(v->showActivities());content.addView(cancel,fullActionLp(52));
@@ -8945,7 +8957,9 @@ public final class NativeMainActivity extends Activity {
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("image/*");
-        startActivityForResult(i,requestCode);
+        try{startActivityForResult(i,requestCode);}
+        catch(android.content.ActivityNotFoundException ex){toast("انتخاب‌گر عکس در دستگاه نصب نیست.");}
+        catch(Exception ex){toast("بازکردن گالری ناموفق بود: "+ex.getMessage());}
     }
 
     private void uploadEventPhoto(android.net.Uri uri,int eventId){
