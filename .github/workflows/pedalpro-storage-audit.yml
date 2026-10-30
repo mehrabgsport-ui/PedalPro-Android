@@ -1,0 +1,36 @@
+name: PedalPro Storage Audit
+on:
+  push:
+    branches: [export/pedalpro-ai-migration-20261030]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const [owner,repo]=process.env.GITHUB_REPOSITORY.split('/');
+            const arts=await github.paginate(github.rest.actions.listArtifactsForRepo,{owner,repo,per_page:100});
+            const MB=n=>+(n/1024/1024).toFixed(2);
+            const names=new Map();
+            for(const a of arts){
+              const o=names.get(a.name)||{name:a.name,count:0,size:0,oldest:a.created_at,newest:a.created_at};
+              o.count++;o.size+=a.size_in_bytes||0;
+              if(a.created_at<o.oldest)o.oldest=a.created_at;
+              if(a.created_at>o.newest)o.newest=a.created_at;
+              names.set(a.name,o);
+            }
+            const rows=[...names.values()].sort((a,b)=>b.size-a.size);
+            const now=Date.now();
+            const signed=arts.filter(a=>['PedalPro-bazaar-signed-release','PedalPro-myket-signed-release'].includes(a.name)&&!a.expired);
+            const stats={repository:process.env.GITHUB_REPOSITORY,total_artifacts:arts.length,total_gib:+(arts.reduce((s,a)=>s+(a.size_in_bytes||0),0)/1073741824).toFixed(3),signed_count:signed.length,signed_mb:MB(signed.reduce((s,a)=>s+a.size_in_bytes,0)),older_than_7d:signed.filter(a=>now-Date.parse(a.created_at)>7*86400000).length,older_than_14d:signed.filter(a=>now-Date.parse(a.created_at)>14*86400000).length,by_name:rows.map(a=>({...a,MB:MB(a.size)}))};
+            console.log('STORAGE_AUDIT_JSON='+JSON.stringify(stats));
+            await core.summary.addHeading('PedalPro Storage Audit')
+              .addRaw('Repo: '+process.env.GITHUB_REPOSITORY+'; total: '+arts.length+' artifacts, '+stats.total_gib+' GiB.\n')
+              .addTable([['Name','Count','MB','Earliest','Latest'],...rows.map(a=>[a.name,String(a.count),String(MB(a.size)),a.oldest.slice(0,10),a.newest.slice(0,10)])])
+              .write();
