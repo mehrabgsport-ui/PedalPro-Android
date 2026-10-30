@@ -3,9 +3,11 @@ name: Android Store Release Build
 on:
   workflow_dispatch:
   push:
-    branches: [ main, native/web-parity ]
+    branches: [ main ]
 
-# Signed store APKs are built once per push, not duplicated for pull_request.
+# Development pushes run unsigned QA, not a signed store build for every commit.
+# For RC delivery select "Run workflow" on native/web-parity to build signed APKs.
+# Main-branch pushes retain automatic release build; no publishing is automatic.
 # Rapid subsequent commits cancel stale push builds; manual builds remain protected.
 concurrency:
   group: store-signed-${{ github.ref }}
