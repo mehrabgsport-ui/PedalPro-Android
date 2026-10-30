@@ -9,6 +9,9 @@ on:
 
 jobs:
   qa:
+    # A push to native/web-parity already runs QA. Avoid running the exact same
+    # expensive Gradle checks again for its open PR to main.
+    if: github.event_name != 'pull_request' || github.head_ref != 'native/web-parity'
     runs-on: ubuntu-latest
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
