@@ -1,0 +1,28 @@
+name: PedalPro AI Migration Source Snapshot
+on:
+  push:
+    branches:
+      - export/pedalpro-ai-migration-20261030
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive exact RC44 source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p migration-export
+          git archive --format=zip --output=migration-export/PedalPro_Android_RC44_SOURCE_08ea6aae.zip 08ea6aae414ba2d1aa29fb46cd6e1590a0caec62
+          printf '%s\n' 'repo=mehrabgsport-ui/PedalPro-Android' 'commit=08ea6aae414ba2d1aa29fb46cd6e1590a0caec62' 'branch=native/web-parity' > migration-export/SOURCE_VERSION.txt
+          sha256sum migration-export/PedalPro_Android_RC44_SOURCE_08ea6aae.zip > migration-export/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PedalPro-AI-Migration-RC44-Source
+          path: migration-export/
+          retention-days: 90
+          if-no-files-found: error
