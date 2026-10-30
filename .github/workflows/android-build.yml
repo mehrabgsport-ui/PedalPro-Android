@@ -4,8 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, native/web-parity ]
-  pull_request:
-    branches: [ main ]
+
+# Signed store APKs are built once per push, not duplicated for pull_request.
+# Rapid subsequent commits cancel stale push builds; manual builds remain protected.
+concurrency:
+  group: store-signed-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   build:
@@ -136,6 +140,7 @@ jobs:
           name: PedalPro-bazaar-signed-release
           path: app/build/outputs/signed/*bazaar*-signed.apk
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 3 }}
 
       - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
@@ -143,5 +148,6 @@ jobs:
           name: PedalPro-myket-signed-release
           path: app/build/outputs/signed/*myket*-signed.apk
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 3 }}
 
       # No automatic Bazaar/Myket publish. Owner explicitly requires manual approval.
