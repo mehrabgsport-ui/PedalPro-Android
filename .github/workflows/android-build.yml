@@ -4,8 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
+
+# Development pushes run unsigned QA, not a signed store build for every commit.
+# For RC delivery select "Run workflow" on native/web-parity to build signed APKs.
+# Main-branch pushes retain automatic release build; no publishing is automatic.
+# Rapid subsequent commits cancel stale push builds; manual builds remain protected.
+concurrency:
+  group: store-signed-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   build:
@@ -14,6 +20,7 @@ jobs:
     env:
       ANDROID_HOME: /usr/local/lib/android/sdk
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      NESHAN_MOBILE_API_KEY: ${{ secrets.NESHAN_MOBILE_API_KEY }}
 
     steps:
       - name: Checkout
@@ -40,6 +47,16 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Require genuine Neshan MOBILE key for signed release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NESHAN_MOBILE_API_KEY:-}" ]; then
+            echo "::error::NESHAN_MOBILE_API_KEY missing. Refusing to publish fallback-labelled signed artifacts."
+            exit 1
+          fi
+          echo "Official Neshan MapLibre provider enabled for this signed build."
+
       - name: Configure signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.PEDALPRO_BAZAAR_KEYSTORE_BASE64 }}
@@ -57,7 +74,25 @@ jobs:
 
       - name: Build release APKs
         run: |
-          gradle :app:assembleBazaarRelease :app:assembleMyketRelease --stacktrace
+          gradle :app:assembleBazaarRelease :app:assembleMyketRelease \
+            --stacktrace
+
+      - name: Verify Neshan API-key metadata without revealing its value
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt | sort | tail -1)"
+          test -x "$AAPT"
+          for apk in app/build/outputs/apk/bazaar/release/*.apk app/build/outputs/apk/myket/release/*.apk; do
+            test -f "$apk"
+            # Never display AndroidManifest: its compiled meta-data contains the MOBILE key.
+            "$AAPT" dump xmltree "$apk" AndroidManifest.xml | grep -Fq 'org.maplibre.android.API_KEY'
+            if "$AAPT" dump xmltree "$apk" AndroidManifest.xml | grep -Fq 'UNCONFIGURED'; then
+              echo "::error::Neshan AndroidManifest contains the no-key fallback placeholder."
+              exit 1
+            fi
+          done
+          echo "Both APK manifests declare the Neshan MOBILE key metadata."
 
       - name: Sign APKs
         env:
@@ -107,6 +142,7 @@ jobs:
           name: PedalPro-bazaar-signed-release
           path: app/build/outputs/signed/*bazaar*-signed.apk
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 3 }}
 
       - name: Upload Myket signed APK
         uses: actions/upload-artifact@v4
@@ -114,19 +150,6 @@ jobs:
           name: PedalPro-myket-signed-release
           path: app/build/outputs/signed/*myket*-signed.apk
           if-no-files-found: error
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 3 }}
 
-      - name: Publish signed Bazaar APK to CafeBazaar Pishkhan
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        env:
-          BAZAAR_API_SECRET: ${{ secrets.BAZAAR_PISHKHAN_API_SECRET }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${BAZAAR_API_SECRET}" ]; then
-            echo "BAZAAR_PISHKHAN_API_SECRET is not configured; release artifact built, Bazaar publish skipped."
-            exit 0
-          fi
-          python3 -m pip install --quiet requests==2.32.3
-          APK="$(find app/build/outputs/signed -maxdepth 1 -name '*bazaar*-signed.apk' -type f | head -n1)"
-          test -n "$APK"
-          python3 scripts/publish_bazaar.py --apk "$APK" --auto-publish
+      # No automatic Bazaar/Myket publish. Owner explicitly requires manual approval.

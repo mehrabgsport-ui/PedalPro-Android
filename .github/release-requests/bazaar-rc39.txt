@@ -1,0 +1,12 @@
+Owner approved Bazaar release of PedalPro Native RC39 on 2026-10-18.
+App: ir.pedalpro.app
+Version: 2.0.0-native-rc39, versionCode 83
+Signed APK: Bazaar channel
+Workflow: bazaar-rc39-publish.yml
+Publisher secret: BAZAAR_PISHKHAN_API_SECRET (GitHub Actions only)
+Request: submit release and publish after Cafe Bazaar review
+Rollout after approval: 10%
+Reason for fresh request: RC38 was stopped at upload HTTP 400; RC39 fixes the OLED scope, fixed header scroll, and splash logo.
+No automatic branch merge, backend modification, or Myket release.
+
+Retry authorization: owner-approved same RC39 versionCode 83; fix empty Pishkhan draft response, no APK changes. One controlled retry.

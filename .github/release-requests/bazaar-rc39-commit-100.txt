@@ -1,0 +1,6 @@
+Owner authorizes publish of PedalPro Native RC39 versionCode 83 on 2026-10-18.
+Pishkhan API run 39136239936 successfully created the release draft and uploaded Bazaar RC39 APK.
+The commit with staged rollout 10% returned HTTP 400:
+"The active installs count of this app is less than the minimum required to use stage roll out feature."
+Commit the same already-uploaded APK release with auto_publish=true and 100% rollout, after Bazaar review.
+No new APK upload; no branch merge; no production backend change.
