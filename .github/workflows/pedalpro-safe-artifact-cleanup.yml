@@ -1,0 +1,85 @@
+name: PedalPro Safe Artifact Cleanup
+on:
+  push:
+    branches: [export/pedalpro-ai-migration-20261030]
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const [owner,repo]=process.env.GITHUB_REPOSITORY.split('/');
+            const names=new Set(['PedalPro-bazaar-signed-release','PedalPro-myket-signed-release']);
+            const keepIds=new Set([
+              12720250163,12718949321, // RC44 (latest verified)
+              12713066340,12713051332, // RC43
+              12482360457,12482260660, // RC42
+              12480311161,12479897483  // RC42 earlier verified milestone
+            ]);
+            const all=await github.paginate(github.rest.actions.listArtifactsForRepo,{owner,repo,per_page:100});
+            const signed=all.filter(a=>names.has(a.name)&&!a.expired).sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at));
+            const kept=new Set(keepIds);
+            const seenLatest={},daily=new Set(),weekly=new Set();
+            const now=Date.now();
+            function weekStart(iso){
+              const d=new Date(iso);
+              const weekday=(d.getUTCDay()+6)%7;
+              d.setUTCDate(d.getUTCDate()-weekday);
+              return d.toISOString().slice(0,10);
+            }
+            for(const a of signed){
+              const count=(seenLatest[a.name]||0)+1;
+              seenLatest[a.name]=count;
+              if(count<=12){kept.add(a.id);continue;}
+              const age=(now-Date.parse(a.created_at))/86400000;
+              if(age<7){
+                const key=a.name+'|'+a.created_at.slice(0,10);
+                if(!daily.has(key)){kept.add(a.id);daily.add(key);}
+              }else{
+                const key=a.name+'|'+weekStart(a.created_at);
+                if(!weekly.has(key)){kept.add(a.id);weekly.add(key);}
+              }
+            }
+            const candidates=signed.filter(a=>!kept.has(a.id)).sort((a,b)=>b.size_in_bytes-a.size_in_bytes);
+            const bytes=candidates.reduce((s,a)=>s+(a.size_in_bytes||0),0);
+            console.log('PLAN signed='+signed.length+' protected='+kept.size+' candidates='+candidates.length+' freeGiB='+(bytes/1073741824).toFixed(3));
+            let deleted=0,deletedBytes=0,errors=0;
+            for(let i=0;i<candidates.length;i++){
+              const a=candidates[i];
+              let succeeded=false;
+              for(let attempt=0;attempt<5;attempt++){
+                try{
+                  await github.rest.actions.deleteArtifact({owner,repo,artifact_id:a.id});
+                  succeeded=true;break;
+                }catch(e){
+                  if(e.status===404){succeeded=true;break;}
+                  if(e.status===403||e.status===429||e.status>=500){
+                    const delay=Math.min(60000,3000*Math.pow(2,attempt));
+                    console.log('RATE_OR_TRANSIENT id='+a.id+' status='+e.status+' retry_after_ms='+delay);
+                    await new Promise(resolve=>setTimeout(resolve,delay));
+                    continue;
+                  }
+                  console.log('DELETE_ERROR id='+a.id+' status='+e.status+' message='+String(e.message).slice(0,180));
+                  break;
+                }
+              }
+              if(succeeded){deleted++;deletedBytes+=a.size_in_bytes||0;}
+              else errors++;
+              if((i+1)%100===0||i+1===candidates.length)
+                console.log('PROGRESS done='+(i+1)+'/'+candidates.length+' deleted='+deleted+' freedGiB='+(deletedBytes/1073741824).toFixed(3)+' errors='+errors);
+              // Stay below GitHub REST secondary mutation limits. Can resume on new run.
+              await new Promise(resolve=>setTimeout(resolve,350));
+            }
+            console.log('CLEANUP_RESULT '+JSON.stringify({deleted,freed_gib:+(deletedBytes/1073741824).toFixed(3),errors,remaining_signed:signed.length-deleted,protectedCount:kept.size}));
+            await core.summary.addHeading('PedalPro signed artifact cleanup')
+              .addRaw('Deleted '+deleted+' redundant signed build artifacts. Estimated freed '+(deletedBytes/1073741824).toFixed(3)+' GiB. Errors: '+errors+'.\n')
+              .addRaw('Preserved RC42/43/44 signed binaries, latest 12 per store, one daily/weekly checkpoint, every other artifact and all Git branches/source files.\n')
+              .write();
+            if(errors>0)core.setFailed(errors+' artifact deletions failed, see logs and retry.');
